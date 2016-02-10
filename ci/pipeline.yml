@@ -81,11 +81,11 @@ jobs:
 
         - put: github
           params:
-            name: release/safe/release/name
-            tag:  release/safe/release/tag
-            body: release/safe/release/notes.md
+            name: release/gopath/src/github.com/jhunt/safe/release/name
+            tag:  release/gopath/src/github.com/jhunt/safe/release/tag
+            body: release/gopath/src/github.com/jhunt/safe/release/notes.md
             globs:
-              - release/safe/release/safe-*
+              - release/gopath/src/github.com/jhunt/safe/release/safe-*
 
     ############################################################
 
