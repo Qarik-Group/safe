@@ -1,0 +1,42 @@
+#!/bin/bash
+
+set -e
+
+# change to root of Safe repository (from ci/scripts)
+ROOT=$( cd "$( dirname "${BASH_SOURCE[0]}" )/../.." && pwd )
+cd $ROOT
+
+# NB: VERSION_FROM overrides whatever explicit version has been set
+#     in the environment, since only Concourse should be setting VERSION_FROM
+if [[ -z "${VERSION:-}" || -n "${VERSION_FROM:-}" ]]; then
+	if [[ -z "${VERSION_FROM:-}" ]]; then
+		echo >&2 "No VERSION env var specified, and VERSION_FROM is empty or not set"
+		echo >&2 "You need to either set an explicit version via VERSION=<x.y.z>,"
+		echo >&2 "or, point me at a file containing the version via VERSION_FROM=<path>"
+		exit 1
+	fi
+	if [[ ! -f ${VERSION_FROM} ]]; then
+		echo >&2 "No VERSION env var specified, and ${VERSION_FROM} file not found"
+		echo >&2 "  (from cwd $PWD)"
+		exit 1
+	fi
+	VERSION=$(cat ${VERSION_FROM})
+	if [[ -z "${VERSION:-}" ]]; then
+		echo >&2 "VERSION not found in ${VERSION_FROM}"
+		exit 1
+	fi
+fi
+
+TARGETS=${TARGETS:-linux/amd64 darwin/amd64}
+
+godep restore
+go get github.com/mitchellh/gox
+
+mkdir -p ${ROOT}/release
+cp ${ROOT}/ci/release.md  ${ROOT}/release/notes.md
+echo "Safe v${VERSION}" > ${ROOT}/release/name
+echo "v${VERSION}"      > ${ROOT}/release/tag
+
+gox -osarch="${TARGETS}" --output="${OUTPUT:-release}/safe-{{.OS}}-{{.Arch}}" -ldflags="-X main.Version=${VERSION}" .
+go build -ldflags="-X main.Version=${VERSION}" .
+./safe -v

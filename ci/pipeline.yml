@@ -1,0 +1,107 @@
+################################################################
+
+resources:
+  - name: version
+    type: semver
+    source:
+      key: current-version
+      bucket:            {{aws-bucket}}
+      access_key_id:     {{aws-access-key}}
+      secret_access_key: {{aws-secret-key}}
+      initial_version:   0.0.1
+
+  - name: safe
+    type: git
+    source:
+      uri: git@github.com:jhunt/safe
+      branch: master
+      private_key: {{github-key}}
+
+  - name: github
+    type: github-release
+    source:
+      user: jhunt
+      repository: safe
+      access_token: {{github-token}}
+
+################################################################
+
+jobs:
+  - name: tests
+    public: true
+    serial: true
+    plan:
+      - { get: safe, trigger: true }
+      - task: run_tests
+        config:
+          platform: linux
+          image: docker:///starkandwayne/concourse-go#1.5
+          inputs:
+            - name: safe
+          outputs:
+            - name: safe
+          run:
+            path: /bin/echo
+            args: []
+
+  - name: rc
+    public: true
+    plan:
+      - aggregate:
+        - { get: safe,    trigger: true,  passed: [tests] }
+        - { get: version, trigger: false, params: { pre: rc } }
+      - { put: version, params: { file: version/number } }
+
+  - name: shipit
+    public: true
+    serial: true
+    plan:
+      - aggregate:
+        - { get: version, passed: [rc], params: {bump: final} }
+        - { get: safe,    passed: [rc] }
+
+      - task: release
+        config:
+          platform: linux
+          image: docker:///starkandwayne/concourse-go#1.5
+          inputs:
+            - name: safe
+            - name: version
+          outputs:
+            - name: safe
+            - name: version
+          run:
+            path: ./safe/ci/scripts/shipit
+            args: []
+          params:
+            VERSION_FROM: ../version/number
+
+      - aggregate:
+        - put: version
+          params: { file: version/number }
+
+        - put: github
+          params:
+            name: release/safe/release/name
+            tag:  release/safe/release/tag
+            body: release/safe/release/notes.md
+            globs:
+              - release/safe/release/safe-*
+
+    ############################################################
+
+  - name: major
+    public: true
+    plan:
+      - { get: version, trigger: false, params: { bump: major } }
+      - { put: version,                 params: { file: version/number } }
+  - name: minor
+    public: true
+    plan:
+      - { get: version, trigger: false, params: { bump: minor } }
+      - { put: version,                 params: { file: version/number } }
+  - name: patch
+    public: true
+    plan:
+      - { get: version, trigger: false, params: { bump: patch } }
+      - { put: version,                 params: { file: version/number } }

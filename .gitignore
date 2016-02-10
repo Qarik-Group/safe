@@ -1,1 +1,3 @@
-safe
+safe*
+release
+ci/credentials.yml

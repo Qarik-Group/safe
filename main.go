@@ -8,6 +8,8 @@ import (
 	"github.com/jhunt/safe/vault"
 )
 
+var Version string
+
 func ok(err error) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %s\n", err)
@@ -61,6 +63,16 @@ func main() {
 	}
 
 	r := NewRunner()
+	r.Dispatch("version", func(command string, args ...string) error {
+		if Version != "" {
+			fmt.Printf("safe v%s\n", Version)
+		} else {
+			fmt.Printf("safe (development build)\n")
+		}
+		os.Exit(0)
+		return nil
+	}, "-v", "--version")
+
 	r.Dispatch("set", func(command string, args ...string) error {
 		if len(args) < 2 {
 			return fmt.Errorf("USAGE: set path key[=value] [key ...]")
