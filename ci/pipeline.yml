@@ -66,12 +66,11 @@ jobs:
           image: docker:///starkandwayne/concourse-go#1.5
           inputs:
             - name: safe
+              path: gopath/src/github.com/jhunt/safe
             - name: version
-          outputs:
-            - name: safe
-            - name: version
+              path: gopath/src/github.com/jhunt/version
           run:
-            path: ./safe/ci/scripts/shipit
+            path: gopath/src/github.com/jhunt/safe/ci/scripts/shipit
             args: []
           params:
             VERSION_FROM: ../version/number

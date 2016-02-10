@@ -29,6 +29,13 @@ fi
 
 TARGETS=${TARGETS:-linux/amd64 darwin/amd64}
 
+newgopath=$(cd $(dirname ${ROOT}/../../..) ; pwd)
+if [[ -z ${GOPATH} ]]; then
+	GOPATH="${newgopath}"
+else
+	GOPATH="${newgopath}:${GOPATH}"
+fi
+echo ">> Using GOPATH ${GOPATH}"
 godep restore
 go get github.com/mitchellh/gox
 
