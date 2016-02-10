@@ -55,13 +55,16 @@ func MOVE(v *vault.Vault, oldpath, newpath string) {
 	fmt.Printf("\n")
 }
 
-func main() {
+func connect() *vault.Vault {
 	v, err := vault.NewVault(os.Getenv("VAULT_ADDR"), "")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s\n", err)
 		os.Exit(1)
 	}
+	return v
+}
 
+func main() {
 	r := NewRunner()
 	r.Dispatch("version", func(command string, args ...string) error {
 		if Version != "" {
@@ -77,6 +80,7 @@ func main() {
 		if len(args) < 2 {
 			return fmt.Errorf("USAGE: set path key[=value] [key ...]")
 		}
+		v := connect()
 		path, args := args[0], args[1:]
 		s, err := v.Read(path)
 		if err != nil && err != vault.NotFound {
@@ -93,6 +97,7 @@ func main() {
 		if len(args) < 1 {
 			return fmt.Errorf("USAGE: get path [path ...]")
 		}
+		v := connect()
 		for _, path := range args {
 			s, err := v.Read(path)
 			if err != nil {
@@ -108,6 +113,7 @@ func main() {
 		if len(args) < 1 {
 			return fmt.Errorf("USAGE: delete path [path ...]")
 		}
+		v := connect()
 		for _, path := range args {
 			if err := v.Delete(path); err != nil {
 				return err
@@ -120,6 +126,7 @@ func main() {
 		if len(args) != 2 {
 			return fmt.Errorf("USAGE: move oldpath newpath")
 		}
+		v := connect()
 		return v.Move(args[0], args[1])
 	}, "mv", "rename")
 
@@ -127,6 +134,7 @@ func main() {
 		if len(args) != 2 {
 			return fmt.Errorf("USAGE: copy oldpath newpath")
 		}
+		v := connect()
 		return v.Copy(args[0], args[1])
 	}, "cp")
 
@@ -143,6 +151,7 @@ func main() {
 			return fmt.Errorf("USAGE: gen [length] path key")
 		}
 
+		v := connect()
 		path, key := args[0], args[1]
 		s, err := v.Read(path)
 		if err != nil && err != vault.NotFound {
@@ -168,6 +177,7 @@ func main() {
 			return fmt.Errorf("USAGE: ssh [bits] path [path ...]")
 		}
 
+		v := connect()
 		for _, path := range args {
 			s, err := v.Read(path)
 			if err != nil && err != vault.NotFound {
@@ -196,6 +206,7 @@ func main() {
 			return fmt.Errorf("USAGE: rsa [bits] path [path ...]")
 		}
 
+		v := connect()
 		for _, path := range args {
 			s, err := v.Read(path)
 			if err != nil && err != vault.NotFound {
@@ -211,8 +222,7 @@ func main() {
 		return nil
 	})
 
-	err = r.Run(os.Args[1:]...)
-	if err != nil {
+	if err := r.Run(os.Args[1:]...); err != nil {
 		fmt.Fprintf(os.Stderr, "%s\n", err)
 		os.Exit(1)
 	}
