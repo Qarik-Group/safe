@@ -36,6 +36,7 @@ if [[ -d ${newgopath} ]] then
 	else
 		GOPATH="${newgopath}:${GOPATH}"
 	fi
+	PATH="${PATH}:${newgopath}/bin"
 fi
 echo ">> Using GOPATH ${GOPATH}"
 godep restore
