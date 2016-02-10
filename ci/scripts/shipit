@@ -30,7 +30,7 @@ fi
 TARGETS=${TARGETS:-linux/amd64 darwin/amd64}
 
 newgopath=${ROOT%%/gopath/*}/gopath
-if [[ -d ${newgopath} ]] then
+if [[ -d ${newgopath} ]]; then
 	if [[ -z ${GOPATH} ]]; then
 		GOPATH="${newgopath}"
 	else
