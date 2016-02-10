@@ -10,51 +10,6 @@ import (
 
 var Version string
 
-func ok(err error) {
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %s\n", err)
-		os.Exit(1)
-	}
-}
-
-func notok(err error) {
-	if err == nil {
-		fmt.Fprintf(os.Stderr, "expected an error, but nothing failed!\n")
-		os.Exit(1)
-	}
-}
-
-func DELETE(v *vault.Vault, path string) {
-	fmt.Printf("DELETE %s\n", path)
-	err := v.Delete(path)
-	ok(err)
-	READ(v, path)
-	fmt.Printf("\n")
-}
-
-func READ(v *vault.Vault, path string) {
-	secret, _ := v.Read(path)
-	fmt.Printf("READ %s: %v\n", path, secret)
-}
-
-func COPY(v *vault.Vault, oldpath, newpath string) {
-	fmt.Printf("COPY %s -> %s\n", oldpath, newpath)
-	err := v.Copy(oldpath, newpath)
-	ok(err)
-	READ(v, oldpath)
-	READ(v, newpath)
-	fmt.Printf("\n")
-}
-
-func MOVE(v *vault.Vault, oldpath, newpath string) {
-	fmt.Printf("MOVE %s -> %s\n", oldpath, newpath)
-	err := v.Move(oldpath, newpath)
-	ok(err)
-	READ(v, oldpath)
-	READ(v, newpath)
-	fmt.Printf("\n")
-}
-
 func connect() *vault.Vault {
 	v, err := vault.NewVault(os.Getenv("VAULT_ADDR"), "")
 	if err != nil {
@@ -226,31 +181,4 @@ func main() {
 		fmt.Fprintf(os.Stderr, "%s\n", err)
 		os.Exit(1)
 	}
-}
-
-func main2() {
-	fmt.Printf("starting up\n")
-	v, err := vault.NewVault(os.Getenv("VAULT_ADDR"), "")
-	ok(err)
-
-	DELETE(v, "secret/other")
-	DELETE(v, "secret/copy")
-	READ(v, "secret/handshake")
-
-	COPY(v, "secret/handshake", "secret/copy")
-	MOVE(v, "secret/copy", "secret/other")
-
-	DELETE(v, "secret/ssh")
-	s := vault.NewSecret()
-	err = s.SSHKey(2048); ok(err)
-	err = v.Write("secret/ssh", s); ok(err)
-	READ(v, "secret/ssh")
-
-	DELETE(v, "secret/rsa")
-	s = vault.NewSecret()
-	err = s.RSAKey(2048); ok(err)
-	err = v.Write("secret/rsa", s); ok(err)
-	READ(v, "secret/rsa")
-
-	fmt.Printf("shutting down...\n")
 }
