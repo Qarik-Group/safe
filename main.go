@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/jhunt/safe/vault"
 )
@@ -174,6 +175,11 @@ func main() {
 				return err
 			}
 		}
+		return nil
+	})
+
+	r.Dispatch("prompt", func(command string, args ...string) error {
+		fmt.Printf("%s\n", strings.Join(args, " "));
 		return nil
 	})
 

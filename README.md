@@ -201,6 +201,12 @@ parameter allows you to change that.
 
 Each path gets a unique RSA keypair.
 
+### prompt ...
+
+Echo the arguments, space-separated, as a single line to the
+terminal.  This is a convenience helper for long pipelines of
+chained commands.
+
 
 
 
