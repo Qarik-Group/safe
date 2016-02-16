@@ -21,6 +21,7 @@ func keyPrompt(key string) (string, string) {
 		if l[1] == "" {
 			l[1] = prompt(l[0])
 		}
+		ansi.Printf("%s: @G{%s}\n", l[0], l[1])
 		return l[0], l[1]
 	}
 	return key, prompt(key)
