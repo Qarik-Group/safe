@@ -21,6 +21,8 @@ func connect() *vault.Vault {
 }
 
 func main() {
+	go Signals()
+
 	r := NewRunner()
 	r.Dispatch("version", func(command string, args ...string) error {
 		if Version != "" {
