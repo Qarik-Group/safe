@@ -7,13 +7,15 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"crypto/tls"
 )
 
 // A Vault represents a means for interacting with a remote Vault
 // instance (unsealed and pre-authenticated) to read and write secrets.
 type Vault struct {
-	URL   string
-	Token string
+	URL    string
+	Token  string
+	Client *http.Client
 }
 
 // NewVault creates a new Vault object.  If an empty token is specified,
@@ -34,6 +36,20 @@ func NewVault(url, token string) (*Vault, error) {
 	return &Vault{
 		URL:   url,
 		Token: token,
+		Client: &http.Client{
+			Transport:  &http.Transport{
+				TLSClientConfig: &tls.Config{
+					InsecureSkipVerify: os.Getenv("VAULT_SKIP_VERIFY") != "",
+				},
+			},
+			CheckRedirect: func (req *http.Request, via []*http.Request) error {
+				if len(via) > 10 {
+					return fmt.Errorf("stopped after 10 redirects")
+				}
+				req.Header.Add("X-Vault-Token", token)
+				return nil
+			},
+		},
 	}, nil
 }
 
@@ -43,7 +59,7 @@ func (v *Vault) url(f string, args ...interface{}) string {
 
 func (v *Vault) request(req *http.Request) (*http.Response, error) {
 	req.Header.Add("X-Vault-Token", v.Token)
-	return http.DefaultClient.Do(req)
+	return v.Client.Do(req)
 }
 
 // Read checks the Vault for a Secret at the specified path, and returns it.
