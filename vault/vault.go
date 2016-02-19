@@ -118,6 +118,81 @@ func (v *Vault) Read(path string) (secret *Secret, err error) {
 	return
 }
 
+// List returns the set of (relative) paths that are directly underneath
+// the given path.  Intermediate path nodes are suffixed with a single "/",
+// whereas leaf nodes (the secrets themselves) are not.
+func (v *Vault) List(path string) (paths []string, err error) {
+	req, err := http.NewRequest("GET", v.url("/v1/%s?list=1", path), nil)
+	if err != nil {
+		return
+	}
+	res, err := v.request(req)
+	if err != nil {
+		return
+	}
+
+	switch res.StatusCode {
+	case 200:
+		break
+	case 404:
+		err = NotFound
+		return
+	default:
+		err = fmt.Errorf("API %s", res.Status)
+		return
+	}
+
+	b, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return
+	}
+
+	var r struct { Data struct { Keys []string } }
+	if err = json.Unmarshal(b, &r); err != nil {
+		return
+	}
+	return r.Data.Keys, nil
+}
+
+type Node struct {
+	Path     string
+	Children []Node
+}
+// Tree returns a nested set of Node structures that represent the paths
+// in their hierarchical form, starting with the given path and working
+// downward.
+func (v *Vault) Tree(path string) ([]Node, error) {
+	l, err := v.List(path)
+	if err != nil {
+		return nil, err
+	}
+
+	nodes := make([]Node, len(l))
+	for i, sub := range l {
+		if sub == "" {
+			return nil, fmt.Errorf("got an empty path component for some reason, at %s", path)
+		}
+		if sub[len(sub)-1:len(sub)] == "/" {
+			stem := sub[0:len(sub)-1]
+			kids, err := v.Tree(path + "/" + stem)
+			if err != nil {
+				return nil, err
+			}
+
+			nodes[i] = Node{
+				Path:     stem,
+				Children: kids,
+			}
+		} else {
+			nodes[i] = Node{
+				Path:     sub,
+				Children: nil,
+			}
+		}
+	}
+	return nodes, nil
+}
+
 // Write takes a Secret and writes it to the Vault at the specified path.
 func (v *Vault) Write(path string, s *Secret) error {
 	raw := s.JSON()

@@ -67,6 +67,58 @@ func main() {
 		return nil
 	}, "read", "cat")
 
+	r.Dispatch("tree", func(command string, args ...string) error {
+		if len(args) < 1 {
+			return fmt.Errorf("USAGE: tree path [path ...]")
+		}
+		v := connect()
+		for _, path := range args {
+			tree, err := v.Tree(path)
+			if err != nil {
+				return err
+			}
+			var pp func([]vault.Node, string)
+			pp = func(nodes []vault.Node, prefix string) {
+				for _, n := range nodes {
+					if n.Children != nil {
+						fmt.Printf("%s%s/\n", prefix, n.Path)
+						pp(n.Children, prefix + "  ")
+					} else {
+						fmt.Printf("%s%s\n", prefix, n.Path)
+					}
+				}
+			}
+			fmt.Printf("%s\n", path)
+			pp(tree, "  ")
+		}
+		return nil
+	})
+
+	r.Dispatch("paths", func(command string, args ...string) error {
+		if len(args) < 1 {
+			return fmt.Errorf("USAGE: paths path [path ...]")
+		}
+		v := connect()
+		for _, path := range args {
+			tree, err := v.Tree(path)
+			if err != nil {
+				return err
+			}
+			var pp func([]vault.Node, string)
+			pp = func(nodes []vault.Node, prefix string) {
+				for _, n := range nodes {
+					if n.Children != nil {
+						pp(n.Children, prefix + "/" + n.Path)
+					} else {
+						fmt.Printf("%s/%s\n", prefix, n.Path)
+					}
+				}
+			}
+			pp(tree, path)
+		}
+		return nil
+	})
+
 	r.Dispatch("delete", func(command string, args ...string) error {
 		if len(args) < 1 {
 			return fmt.Errorf("USAGE: delete path [path ...]")
