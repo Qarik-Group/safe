@@ -240,9 +240,29 @@ Echo the arguments, space-separated, as a single line to the
 terminal.  This is a convenience helper for long pipelines of
 chained commands.
 
+### export path \[path ...\]
 
+Export the given subtree(s) in a format suitable for migration
+(via a future `import` call), or long-term storage offline.
+Secrets will not be encrypted in this representation, so care
+should be taken in handling it.  Output will be printed to
+standard output.
 
+### import <export.file
 
+Read an export file (as produced by the `export` subcommand) and
+write all of the secrets contained therein to the same paths
+inside the Vault.  Trees will be imported in an additive nature,
+so existing credentials in the same subtree as imported
+credentials will be left intact.
+
+Import and export can be combined in a pipeline to facilitate
+movement of credentials from one Vault to another, like so:
+
+```
+VAULT_ADDR=$OLD_VAULT safe export secret/sub/tree | \
+  VAULT_ADDR=$NEW_VAULT safe import
+```
 
 [vault]:  https://vaultproject.io
 [spruce]: https://github.com/geofffranks/spruce
