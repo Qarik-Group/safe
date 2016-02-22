@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
@@ -73,7 +74,7 @@ func main() {
 		}
 		v := connect()
 		for _, path := range args {
-			tree, err := v.Tree(path)
+			tree, err := v.Tree(path, true)
 			if err != nil {
 				return err
 			}
@@ -88,7 +89,7 @@ func main() {
 		}
 		v := connect()
 		for _, path := range args {
-			tree, err := v.Tree(path)
+			tree, err := v.Tree(path, false)
 			if err != nil {
 				return err
 			}
@@ -111,6 +112,35 @@ func main() {
 		}
 		return nil
 	}, "rm")
+
+	r.Dispatch("export", func (command string, args ...string) error {
+		if len(args) < 1 {
+			return fmt.Errorf("USAGE: export path [path ...]")
+		}
+		v := connect()
+		data := make(map[string] *vault.Secret)
+		for _, path := range args {
+			tree, err := v.Tree(path, false)
+			if err != nil {
+				return err
+			}
+			for _, sub := range tree.Paths("/") {
+				s, err := v.Read(sub)
+				if err != nil {
+					return err
+				}
+				data[sub] = s
+			}
+		}
+
+		b, err := json.Marshal(data)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("%s\n", string(b))
+
+		return nil
+	})
 
 	r.Dispatch("move", func (command string, args ...string) error {
 		if len(args) != 2 {

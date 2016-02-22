@@ -163,25 +163,34 @@ type Node struct {
 }
 // Tree returns a tree that represents the hierarhcy of paths contained
 // below the given path, inside of the Vault.
-func (v *Vault) Tree(path string) (tree.Node, error) {
-	t := tree.New(ansi.Sprintf("@C{%s}", path))
+func (v *Vault) Tree(path string, ansify bool) (tree.Node, error) {
+	name := path
+	if ansify {
+		name = ansi.Sprintf("@C{%s}", path)
+	}
+	t := tree.New(name)
 
 	l, err := v.List(path)
 	if err != nil {
 		return t, err
 	}
 
-	var (
-		kid tree.Node
-		name string
-	)
+	var kid tree.Node
 	for _, p := range l {
 		if p[len(p)-1:len(p)] == "/" {
-			kid, err = v.Tree(path + "/" + p[0:len(p)-1])
-			name = ansi.Sprintf("@B{%s}", p)
+			kid, err = v.Tree(path + "/" + p[0:len(p)-1], ansify)
+			if ansify {
+				name = ansi.Sprintf("@B{%s}", p)
+			} else {
+				name = p[0:len(p)-1]
+			}
 		} else {
-			kid, err = v.Tree(path + "/" + p)
-			name = ansi.Sprintf("@G{%s}", p)
+			kid, err = v.Tree(path + "/" + p, ansify)
+			if ansify {
+				name = ansi.Sprintf("@G{%s}", p)
+			} else {
+				name = p
+			}
 		}
 		if err != nil {
 			return t, err

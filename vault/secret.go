@@ -15,6 +15,10 @@ func NewSecret() *Secret {
 	return &Secret{ make(map[string] string) }
 }
 
+func (s Secret) MarshalJSON() ([]byte, error) {
+	return json.Marshal(s.data)
+}
+
 // Has returns true if the Secret has defined the given key.
 func (s *Secret) Has(key string) bool {
 	_, ok := s.data[key]
