@@ -11,6 +11,10 @@
 			"Rev": "9aaf89a789f0b58bef35c13d4e0e4c4c62759364"
 		},
 		{
+			"ImportPath": "github.com/jhunt/tree",
+			"Rev": "727593165320989cafef6fb65479934653d86ee5"
+		},
+		{
 			"ImportPath": "github.com/mattn/go-isatty",
 			"Rev": "56b76bdf51f7708750eac80fa38b952bb9f32639"
 		},
