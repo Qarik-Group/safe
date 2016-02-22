@@ -8,6 +8,9 @@ import (
 	"net/http"
 	"os"
 	"crypto/tls"
+
+	"github.com/jhunt/ansi"
+	"github.com/jhunt/tree"
 )
 
 // A Vault represents a means for interacting with a remote Vault
@@ -158,39 +161,35 @@ type Node struct {
 	Path     string
 	Children []Node
 }
-// Tree returns a nested set of Node structures that represent the paths
-// in their hierarchical form, starting with the given path and working
-// downward.
-func (v *Vault) Tree(path string) ([]Node, error) {
+// Tree returns a tree that represents the hierarhcy of paths contained
+// below the given path, inside of the Vault.
+func (v *Vault) Tree(path string) (tree.Node, error) {
+	t := tree.New(ansi.Sprintf("@C{%s}", path))
+
 	l, err := v.List(path)
 	if err != nil {
-		return nil, err
+		return t, err
 	}
 
-	nodes := make([]Node, len(l))
-	for i, sub := range l {
-		if sub == "" {
-			return nil, fmt.Errorf("got an empty path component for some reason, at %s", path)
-		}
-		if sub[len(sub)-1:len(sub)] == "/" {
-			stem := sub[0:len(sub)-1]
-			kids, err := v.Tree(path + "/" + stem)
-			if err != nil {
-				return nil, err
-			}
-
-			nodes[i] = Node{
-				Path:     stem,
-				Children: kids,
-			}
+	var (
+		kid tree.Node
+		name string
+	)
+	for _, p := range l {
+		if p[len(p)-1:len(p)] == "/" {
+			kid, err = v.Tree(path + "/" + p[0:len(p)-1])
+			name = ansi.Sprintf("@B{%s}", p)
 		} else {
-			nodes[i] = Node{
-				Path:     sub,
-				Children: nil,
-			}
+			kid, err = v.Tree(path + "/" + p)
+			name = ansi.Sprintf("@G{%s}", p)
 		}
+		if err != nil {
+			return t, err
+		}
+		kid.Name = name
+		t.Append(kid)
 	}
-	return nodes, nil
+	return t, nil
 }
 
 // Write takes a Secret and writes it to the Vault at the specified path.

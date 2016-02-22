@@ -77,19 +77,7 @@ func main() {
 			if err != nil {
 				return err
 			}
-			var pp func([]vault.Node, string)
-			pp = func(nodes []vault.Node, prefix string) {
-				for _, n := range nodes {
-					if n.Children != nil {
-						fmt.Printf("%s%s/\n", prefix, n.Path)
-						pp(n.Children, prefix + "  ")
-					} else {
-						fmt.Printf("%s%s\n", prefix, n.Path)
-					}
-				}
-			}
-			fmt.Printf("%s\n", path)
-			pp(tree, "  ")
+			fmt.Printf("%s\n", tree.Draw())
 		}
 		return nil
 	})
@@ -104,17 +92,9 @@ func main() {
 			if err != nil {
 				return err
 			}
-			var pp func([]vault.Node, string)
-			pp = func(nodes []vault.Node, prefix string) {
-				for _, n := range nodes {
-					if n.Children != nil {
-						pp(n.Children, prefix + "/" + n.Path)
-					} else {
-						fmt.Printf("%s/%s\n", prefix, n.Path)
-					}
-				}
+			for _, s := range tree.Paths("/") {
+				fmt.Printf("%s\n", s)
 			}
-			pp(tree, path)
 		}
 		return nil
 	})
