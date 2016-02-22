@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"strconv"
 	"strings"
@@ -139,6 +140,28 @@ func main() {
 		}
 		fmt.Printf("%s\n", string(b))
 
+		return nil
+	})
+
+	r.Dispatch("import", func (command string, args ...string) error {
+		b, err := ioutil.ReadAll(os.Stdin)
+		if err != nil {
+			return err
+		}
+		var data map[string] *vault.Secret
+		err = json.Unmarshal(b, &data)
+		if err != nil {
+			return err
+		}
+
+		v := connect()
+		for path, s := range data {
+			err = v.Write(path, s)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("wrote %s\n", path)
+		}
 		return nil
 	})
 

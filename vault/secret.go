@@ -19,6 +19,10 @@ func (s Secret) MarshalJSON() ([]byte, error) {
 	return json.Marshal(s.data)
 }
 
+func (s *Secret) UnmarshalJSON(b []byte) error {
+	return json.Unmarshal(b, &s.data)
+}
+
 // Has returns true if the Secret has defined the given key.
 func (s *Secret) Has(key string) bool {
 	_, ok := s.data[key]
