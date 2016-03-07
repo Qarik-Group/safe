@@ -70,8 +70,8 @@ func main() {
 	}, "read", "cat")
 
 	r.Dispatch("tree", func(command string, args ...string) error {
-		if len(args) < 1 {
-			return fmt.Errorf("USAGE: tree path [path ...]")
+		if len(args) == 0 {
+			args = append(args, "secret")
 		}
 		v := connect()
 		for _, path := range args {
