@@ -27,6 +27,12 @@ if [[ -z "${VERSION:-}" || -n "${VERSION_FROM:-}" ]]; then
 	fi
 fi
 
+if [[ -z "${REPO_OUT:-}" ]]; then
+	echo >&2 "No REPO_OUT env var specified."
+	echo >&2 "You need to set it to the output of the concourse task running shipit."
+	exit 1
+fi
+
 TARGETS=${TARGETS:-linux/amd64 darwin/amd64}
 
 newgopath=${ROOT%%/gopath/*}/gopath
@@ -50,3 +56,6 @@ echo "v${VERSION}"      > ${ROOT}/release/tag
 gox -osarch="${TARGETS}" --output="${OUTPUT:-release}/safe-{{.OS}}-{{.Arch}}" -ldflags="-X main.Version=${VERSION}" .
 go build -ldflags="-X main.Version=${VERSION}" .
 ./safe -v
+
+# so that future steps in the pipeline can push our changes
+cp -a ${REPO_ROOT} ${REPO_OUT}

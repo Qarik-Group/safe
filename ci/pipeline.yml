@@ -38,8 +38,6 @@ jobs:
           image: docker:///starkandwayne/concourse-go#1.5
           inputs:
             - name: safe
-          outputs:
-            - name: safe
           run:
             path: /bin/echo
             args: []
@@ -65,15 +63,16 @@ jobs:
           platform: linux
           image: docker:///starkandwayne/concourse-go#1.5
           inputs:
-            - name: safe
-              path: gopath/src/github.com/jhunt/safe
-            - name: version
-              path: gopath/src/github.com/jhunt/version
+            - { name: safe,       path: gopath/src/github.com/jhunt/safe }
+            - { name: version,    path: gopath/src/github.com/jhunt/version }
+          outputs:
+            - { name: releasable, path: gopath/src/github.com/jhunt/safe-out }
           run:
             path: gopath/src/github.com/jhunt/safe/ci/scripts/shipit
             args: []
           params:
             VERSION_FROM: ../version/number
+            REPO_OUT: ../safe-out
 
       - aggregate:
         - put: version
@@ -81,11 +80,11 @@ jobs:
 
         - put: github
           params:
-            name: release/gopath/src/github.com/jhunt/safe/release/name
-            tag:  release/gopath/src/github.com/jhunt/safe/release/tag
-            body: release/gopath/src/github.com/jhunt/safe/release/notes.md
+            name: releasable/release/name
+            tag:  releasable/release/tag
+            body: releasable/release/notes.md
             globs:
-              - release/gopath/src/github.com/jhunt/safe/release/safe-*
+              - releasable/release/safe-*
 
     ############################################################
 
