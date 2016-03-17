@@ -3,6 +3,7 @@
 set -e
 
 # change to root of Safe repository (from ci/scripts)
+ORIGIN=$(pwd)
 ROOT=$( cd "$( dirname "${BASH_SOURCE[0]}" )/../.." && pwd )
 cd $ROOT
 
@@ -58,4 +59,10 @@ go build -ldflags="-X main.Version=${VERSION}" .
 ./safe -v
 
 # so that future steps in the pipeline can push our changes
-cp -a ${ROOT} ${REPO_OUT}
+echo ; echo ; echo
+echo "ROOT     = ${ROOT}"
+echo "REPO_OUT = ${REPO_OUT}"
+echo "cp -a ${ROOT} ${ORIGIN}/${REPO_OUT}"
+cp -a ${ROOT} ${ORIGIN}/${REPO_OUT}
+echo ; echo ; echo
+ls -l ${REPO_OUT}
