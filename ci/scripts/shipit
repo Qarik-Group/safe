@@ -65,4 +65,4 @@ echo "REPO_OUT = ${REPO_OUT}"
 echo "cp -a ${ROOT} ${ORIGIN}/${REPO_OUT}"
 cp -a ${ROOT} ${ORIGIN}/${REPO_OUT}
 echo ; echo ; echo
-ls -l ${REPO_OUT}
+ls -l ${ORIGIN}/${REPO_OUT}
