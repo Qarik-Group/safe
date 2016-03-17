@@ -66,15 +66,13 @@ jobs:
             - { name: safe,    path: gopath/src/github.com/jhunt/safe }
             - { name: version, path: gopath/src/github.com/jhunt/version }
           outputs:
-            - { name: release, path: gopath/src/github.com/jhunt/safe-out }
+            - name: gh
           run:
             path: gopath/src/github.com/jhunt/safe/ci/scripts/shipit
             args: []
-            #path: /bin/sh
-            #args: [-c, 'set']
           params:
             VERSION_FROM: ../version/number
-            REPO_OUT: gopath/src/github.com/jhunt/safe-out
+            REPO_OUT: gh
 
       - aggregate:
         - put: version
@@ -82,11 +80,11 @@ jobs:
 
         - put: github
           params:
-            name: release/name
-            tag:  release/tag
-            body: release/notes.md
+            name: gh/safe/release/name
+            tag:  gh/safe/release/tag
+            body: gh/safe/release/notes.md
             globs:
-              - release/safe-*
+              - gh/safe/release/safe-*
 
     ############################################################
 
