@@ -1,105 +1,173 @@
-################################################################
+---
+#
+# ci/pipeline.yml
+#
+# Pipeline structure file for a Go Project pipeline
+#
+# DO NOT MAKE CHANGES TO THIS FILE.  Instead, modify
+# ci/settings.yml and override what needs overridden.
+# This uses spruce, so you have some options there.
+#
+# author:  James Hunt <james@niftylogic.com>
+# created: 2016-03-30
 
-resources:
-  - name: version
-    type: semver
-    source:
-      key: current-version
-      bucket:            {{aws-bucket}}
-      access_key_id:     {{aws-access-key}}
-      secret_access_key: {{aws-secret-key}}
-      initial_version:   0.0.1
+meta:
+  name:     (( param "Please name your pipeline" ))
+  release:  (( concat meta.name " Release" ))
+  target:   (( param "Please identify the name of the target Concourse CI" ))
+  pipeline: (( grab meta.name ))
 
-  - name: safe
-    type: git
-    source:
-      uri: git@github.com:jhunt/safe
-      branch: master
-      private_key: {{github-key}}
+  image:    (( concat "docker:///starkandwayne/concourse-go#" meta.go.version ))
 
-  - name: github
-    type: github-release
-    source:
-      user: jhunt
-      repository: safe
-      access_token: {{github-token}}
+  go:
+    version: 1.5
+    module:  (( concat "github.com/" meta.github.owner "/" meta.github.repo ))
 
-################################################################
+  aws:
+    bucket:     (( concat meta.name "-pipeline" ))
+    access_key: (( param "Please set your AWS Access Key ID" ))
+    secret_key: (( param "Please set your AWS Secret Key ID" ))
+
+  github:
+    uri:          (( concat "git@github.com:" meta.github.owner "/" meta.github.repo ))
+    owner:        (( param "Please specify the name of the user / organization that owns the Github repository" ))
+    repo:         (( param "Please specify the name of the Github repository" ))
+    branch:       master
+    private_key:  (( param "Please generate an SSH Deployment Key for this repo and specify it here" ))
+    access_token: (( param "Please generate a Personal Access Token and specify it here" ))
+
+  slack:
+    webhook:       (( param "Please specify your Slack Incoming Webhook Integration URL" ))
+    notification: '(( concat ":sadpanda: " meta.name " build failed!<br>URL-GOES-HERE" ))'
+    channel:       (( param "Please specify the channel (#name) or user (@user) to send messages to" ))
+    username:      concourse
+    icon:          http://cl.ly/image/3e1h0H3H2s0P/concourse-logo.png
+
+groups:
+  - name: (( grab meta.name ))
+    jobs:
+      - test
+      - rc
+      - shipit
+      - major
+      - minor
 
 jobs:
-  - name: tests
+  - name: test
     public: true
     serial: true
     plan:
-      - { get: safe, trigger: true }
-      - task: run_tests
+      - { get: git, trigger: true }
+      - task: test
         config:
           platform: linux
-          image: docker:///starkandwayne/concourse-go#1.5
+          image: (( grab meta.image ))
           inputs:
-            - name: safe
+            - name: git
+              path: (( concat "gopath/src/" meta.go.module ))
           run:
-            path: /bin/echo
+            path: (( concat "./gopath/src/" meta.go.module "/ci/scripts/test" ))
             args: []
+          params:
+            REPO_ROOT: git
 
   - name: rc
     public: true
     plan:
       - aggregate:
-        - { get: safe,    trigger: true,  passed: [tests] }
-        - { get: version, trigger: false, params: { pre: rc } }
-      - { put: version, params: { file: version/number } }
+          - { get: git,     trigger: true,  passed: [test] }
+          - { get: version, trigger: false, params: {pre: rc} }
+      - put: version
+        params: {file: version/number}
+
+  - name: minor
+    public: true
+    plan:
+      - { get: version, trigger: false, params: {bump: minor} }
+      - { put: version,                 params: {file: version/number} }
+
+  - name: major
+    public: true
+    plan:
+      - { get: version, trigger: false, params: {bump: major} }
+      - { put: version,                 params: {file: version/number} }
 
   - name: shipit
     public: true
     serial: true
     plan:
       - aggregate:
-        - { get: version, passed: [rc], params: {bump: final} }
-        - { get: safe,    passed: [rc] }
-
+          - { get: version, passed: [rc], params: {bump: final} }
+          - { get: git,     passed: [rc] }
       - task: release
         config:
+          image: (( grab meta.image ))
           platform: linux
-          image: docker:///starkandwayne/concourse-go#1.5
           inputs:
-            - { name: safe,    path: gopath/src/github.com/jhunt/safe }
-            - { name: version, path: gopath/src/github.com/jhunt/version }
+            - name: version
+            - name: git
+              path: (( concat "gopath/src/" meta.go.module ))
           outputs:
             - name: gh
+            - name: pushme
           run:
-            path: gopath/src/github.com/jhunt/safe/ci/scripts/shipit
+            path: (( concat "./gopath/src/" meta.go.module "/ci/scripts/shipit" ))
             args: []
           params:
-            VERSION_FROM: ../version/number
-            REPO_OUT: gh
+            REPO_ROOT:    (( concat "gopath/src/" meta.go.module ))
+            VERSION_FROM: version/number
+            RELEASE_NAME: (( grab meta.release ))
+            RELEASE_ROOT: gh
+            REPO_OUT:     pushme
+            BRANCH:       (( grab meta.github.branch ))
 
       - aggregate:
         - put: version
-          params: { file: version/number }
-
+          params:
+            bump: patch
+        - put: git
+          params:
+            rebase: true
+            repository: pushme/git
         - put: github
           params:
-            name: gh/safe/release/name
-            tag:  gh/safe/release/tag
-            body: gh/safe/release/notes.md
-            globs:
-              - gh/safe/release/safe-*
+            name:   gh/name
+            tag:    gh/tag
+            body:   gh/notes.md
+            globs: [gh/artifacts/*]
 
-    ############################################################
+resource_types:
+  - name: slack-notification
+    type: docker-image
+    source:
+      repository: cfcommunity/slack-notification-resource
 
-  - name: major
-    public: true
-    plan:
-      - { get: version, trigger: false, params: { bump: major } }
-      - { put: version,                 params: { file: version/number } }
-  - name: minor
-    public: true
-    plan:
-      - { get: version, trigger: false, params: { bump: minor } }
-      - { put: version,                 params: { file: version/number } }
-  - name: patch
-    public: true
-    plan:
-      - { get: version, trigger: false, params: { bump: patch } }
-      - { put: version,                 params: { file: version/number } }
+resources:
+  - name: git
+    type: git
+    source:
+      uri:         (( grab meta.github.uri ))
+      branch:      (( grab meta.github.branch ))
+      private_key: (( grab meta.github.private_key ))
+
+  - name: version
+    type: semver
+    source :
+      driver:            s3
+      bucket:            (( grab meta.aws.bucket ))
+      key:               version
+      access_key_id:     (( grab meta.aws.access_key ))
+      secret_access_key: (( grab meta.aws.secret_key ))
+      initial_version:   (( grab meta.initial_version || "0.0.1" ))
+
+  - name: notify
+    type: slack-notification
+    source:
+      url: (( grab meta.slack.webhook ))
+
+  - name: github
+    type: github-release
+    source:
+      user:         (( grab meta.github.owner ))
+      repository:   (( grab meta.github.repo ))
+      access_token: (( grab meta.github.access_token ))

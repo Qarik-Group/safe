@@ -1,41 +1,42 @@
 #!/bin/bash
 
-set -e
+#
+# ci/scripts/shipit
+#
+# Script for generating Github release / tag assets
+# and managing release notes for a software pipeline
+#
+# author:  James Hunt <james@niftylogic.com>
+# created: 2016-03-30
 
-# change to root of Safe repository (from ci/scripts)
-ORIGIN=$(pwd)
-ROOT=$( cd "$( dirname "${BASH_SOURCE[0]}" )/../.." && pwd )
-cd $ROOT
+set -eu
 
-# NB: VERSION_FROM overrides whatever explicit version has been set
-#     in the environment, since only Concourse should be setting VERSION_FROM
-if [[ -z "${VERSION:-}" || -n "${VERSION_FROM:-}" ]]; then
-	if [[ -z "${VERSION_FROM:-}" ]]; then
-		echo >&2 "No VERSION env var specified, and VERSION_FROM is empty or not set"
-		echo >&2 "You need to either set an explicit version via VERSION=<x.y.z>,"
-		echo >&2 "or, point me at a file containing the version via VERSION_FROM=<path>"
-		exit 1
-	fi
-	if [[ ! -f ${VERSION_FROM} ]]; then
-		echo >&2 "No VERSION env var specified, and ${VERSION_FROM} file not found"
-		echo >&2 "  (from cwd $PWD)"
-		exit 1
-	fi
-	VERSION=$(cat ${VERSION_FROM})
-	if [[ -z "${VERSION:-}" ]]; then
-		echo >&2 "VERSION not found in ${VERSION_FROM}"
-		exit 1
-	fi
+if [[ -z ${VERSION_FROM} ]]; then
+  echo >&2 "VERSION_FROM environment variable not set, or empty.  Did you misconfigure Concourse?"
+  exit 2
+fi
+if [[ ! -f ${VERSION_FROM} ]]; then
+  echo >&2 "Version file (${VERSION_FROM}) not found.  Did you misconfigure Concourse?"
+  exit 2
+fi
+VERSION=$(cat ${VERSION_FROM})
+if [[ -z ${VERSION} ]]; then
+  echo >&2 "Version file (${VERSION_FROM}) was empty.  Did you misconfigure Concourse?"
+  exit 2
 fi
 
-if [[ -z "${REPO_OUT:-}" ]]; then
-	echo >&2 "No REPO_OUT env var specified."
-	echo >&2 "You need to set it to the output of the concourse task running shipit."
-	exit 1
+if [[ ! -f ${REPO_ROOT}/ci/release_notes.md ]]; then
+  echo >&2 "ci/release_notes.md not found.  Did you forget to write them?"
+  exit 1
 fi
 
+###############################################################
+
+#?#ORIGIN=$(pwd)
 TARGETS=${TARGETS:-linux/amd64 darwin/amd64}
+ROOT=$( cd "$( dirname "${BASH_SOURCE[0]}" )/../.." && pwd )
 
+pushd $REPO_ROOT
 newgopath=${ROOT%%/gopath/*}/gopath
 if [[ -d ${newgopath} ]]; then
 	if [[ -z ${GOPATH} ]]; then
@@ -48,21 +49,40 @@ fi
 echo ">> Using GOPATH ${GOPATH}"
 godep restore
 go get github.com/mitchellh/gox
+popd
 
-mkdir -p ${ROOT}/release
-cp ${ROOT}/ci/release.md  ${ROOT}/release/notes.md
-echo "Safe v${VERSION}" > ${ROOT}/release/name
-echo "v${VERSION}"      > ${ROOT}/release/tag
 
-gox -osarch="${TARGETS}" --output="${OUTPUT:-release}/safe-{{.OS}}-{{.Arch}}" -ldflags="-X main.Version=${VERSION}" .
+pushd $REPO_ROOT
+mkdir artifacts
+gox -osarch="${TARGETS}" --output="artifacts/safe-{{.OS}}-{{.Arch}}" -ldflags="-X main.Version=${VERSION}" .
 go build -ldflags="-X main.Version=${VERSION}" .
 ./safe -v
+popd
+
+
+echo "v${VERSION}"                         > ${RELEASE_ROOT}/tag
+echo "${RELEASE_NAME} v${VERSION}"         > ${RELEASE_ROOT}/name
+mv ${REPO_ROOT}/ci/release_notes.md          ${RELEASE_ROOT}/notes.md
+mv ${REPO_ROOT}/artifacts                    ${RELEASE_ROOT}/artifacts
+
+cat > ${RELEASE_ROOT}/notification <<EOF
+<!here> New ${RELEASE_NAME} v${VERSION} released!
+EOF
+
+
+# GIT!
+if [[ -z $(git config --global user.email) ]]; then
+  git config --global user.email "ci@starkandwayne.com"
+fi
+if [[ -z $(git config --global user.name) ]]; then
+  git config --global user.name "CI Bot"
+fi
+
+(cd ${REPO_ROOT}
+ git merge --no-edit ${BRANCH}
+ git add -A
+ git status
+ git commit -m "release v${VERSION}")
 
 # so that future steps in the pipeline can push our changes
-echo ; echo ; echo
-echo "ROOT     = ${ROOT}"
-echo "REPO_OUT = ${REPO_OUT}"
-echo "cp -a ${ROOT} ${ORIGIN}/${REPO_OUT}"
-cp -a ${ROOT} ${ORIGIN}/${REPO_OUT}
-echo ; echo ; echo
-ls -l ${ORIGIN}/${REPO_OUT}
+cp -a ${REPO_ROOT} ${REPO_OUT}/git
