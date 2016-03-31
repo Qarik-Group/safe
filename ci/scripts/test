@@ -1,3 +1,6 @@
 #!/bin/bash
 
-echo "no tests..."
+ROOT=$( cd "$( dirname "${BASH_SOURCE[0]}" )/../.." && pwd )
+
+cd $ROOT
+make test

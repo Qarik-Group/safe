@@ -68,8 +68,6 @@ jobs:
           run:
             path: (( concat "./gopath/src/" meta.go.module "/ci/scripts/test" ))
             args: []
-          params:
-            REPO_ROOT: git
 
   - name: rc
     public: true
@@ -114,7 +112,6 @@ jobs:
             path: (( concat "./gopath/src/" meta.go.module "/ci/scripts/shipit" ))
             args: []
           params:
-            REPO_ROOT:    (( concat "gopath/src/" meta.go.module ))
             VERSION_FROM: version/number
             RELEASE_NAME: (( grab meta.release ))
             RELEASE_ROOT: gh

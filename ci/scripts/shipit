@@ -10,8 +10,9 @@
 # created: 2016-03-30
 
 set -eu
+ROOT=$( cd "$( dirname "${BASH_SOURCE[0]}" )/../.." && pwd )
 
-if [[ -z ${VERSION_FROM} ]]; then
+if [[ -z ${VERSION_FROM:-} ]]; then
   echo >&2 "VERSION_FROM environment variable not set, or empty.  Did you misconfigure Concourse?"
   exit 2
 fi
@@ -25,18 +26,13 @@ if [[ -z ${VERSION} ]]; then
   exit 2
 fi
 
-if [[ ! -f ${REPO_ROOT}/ci/release_notes.md ]]; then
+if [[ ! -f ${ROOT}/ci/release_notes.md ]]; then
   echo >&2 "ci/release_notes.md not found.  Did you forget to write them?"
   exit 1
 fi
 
 ###############################################################
 
-#?#ORIGIN=$(pwd)
-TARGETS=${TARGETS:-linux/amd64 darwin/amd64}
-ROOT=$( cd "$( dirname "${BASH_SOURCE[0]}" )/../.." && pwd )
-
-pushd $REPO_ROOT
 newgopath=${ROOT%%/gopath/*}/gopath
 if [[ -d ${newgopath} ]]; then
 	if [[ -z ${GOPATH} ]]; then
@@ -47,23 +43,11 @@ if [[ -d ${newgopath} ]]; then
 	PATH="${PATH}:${newgopath}/bin"
 fi
 echo ">> Using GOPATH ${GOPATH}"
-godep restore
-go get github.com/mitchellh/gox
-popd
 
-
-pushd $REPO_ROOT
-mkdir artifacts
-gox -osarch="${TARGETS}" --output="artifacts/safe-{{.OS}}-{{.Arch}}" -ldflags="-X main.Version=${VERSION}" .
-go build -ldflags="-X main.Version=${VERSION}" .
-./safe -v
-popd
-
-
-echo "v${VERSION}"                         > ${RELEASE_ROOT}/tag
-echo "${RELEASE_NAME} v${VERSION}"         > ${RELEASE_ROOT}/name
-mv ${REPO_ROOT}/ci/release_notes.md          ${RELEASE_ROOT}/notes.md
-mv ${REPO_ROOT}/artifacts                    ${RELEASE_ROOT}/artifacts
+make -C $ROOT release
+echo "v${VERSION}"                    > ${RELEASE_ROOT}/tag
+echo "${RELEASE_NAME} v${VERSION}"    > ${RELEASE_ROOT}/name
+mv ${ROOT}/ci/release_notes.md          ${RELEASE_ROOT}/notes.md
 
 cat > ${RELEASE_ROOT}/notification <<EOF
 <!here> New ${RELEASE_NAME} v${VERSION} released!
@@ -78,11 +62,11 @@ if [[ -z $(git config --global user.name) ]]; then
   git config --global user.name "CI Bot"
 fi
 
-(cd ${REPO_ROOT}
+(cd ${ROOT}
  git merge --no-edit ${BRANCH}
  git add -A
  git status
  git commit -m "release v${VERSION}")
 
 # so that future steps in the pipeline can push our changes
-cp -a ${REPO_ROOT} ${REPO_OUT}/git
+cp -a ${ROOT} ${REPO_OUT}/git
