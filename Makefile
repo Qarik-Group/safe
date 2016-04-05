@@ -1,5 +1,5 @@
 DESTDIR      ?= /usr/local
-RELEASE_ROOT ?= artifacts
+RELEASE_ROOT ?= release
 TARGETS      ?= linux/amd64 darwin/amd64
 
 GO_LDFLAGS := -ldflags="-X main.Version=$(VERSION)"
@@ -15,7 +15,7 @@ test:
 release: build
 	mkdir -p $(RELEASE_ROOT)
 	@go get github.com/mitchellh/gox
-	gox -osarch="$(TARGETS)" --output="$(RELEASE_ROOT)/safe-{{.OS}}-{{.Arch}}" $(GO_LDFLAGS)
+	gox -osarch="$(TARGETS)" --output="$(RELEASE_ROOT)/artifacts/safe-{{.OS}}-{{.Arch}}" $(GO_LDFLAGS)
 
 install: build
 	mkdir -p $(DESTDIR)/bin
