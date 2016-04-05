@@ -44,7 +44,7 @@ if [[ -d ${newgopath} ]]; then
 fi
 echo ">> Using GOPATH ${GOPATH}"
 
-make -C $ROOT release
+make -C $ROOT VERSION="${VERSION}" RELEASE_ROOT="${PWD}/${RELEASE_ROOT}" release
 echo "v${VERSION}"                    > ${RELEASE_ROOT}/tag
 echo "${RELEASE_NAME} v${VERSION}"    > ${RELEASE_ROOT}/name
 mv ${ROOT}/ci/release_notes.md          ${RELEASE_ROOT}/notes.md
