@@ -4,8 +4,8 @@ import (
 	"os"
 	"strings"
 
-	"golang.org/x/crypto/ssh/terminal"
 	"github.com/jhunt/ansi"
+	"github.com/jhunt/safe/prompt"
 )
 
 func fail(err error) {
@@ -19,27 +19,19 @@ func keyPrompt(key string) (string, string) {
 	if strings.Index(key, "=") >= 0 {
 		l := strings.SplitN(key, "=", 2)
 		if l[1] == "" {
-			l[1] = prompt(l[0])
+			l[1] = pr(l[0])
 		}
 		ansi.Printf("%s: @G{%s}\n", l[0], l[1])
 		return l[0], l[1]
 	}
-	return key, prompt(key)
+	return key, pr(key)
 }
 
-func prompt(label string) string {
+func pr(label string) string {
 	for {
-		ansi.Printf("%s @Y{[hidden]:} ", label)
-		a_, err := terminal.ReadPassword(int(os.Stdin.Fd()))
-		ansi.Printf("\n")
-		fail(err)
+		a := prompt.Secure("%s @Y{[hidden]:} ", label)
+		b := prompt.Secure("%s @C{[confirm]:} ", label)
 
-		ansi.Printf("%s @C{[confirm]:} ", label)
-		b_, err := terminal.ReadPassword(int(os.Stdin.Fd()))
-		ansi.Printf("\n")
-		fail(err)
-
-		a, b := string(a_), string(b_)
 		if a == b && a != "" {
 			ansi.Printf("\n")
 			return a

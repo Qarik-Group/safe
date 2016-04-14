@@ -8,15 +8,35 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/jhunt/ansi"
+
+	"github.com/jhunt/safe/auth"
+	"github.com/jhunt/safe/rc"
 	"github.com/jhunt/safe/vault"
 )
 
 var Version string
 
 func connect() *vault.Vault {
-	v, err := vault.NewVault(os.Getenv("VAULT_ADDR"), "")
+	addr := os.Getenv("VAULT_ADDR")
+	if addr == "" {
+		ansi.Fprintf(os.Stderr, "@R{You are not targeting a Vault.}\n")
+		ansi.Fprintf(os.Stderr, "Try @C{safe target http://your-vault alias}\n")
+		ansi.Fprintf(os.Stderr, " or @C{safe target alias}\n")
+		os.Exit(1)
+	}
+
+	if os.Getenv("VAULT_TOKEN") == "" {
+		ansi.Fprintf(os.Stderr, "@R{You are not authenticated to a Vault.}\n")
+		ansi.Fprintf(os.Stderr, "Try @C{safe auth ldap}\n")
+		ansi.Fprintf(os.Stderr, " or @C{safe auth github}\n")
+		ansi.Fprintf(os.Stderr, " or @C{safe auth token}\n")
+		os.Exit(1)
+	}
+
+	v, err := vault.NewVault(addr, "")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s\n", err)
+		ansi.Fprintf(os.Stderr, "@R{!! %s}\n", err)
 		os.Exit(1)
 	}
 	return v
@@ -40,6 +60,15 @@ func main() {
 		fmt.Fprintf(os.Stderr, `Usage: safe <cmd> <args ...>
 
     Valid subcommands are:
+
+    targets
+           List all Vaults that have been targeted.
+
+    target [vault-address] name
+           Target a new or existing Vault.
+
+    auth [token|ldap|github]
+           Authenticate against the currently targeted Vault.
 
     get path [path ...]
            Retrieve and print the values of one or more paths.
@@ -95,7 +124,109 @@ func main() {
 		return nil
 	}, "-h", "--help")
 
+	r.Dispatch("targets", func(command string, args ...string) error {
+		if len(args) != 0 {
+			return fmt.Errorf("USAGE: targets")
+		}
+
+		cfg := rc.Apply()
+		wide := 0
+		for name := range cfg.Aliases {
+			if len(name) > wide {
+				wide = len(name)
+			}
+		}
+
+		current := fmt.Sprintf(" @G{%%-%ds}\t@Y{%%s}\n", wide)
+		other := fmt.Sprintf(" %%-%ds\t%%s\n", wide)
+		fmt.Printf("\n")
+		for name, url := range cfg.Aliases {
+			if name == cfg.Current {
+				ansi.Printf(current, name, url)
+			} else {
+				ansi.Printf(other, name, url)
+			}
+		}
+		fmt.Printf("\n")
+		return nil
+	})
+
+	r.Dispatch("target", func(command string, args ...string) error {
+		cfg := rc.Apply()
+		if len(args) == 1 {
+			err := cfg.SetCurrent(args[0])
+			if err != nil {
+				return err
+			}
+			ansi.Printf("Now targeting @C{%s} at @C{%s}\n", cfg.Current, cfg.URL())
+			return cfg.Write("")
+		}
+
+		if len(args) == 2 {
+			err := cfg.SetTarget(args[1], args[0])
+			if err != nil {
+				return err
+			}
+			ansi.Printf("Now targeting @C{%s} at @C{%s}\n", cfg.Current, cfg.URL())
+			return cfg.Write("")
+		}
+
+		return fmt.Errorf("USAGE: target [vault-address] name")
+	})
+
+	r.Dispatch("env", func(command string, args ...string) error {
+		rc.Apply()
+		ansi.Printf("  @B{VAULT_ADDR}  @G{%s}\n", os.Getenv("VAULT_ADDR"))
+		ansi.Printf("  @B{VAULT_TOKEN} @G{%s}\n", os.Getenv("VAULT_TOKEN"))
+		return nil
+	})
+
+	r.Dispatch("auth", func(command string, args ...string) error {
+		cfg := rc.Apply()
+
+		method := "token"
+		if len(args) > 0 {
+			method = args[0]
+			args = args[1:]
+		}
+
+		var token string
+		var err error
+
+		ansi.Printf("Authenticating against @C{%s} at @C{%s}\n", cfg.Current, cfg.URL())
+		switch method {
+		case "token":
+			token, err = auth.Token(os.Getenv("VAULT_ADDR"))
+			if err != nil {
+				return err
+			}
+			break
+
+		case "ldap":
+			token, err = auth.LDAP(os.Getenv("VAULT_ADDR"))
+			if err != nil {
+				return err
+			}
+			break
+
+		case "github":
+			token, err = auth.Github(os.Getenv("VAULT_ADDR"))
+			if err != nil {
+				return err
+			}
+			break
+
+		default:
+			return fmt.Errorf("Unrecognized authentication method '%s'", method)
+		}
+
+		cfg.SetToken(token)
+		return cfg.Write("")
+
+	}, "login")
+
 	r.Dispatch("set", func(command string, args ...string) error {
+		rc.Apply()
 		if len(args) < 2 {
 			return fmt.Errorf("USAGE: set path key[=value] [key ...]")
 		}
@@ -113,6 +244,7 @@ func main() {
 	}, "write")
 
 	r.Dispatch("get", func(command string, args ...string) error {
+		rc.Apply()
 		if len(args) < 1 {
 			return fmt.Errorf("USAGE: get path [path ...]")
 		}
@@ -129,6 +261,7 @@ func main() {
 	}, "read", "cat")
 
 	r.Dispatch("tree", func(command string, args ...string) error {
+		rc.Apply()
 		if len(args) == 0 {
 			args = append(args, "secret")
 		}
@@ -144,6 +277,7 @@ func main() {
 	})
 
 	r.Dispatch("paths", func(command string, args ...string) error {
+		rc.Apply()
 		if len(args) < 1 {
 			return fmt.Errorf("USAGE: paths path [path ...]")
 		}
@@ -161,6 +295,7 @@ func main() {
 	})
 
 	r.Dispatch("delete", func(command string, args ...string) error {
+		rc.Apply()
 		if len(args) < 1 {
 			return fmt.Errorf("USAGE: delete path [path ...]")
 		}
@@ -174,6 +309,7 @@ func main() {
 	}, "rm")
 
 	r.Dispatch("export", func(command string, args ...string) error {
+		rc.Apply()
 		if len(args) < 1 {
 			return fmt.Errorf("USAGE: export path [path ...]")
 		}
@@ -203,6 +339,7 @@ func main() {
 	})
 
 	r.Dispatch("import", func(command string, args ...string) error {
+		rc.Apply()
 		b, err := ioutil.ReadAll(os.Stdin)
 		if err != nil {
 			return err
@@ -225,6 +362,7 @@ func main() {
 	})
 
 	r.Dispatch("move", func(command string, args ...string) error {
+		rc.Apply()
 		if len(args) != 2 {
 			return fmt.Errorf("USAGE: move oldpath newpath")
 		}
@@ -233,6 +371,7 @@ func main() {
 	}, "mv", "rename")
 
 	r.Dispatch("copy", func(command string, args ...string) error {
+		rc.Apply()
 		if len(args) != 2 {
 			return fmt.Errorf("USAGE: copy oldpath newpath")
 		}
@@ -241,6 +380,7 @@ func main() {
 	}, "cp")
 
 	r.Dispatch("gen", func(command string, args ...string) error {
+		rc.Apply()
 		length := 64
 		if len(args) > 0 {
 			if u, err := strconv.ParseUint(args[0], 10, 16); err == nil {
@@ -267,6 +407,7 @@ func main() {
 	}, "auto")
 
 	r.Dispatch("ssh", func(command string, args ...string) error {
+		rc.Apply()
 		bits := 2048
 		if len(args) > 0 {
 			if u, err := strconv.ParseUint(args[0], 10, 16); err == nil {
@@ -296,6 +437,7 @@ func main() {
 	})
 
 	r.Dispatch("rsa", func(command string, args ...string) error {
+		rc.Apply()
 		bits := 2048
 		if len(args) > 0 {
 			if u, err := strconv.ParseUint(args[0], 10, 16); err == nil {
@@ -334,7 +476,7 @@ func main() {
 	}
 
 	if err := r.Run(os.Args[1:]...); err != nil {
-		fmt.Fprintf(os.Stderr, "%s\n", err)
+		ansi.Fprintf(os.Stderr, "@R{!! %s}\n", err)
 		os.Exit(1)
 	}
 }

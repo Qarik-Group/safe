@@ -18,6 +18,48 @@ So, why `safe`?  To solve the following problems:
 Primarily, these are things encountered in trying to build secure
 BOSH deployments using Vault and [Spruce][spruce].
 
+Authenticaion
+-------------
+
+To make it easier to target multiple Vaults from one client (i.e.
+your work laptop), `safe` lets you track and authenticate against
+_targets_, each representing a different vault.
+
+To get started, you'll need to add a new target:
+
+```
+safe target https://vault.example.com myvault
+```
+
+The first argument is the URL to the Vault; the second is a
+shorthand alias for the target.  Later, you can retarget this
+Vault with just:
+
+```
+safe target myvault
+```
+
+You can see what Vaults you have targeted by running
+
+```
+safe targets
+```
+
+All commands will be run against the currently targeted Vault.
+
+To authenticate:
+
+```
+safe auth [token]
+safe auth ldap
+safe auth github
+```
+
+(Other authentication backends are not yet supported)
+
+For each type (token, ldap or github), you will be prompted for
+the necessary credentials to authenticated against the Vault.
+
 Usage
 -----
 
