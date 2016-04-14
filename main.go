@@ -476,7 +476,11 @@ func main() {
 	}
 
 	if err := r.Run(os.Args[1:]...); err != nil {
-		ansi.Fprintf(os.Stderr, "@R{!! %s}\n", err)
+		if strings.HasPrefix(err.Error(), "USAGE") {
+			ansi.Fprintf(os.Stderr, "@Y{%s}\n", err)
+		} else {
+			ansi.Fprintf(os.Stderr, "@R{!! %s}\n", err)
+		}
 		os.Exit(1)
 	}
 }
