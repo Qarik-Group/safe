@@ -76,6 +76,13 @@ To set non-sensitive keys, you can just specify them inline:
 safe set secret/ssh username=system
 ```
 
+If you use a password manager (good for you!) and don't want to
+have to paste passwords twice, use the `passte` subcommand:
+
+```
+safe paste secret/1pass/managed
+```
+
 Commands can be chained by separating them with the argument
 terminator, `--`, so to both create a new SSH keypair and set the
 username:

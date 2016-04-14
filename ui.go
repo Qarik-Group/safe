@@ -15,19 +15,23 @@ func fail(err error) {
 	}
 }
 
-func keyPrompt(key string) (string, string) {
+func keyPrompt(key string, confirm bool) (string, string) {
 	if strings.Index(key, "=") >= 0 {
 		l := strings.SplitN(key, "=", 2)
 		if l[1] == "" {
-			l[1] = pr(l[0])
+			l[1] = pr(l[0], confirm)
 		}
 		ansi.Printf("%s: @G{%s}\n", l[0], l[1])
 		return l[0], l[1]
 	}
-	return key, pr(key)
+	return key, pr(key, confirm)
 }
 
-func pr(label string) string {
+func pr(label string, confirm bool) string {
+	if !confirm {
+		return prompt.Secure("%s: ", label)
+	}
+
 	for {
 		a := prompt.Secure("%s @Y{[hidden]:} ", label)
 		b := prompt.Secure("%s @C{[confirm]:} ", label)
