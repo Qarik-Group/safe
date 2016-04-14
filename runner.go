@@ -4,17 +4,17 @@ import (
 	"fmt"
 )
 
-type Handler func (command string, args ...string) error
+type Handler func(command string, args ...string) error
 
 type Runner struct {
-	Handlers map[string] Handler
-	Aliases  map[string] string
+	Handlers map[string]Handler
+	Aliases  map[string]string
 }
 
 func NewRunner() *Runner {
 	return &Runner{
-		Handlers: make(map[string] Handler),
-		Aliases:  make(map[string] string),
+		Handlers: make(map[string]Handler),
+		Aliases:  make(map[string]string),
 	}
 }
 
