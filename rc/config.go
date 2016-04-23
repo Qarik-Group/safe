@@ -1,25 +1,59 @@
 package rc
 
 import (
-	"io/ioutil"
 	"fmt"
+	"io/ioutil"
 	"os"
 
 	"github.com/ghodss/yaml"
 )
 
 type Config struct {
-	Current string `yaml:"current"`
-	Targets map[string] interface{} `yaml:"targets"`
-	Aliases map[string] string `yaml:"aliases"`
+	Current string                 `yaml:"current"`
+	Targets map[string]interface{} `yaml:"targets"`
+	Aliases map[string]string      `yaml:"aliases"`
 }
 
-func Path() string {
+func saferc() string {
 	return fmt.Sprintf("%s/.saferc", os.Getenv("HOME"))
 }
 
+func svtoken() string {
+	return fmt.Sprintf("%s/.svtoken", os.Getenv("HOME"))
+}
+
+func (c *Config) credentials() (string, string, error) {
+	if c.Current == "" {
+		return "", "", nil
+	}
+
+	url, ok := c.Aliases[c.Current]
+	if !ok {
+		return "", "", fmt.Errorf("Current target vault '%s' not found in ~/.saferc", c.Current)
+	}
+
+	t, ok := c.Targets[url]
+	if !ok {
+		return "", "", fmt.Errorf("Current target vault '%s' not found in ~/.saferc", c.Current)
+	}
+
+	token := ""
+	if t != nil {
+		token = t.(string)
+	}
+
+	return url, token, nil
+}
+
 func Apply() Config {
-	c, err := ReadConfig(Path())
+	var c Config
+
+	b, err := ioutil.ReadFile(saferc())
+	if err != nil {
+		return c
+	}
+
+	err = yaml.Unmarshal(b, &c)
 	if err != nil {
 		return c
 	}
@@ -28,54 +62,38 @@ func Apply() Config {
 	return c
 }
 
-func ReadConfig(path string) (Config, error) {
-	var c Config
-
-	if path == "" {
-		path = Path()
-	}
-
-	b, err := ioutil.ReadFile(path);
-	if err != nil {
-		return c, err
-	}
-
-	err = yaml.Unmarshal(b, &c)
-	return c, err
-}
-
-func (c *Config) Write(path string) error {
+func (c *Config) Write() error {
 	b, err := yaml.Marshal(c)
 	if err != nil {
 		return err
 	}
 
-	if path == "" {
-		path = Path()
+	err = ioutil.WriteFile(saferc(), b, 0600)
+	if err != nil {
+		return err
 	}
 
-	err = ioutil.WriteFile(path, b, 0600)
-	return err
+	url, token, err := c.credentials()
+	if err != nil {
+		return err
+	}
+
+	b, err = yaml.Marshal(
+		struct {
+			URL   string `json:"vault"`
+			Token string `json:"token"`
+		}{url, token})
+	if err != nil {
+		return err
+	}
+
+	return ioutil.WriteFile(svtoken(), b, 0600)
 }
 
 func (c *Config) Apply() error {
-	if c.Current == "" {
-		return nil
-	}
-
-	url, ok := c.Aliases[c.Current]
-	if !ok {
-		return fmt.Errorf("Current target vault '%s' not found in ~/.saferc", c.Current)
-	}
-
-	t, ok := c.Targets[url]
-	if !ok {
-		return fmt.Errorf("Current target vault '%s' not found in ~/.saferc", c.Current)
-	}
-
-	token := ""
-	if t != nil {
-		token = t.(string)
+	url, token, err := c.credentials()
+	if err != nil {
+		return err
 	}
 
 	os.Setenv("VAULT_ADDR", url)
@@ -93,10 +111,10 @@ func (c *Config) SetCurrent(alias string) error {
 
 func (c *Config) SetTarget(alias, url string) error {
 	if c.Aliases == nil {
-		c.Aliases = make(map[string] string)
+		c.Aliases = make(map[string]string)
 	}
 	if c.Targets == nil {
-		c.Targets = make(map[string] interface{})
+		c.Targets = make(map[string]interface{})
 	}
 	c.Aliases[alias] = url
 	c.Current = alias

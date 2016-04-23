@@ -159,7 +159,7 @@ func main() {
 				return err
 			}
 			ansi.Printf("Now targeting @C{%s} at @C{%s}\n", cfg.Current, cfg.URL())
-			return cfg.Write("")
+			return cfg.Write()
 		}
 
 		if len(args) == 2 {
@@ -168,7 +168,7 @@ func main() {
 				return err
 			}
 			ansi.Printf("Now targeting @C{%s} at @C{%s}\n", cfg.Current, cfg.URL())
-			return cfg.Write("")
+			return cfg.Write()
 		}
 
 		return fmt.Errorf("USAGE: target [vault-address] name")
@@ -221,7 +221,7 @@ func main() {
 		}
 
 		cfg.SetToken(token)
-		return cfg.Write("")
+		return cfg.Write()
 
 	}, "login")
 
