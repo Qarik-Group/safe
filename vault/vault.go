@@ -1,13 +1,13 @@
 package vault
 
 import (
-	"strings"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
-	"crypto/tls"
+	"strings"
 
 	"github.com/jhunt/ansi"
 	"github.com/jhunt/tree"
@@ -40,12 +40,12 @@ func NewVault(url, token string) (*Vault, error) {
 		URL:   url,
 		Token: token,
 		Client: &http.Client{
-			Transport:  &http.Transport{
+			Transport: &http.Transport{
 				TLSClientConfig: &tls.Config{
 					InsecureSkipVerify: os.Getenv("VAULT_SKIP_VERIFY") != "",
 				},
 			},
-			CheckRedirect: func (req *http.Request, via []*http.Request) error {
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				if len(via) > 10 {
 					return fmt.Errorf("stopped after 10 redirects")
 				}
@@ -150,7 +150,7 @@ func (v *Vault) List(path string) (paths []string, err error) {
 		return
 	}
 
-	var r struct { Data struct { Keys []string } }
+	var r struct{ Data struct{ Keys []string } }
 	if err = json.Unmarshal(b, &r); err != nil {
 		return
 	}
@@ -161,6 +161,7 @@ type Node struct {
 	Path     string
 	Children []Node
 }
+
 // Tree returns a tree that represents the hierarhcy of paths contained
 // below the given path, inside of the Vault.
 func (v *Vault) Tree(path string, ansify bool) (tree.Node, error) {
@@ -178,14 +179,14 @@ func (v *Vault) Tree(path string, ansify bool) (tree.Node, error) {
 	var kid tree.Node
 	for _, p := range l {
 		if p[len(p)-1:len(p)] == "/" {
-			kid, err = v.Tree(path + "/" + p[0:len(p)-1], ansify)
+			kid, err = v.Tree(path+"/"+p[0:len(p)-1], ansify)
 			if ansify {
 				name = ansi.Sprintf("@B{%s}", p)
 			} else {
-				name = p[0:len(p)-1]
+				name = p[0 : len(p)-1]
 			}
 		} else {
-			kid, err = v.Tree(path + "/" + p, ansify)
+			kid, err = v.Tree(path+"/"+p, ansify)
 			if ansify {
 				name = ansi.Sprintf("@G{%s}", p)
 			} else {
@@ -220,7 +221,8 @@ func (v *Vault) Write(path string, s *Secret) error {
 	switch res.StatusCode {
 	case 200:
 		break
-	case 204: break
+	case 204:
+		break
 	default:
 		return fmt.Errorf("API %s", res.Status)
 	}
@@ -242,7 +244,8 @@ func (v *Vault) Delete(path string) error {
 	switch res.StatusCode {
 	case 200:
 		break
-	case 204: break
+	case 204:
+		break
 	default:
 		return fmt.Errorf("API %s", res.Status)
 	}

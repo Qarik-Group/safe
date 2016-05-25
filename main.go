@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 
@@ -34,7 +35,7 @@ func connect() *vault.Vault {
 		os.Exit(1)
 	}
 
-	v, err := vault.NewVault(addr, "")
+	v, err := vault.NewVault(addr, os.Getenv("VAULT_TOKEN"))
 	if err != nil {
 		ansi.Fprintf(os.Stderr, "@R{!! %s}\n", err)
 		os.Exit(1)
@@ -75,7 +76,7 @@ func main() {
 
     set path key[=value] [key ...]
            Update a single path with new keys.  Any existing keys that are
-           not specified on the command line are left intact.You will be
+           not specified on the command line are left intact. You will be
            prompted to enter values for any keys that do not have values.
            This can be used for more sensitive credentials like passwords,
            PINs, etc.
@@ -119,6 +120,9 @@ func main() {
     export path [path ...]
            Export the given subtree(s) in a format suitable for migration (via a
            future import call), or long-term storage offline.
+
+    vault  ...
+           Runs arbitrary commands through the vault cli.
 `)
 		os.Exit(0)
 		return nil
@@ -486,6 +490,21 @@ func main() {
 
 	r.Dispatch("prompt", func(command string, args ...string) error {
 		fmt.Printf("%s\n", strings.Join(args, " "))
+		return nil
+	})
+
+	r.Dispatch("vault", func(command string, args ...string) error {
+		rc.Apply()
+
+		cmd := exec.Command("vault", args...)
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+
+		err := cmd.Run()
+		if err != nil {
+			return err
+		}
 		return nil
 	})
 
