@@ -478,7 +478,7 @@ func main() {
 			if err != nil && err != vault.NotFound {
 				return err
 			}
-			if err = s.SSHKey(bits); err != nil {
+			if err = s.RSAKey(bits); err != nil {
 				return err
 			}
 			if err = v.Write(path, s); err != nil {

@@ -8,11 +8,11 @@ import (
 // A Secret contains a set of key/value pairs that store anything you
 // want, including passwords, RSAKey keys, usernames, etc.
 type Secret struct {
-	data map[string] string
+	data map[string]string
 }
 
 func NewSecret() *Secret {
-	return &Secret{ make(map[string] string) }
+	return &Secret{make(map[string]string)}
 }
 
 func (s Secret) MarshalJSON() ([]byte, error) {
@@ -45,12 +45,15 @@ func (s *Secret) Password(key string, length int) {
 	s.data[key] = random(length)
 }
 
-func (s *Secret) keypair(private, public string, err error) error {
+func (s *Secret) keypair(private, public string, fingerprint string, err error) error {
 	if err != nil {
 		return err
 	}
 	s.data["private"] = private
-	s.data["public"]  = public
+	s.data["public"] = public
+	if fingerprint != "" {
+		s.data["fingerprint"] = fingerprint
+	}
 	return nil
 }
 

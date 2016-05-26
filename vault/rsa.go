@@ -1,35 +1,35 @@
 package vault
 
 import (
-	"encoding/pem"
+	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
-	"crypto/rand"
+	"encoding/pem"
 )
 
-func rsakey(bits int) (string, string, error) {
+func rsakey(bits int) (string, string, string, error) {
 	key, err := rsa.GenerateKey(rand.Reader, bits)
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 
 	private := pem.EncodeToMemory(
 		&pem.Block{
-			Type: "RSA PRIVATE KEY",
+			Type:  "RSA PRIVATE KEY",
 			Bytes: x509.MarshalPKCS1PrivateKey(key),
 		},
 	)
 
 	b, err := x509.MarshalPKIXPublicKey(key.Public())
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 	public := pem.EncodeToMemory(
 		&pem.Block{
-			Type: "RSA PUBLIC KEY",
+			Type:  "RSA PUBLIC KEY",
 			Bytes: b,
 		},
 	)
 
-	return string(private), string(public), nil
+	return string(private), string(public), "", nil
 }
