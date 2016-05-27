@@ -1,22 +1,25 @@
 package vault
 
 import (
-	"encoding/pem"
+	"crypto/md5"
+	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
-	"crypto/rand"
+	"encoding/pem"
+	"fmt"
 	"golang.org/x/crypto/ssh"
+	"strings"
 )
 
-func sshkey(bits int) (string, string, error) {
+func sshkey(bits int) (string, string, string, error) {
 	key, err := rsa.GenerateKey(rand.Reader, bits)
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 
 	private := pem.EncodeToMemory(
 		&pem.Block{
-			Type: "RSA PRIVATE KEY",
+			Type:  "RSA PRIVATE KEY",
 			Bytes: x509.MarshalPKCS1PrivateKey(key),
 		},
 	)
@@ -24,9 +27,16 @@ func sshkey(bits int) (string, string, error) {
 	pub := key.Public()
 	pubkey, err := ssh.NewPublicKey(pub)
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 	public := ssh.MarshalAuthorizedKey(pubkey)
 
-	return string(private), string(public), nil
+	var fp []string
+	f := []byte(fmt.Sprintf("%x", md5.Sum(pubkey.Marshal())))
+	for i := 0; i < len(f); i += 2 {
+		fp = append(fp, string(f[i:i+2]))
+	}
+	fingerprint := strings.Join(fp, ":")
+
+	return string(private), string(public), string(fingerprint), nil
 }
