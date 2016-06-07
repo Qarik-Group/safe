@@ -1,8 +1,11 @@
 package vault
 
 import (
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"github.com/ghodss/yaml"
+	"github.com/kless/osutil/user/crypt/sha512_crypt"
 )
 
 // A Secret contains a set of key/value pairs that store anything you
@@ -40,9 +43,39 @@ func (s *Secret) Set(key, value string) {
 	s.data[key] = value
 }
 
+func (s *Secret) Format(oldKey, newKey, fmtType string) error {
+	if !s.Has(oldKey) {
+		return NotFound
+	}
+	oldVal := s.Get(oldKey)
+	switch fmtType {
+	case "crypt-sha512":
+		newVal, err := crypt_sha512(oldVal)
+		if err != nil {
+			return err
+		}
+		s.data[newKey] = newVal
+	case "base64":
+		s.data[newKey] = base64.StdEncoding.EncodeToString([]byte(oldVal))
+	default:
+		return fmt.Errorf("%s is not a valid encoding for the `safe fmt` command", fmtType)
+	}
+
+	return nil
+}
+
 // Password creates and stores a new randomized password.
 func (s *Secret) Password(key string, length int) {
 	s.data[key] = random(length)
+}
+
+func crypt_sha512(pass string) (string, error) {
+	c := sha512_crypt.New()
+	sha, err := c.Generate([]byte(pass), []byte("$6$"+random(16)))
+	if err != nil {
+		return "", fmt.Errorf("Error generating crypt for password: %s\n", err)
+	}
+	return sha, err
 }
 
 func (s *Secret) keypair(private, public string, fingerprint string, err error) error {
