@@ -275,8 +275,8 @@ safe gen 16 secret/account password
 
 ### fmt format_type path oldKey newKey
 
-Take the key at path:oldKey, reformat it according to **format_type**,
-and save it in path:newKey. Useful for hashing, or encoding passwords
+Take the key at `path:oldKey`, reformat it according to **format_type**,
+and save it in `path:newKey`. Useful for hashing, or encoding passwords
 in an alternate format (for htpass files, or /etc/shadow).
 
 Currently supported formats:
