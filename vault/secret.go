@@ -2,7 +2,10 @@ package vault
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/ghodss/yaml"
+	"github.com/kless/osutil/user/crypt/sha512_crypt"
+	"os"
 )
 
 // A Secret contains a set of key/value pairs that store anything you
@@ -43,6 +46,17 @@ func (s *Secret) Set(key, value string) {
 // Password creates and stores a new randomized password.
 func (s *Secret) Password(key string, length int) {
 	s.data[key] = random(length)
+	s.data[key+"-crypt"] = crypt(s.data[key])
+}
+
+func crypt(pass string) string {
+	c := sha512_crypt.New()
+	sha, err := c.Generate([]byte(pass), []byte("$6$"+random(16)))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating crypt for password: %s\n", err)
+		return ""
+	}
+	return sha
 }
 
 func (s *Secret) keypair(private, public string, fingerprint string, err error) error {
