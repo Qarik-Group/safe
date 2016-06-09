@@ -15,6 +15,18 @@
 			"Rev": "727593165320989cafef6fb65479934653d86ee5"
 		},
 		{
+			"ImportPath": "github.com/kless/osutil/user/crypt",
+			"Rev": "3ac994847c4376a4b905fc0a19f450c5a4bec647"
+		},
+		{
+			"ImportPath": "github.com/kless/osutil/user/crypt/common",
+			"Rev": "3ac994847c4376a4b905fc0a19f450c5a4bec647"
+		},
+		{
+			"ImportPath": "github.com/kless/osutil/user/crypt/sha512_crypt",
+			"Rev": "3ac994847c4376a4b905fc0a19f450c5a4bec647"
+		},
+		{
 			"ImportPath": "github.com/mattn/go-isatty",
 			"Rev": "56b76bdf51f7708750eac80fa38b952bb9f32639"
 		},
@@ -24,6 +36,10 @@
 		},
 		{
 			"ImportPath": "golang.org/x/crypto/ssh",
+			"Rev": "1f22c0103821b9390939b6776727195525381532"
+		},
+		{
+			"ImportPath": "golang.org/x/crypto/ssh/terminal",
 			"Rev": "1f22c0103821b9390939b6776727195525381532"
 		},
 		{
