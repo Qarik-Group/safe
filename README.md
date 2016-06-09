@@ -126,6 +126,18 @@ is equivalent to this:
 safe set secret/x a=b -- set secret/x c=d
 ```
 
+Need to take an existing password, and generate a crypt-sha512 hash,
+or base64 encode it? `safe fmt` will do this, and store the results
+in a new key for you, making it easy to generate a password, and then
+format that password as needed.
+
+```
+safe gen secret/account password
+safe fmt base64 secret/account password base64_pass
+safe fmt crypt-sha512 secret/account password crypt_pass
+safe get secret/account
+```
+
 Command Reference
 ------------------
 
@@ -259,6 +271,22 @@ To get a shorter password, only 16 characters long:
 
 ```
 safe gen 16 secret/account password
+```
+
+### fmt format_type path oldKey newKey
+
+Take the key at `path:oldKey`, reformat it according to **format_type**,
+and save it in `path:newKey`. Useful for hashing, or encoding passwords
+in an alternate format (for htpass files, or /etc/shadow).
+
+Currently supported formats:
+
+- base64
+- crypt-sha512
+
+```
+safe fmt base64 secret/account password base64_password
+safe fmt crypt-sha512 secret/account password crypt_password
 ```
 
 ### ssh \[nbits\] path \[path ...\]

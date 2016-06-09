@@ -96,6 +96,15 @@ func main() {
     copy oldpath newpath
            Copy a secret from oldpath to newpath.
 
+    fmt format_type path oldkey newkey
+           Take the value found at path:oldkey, and reformat it based
+           on the provided flags (such as base64 encoding or crypt
+           hashing). The resultant value will be stored into path:newkey.
+
+           Valid format_types include the following:
+           - crypt-sha512
+           - base64
+
     gen [length] path key
            Generate a new, random password (length defaults to 64 chars).
 
@@ -422,6 +431,7 @@ func main() {
 			return err
 		}
 		s.Password(key, length)
+
 		if err = v.Write(path, s); err != nil {
 			return err
 		}
@@ -506,6 +516,33 @@ func main() {
 			return err
 		}
 		return nil
+	})
+
+	r.Dispatch("fmt", func(command string, args ...string) error {
+		rc.Apply()
+
+		if len(args) != 4 {
+			return fmt.Errorf("USAGE: fmt format_type path oldkey newkey")
+		}
+
+		fmtType := args[0]
+		path := args[1]
+		oldKey := args[2]
+		newKey := args[3]
+
+		v := connect()
+		s, err := v.Read(path)
+		if err != nil {
+			return err
+		}
+		if err = s.Format(oldKey, newKey, fmtType); err != nil {
+			if err == vault.NotFound {
+				return fmt.Errorf("%s:%s does not exist, cannot create %s encoded copy at %s:%s", path, oldKey, fmtType, path, newKey)
+			}
+			return fmt.Errorf("Error encoding %s:%s as %s: %s", path, oldKey, fmtType, err)
+		}
+
+		return v.Write(path, s)
 	})
 
 	if len(os.Args) < 2 {
