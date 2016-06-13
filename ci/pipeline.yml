@@ -118,9 +118,6 @@ jobs:
             REPO_OUT:     pushme
             BRANCH:       (( grab meta.github.branch ))
 
-      - put: version
-        params:
-          bump: patch
       - put: git
         params:
           rebase: true
@@ -131,6 +128,9 @@ jobs:
           tag:    gh/tag
           body:   gh/notes.md
           globs: [gh/artifacts/*]
+      - put: version
+        params:
+          bump: patch
 
 resource_types:
   - name: slack-notification
