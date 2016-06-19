@@ -176,7 +176,12 @@ func main() {
 		}
 
 		if len(args) == 2 {
-			err := cfg.SetTarget(args[1], args[0])
+			var err error
+			if strings.HasPrefix(args[1], "http://") || strings.HasPrefix(args[1], "https://") {
+				err = cfg.SetTarget(args[0], args[1])
+			} else {
+				err = cfg.SetTarget(args[1], args[0])
+			}
 			if err != nil {
 				return err
 			}
