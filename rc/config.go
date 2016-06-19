@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"strings"
 
 	"github.com/ghodss/yaml"
 )
@@ -49,13 +50,8 @@ func Apply() Config {
 	var c Config
 
 	b, err := ioutil.ReadFile(saferc())
-	if err != nil {
-		return c
-	}
-
-	err = yaml.Unmarshal(b, &c)
-	if err != nil {
-		return c
+	if err == nil {
+		yaml.Unmarshal(b, &c)
 	}
 
 	c.Apply()
@@ -96,8 +92,18 @@ func (c *Config) Apply() error {
 		return err
 	}
 
-	os.Setenv("VAULT_ADDR", url)
-	os.Setenv("VAULT_TOKEN", token)
+	if url != "" {
+		os.Setenv("VAULT_ADDR", url)
+		os.Setenv("VAULT_TOKEN", token)
+	} else {
+		if os.Getenv("VAULT_TOKEN") == "" {
+			tokenFile := fmt.Sprintf("%s/.vault-token", os.Getenv("HOME"))
+			b, err := ioutil.ReadFile(tokenFile)
+			if err == nil {
+				os.Setenv("VAULT_TOKEN", strings.TrimSpace(string(b)))
+			}
+		}
+	}
 	return nil
 }
 
