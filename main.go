@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/jhunt/ansi"
+	"github.com/pborman/getopt"
 
 	"github.com/jhunt/safe/auth"
 	"github.com/jhunt/safe/rc"
@@ -55,7 +56,7 @@ func main() {
 		}
 		os.Exit(0)
 		return nil
-	}, "-v", "--version")
+	})
 
 	r.Dispatch("help", func(command string, args ...string) error {
 		fmt.Fprintf(os.Stderr, `Usage: safe <cmd> <args ...>
@@ -135,7 +136,7 @@ func main() {
 `)
 		os.Exit(0)
 		return nil
-	}, "-h", "--help")
+	})
 
 	r.Dispatch("targets", func(command string, args ...string) error {
 		if len(args) != 0 {
@@ -550,11 +551,31 @@ func main() {
 		return v.Write(path, s)
 	})
 
-	if len(os.Args) < 2 {
-		os.Args = append(os.Args, "help")
+	insecure := getopt.BoolLong("insecure", 'k', "Disable SSL/TLS certificate validation")
+	showVersion := getopt.BoolLong("version", 'v', "Print version information and exit")
+	showHelp := getopt.BoolLong("help", 'h', "Get some help")
+	opts := getopt.CommandLine
+	opts.Parse(os.Args)
+
+	var args []string
+	if *showHelp {
+		args = []string{"help"}
+
+	} else if *showVersion {
+		args = []string{"version"}
+
+	} else if opts.NArgs() == 0 {
+		args = []string{"help"}
+
+	} else {
+		args = opts.Args()
 	}
 
-	if err := r.Run(os.Args[1:]...); err != nil {
+	if *insecure {
+		os.Setenv("VAULT_SKIP_VERIFY", "1")
+	}
+
+	if err := r.Run(args...); err != nil {
 		if strings.HasPrefix(err.Error(), "USAGE") {
 			ansi.Fprintf(os.Stderr, "@Y{%s}\n", err)
 		} else {
