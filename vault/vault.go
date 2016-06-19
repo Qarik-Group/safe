@@ -176,9 +176,13 @@ func (v *Vault) Tree(path string, ansify bool) (tree.Node, error) {
 		return t, err
 	}
 
+	seen := make(map[string]bool)
 	var kid tree.Node
 	for _, p := range l {
 		if p[len(p)-1:len(p)] == "/" {
+			if _, ok := seen[p[0:len(p)-1]]; ok {
+				continue
+			}
 			kid, err = v.Tree(path+"/"+p[0:len(p)-1], ansify)
 			if ansify {
 				name = ansi.Sprintf("@B{%s}", p)
@@ -186,6 +190,7 @@ func (v *Vault) Tree(path string, ansify bool) (tree.Node, error) {
 				name = p[0 : len(p)-1]
 			}
 		} else {
+			seen[p] = true
 			kid, err = v.Tree(path+"/"+p, ansify)
 			if ansify {
 				name = ansi.Sprintf("@G{%s}", p)
