@@ -22,6 +22,9 @@ meta:
   go:
     version: 1.5
     module:  (( concat "github.com/" meta.github.owner "/" meta.github.repo ))
+    cmd_module: (( grab meta.go.module ))
+    binary:  (( grab meta.github.repo ))
+    force_static_binary: false
 
   aws:
     bucket:     (( concat meta.name "-pipeline" ))
@@ -51,6 +54,7 @@ groups:
       - shipit
       - major
       - minor
+      - bump-patch
 
 jobs:
   - name: test
@@ -68,15 +72,23 @@ jobs:
           run:
             path: (( concat "./gopath/src/" meta.go.module "/ci/scripts/test" ))
             args: []
+          params:
+            MODULE: (( grab meta.go.module ))
 
   - name: rc
     public: true
     plan:
       - aggregate:
-          - { get: git,     trigger: true, passed: [test] }
+          - { get: git,     trigger: true,  passed: [test] }
           - { get: version, trigger: true, params: {pre: rc} }
       - put: version
         params: {file: version/number}
+
+  - name: bump-patch
+    public: true
+    plan:
+      - { get: version, trigger: true, params: { bump: patch, pre: rc }, passed: [shipit] } # bump rc + patch, so that subesquent version bumps can trigger a new bump-patch
+      - { put: version,                params: { file: version/number} }
 
   - name: minor
     public: true
@@ -112,12 +124,18 @@ jobs:
             path: (( concat "./gopath/src/" meta.go.module "/ci/scripts/shipit" ))
             args: []
           params:
+            BINARY:       (( grab meta.go.binary ))
+            REPO_ROOT:    (( concat "gopath/src/" meta.go.module ))
             VERSION_FROM: version/number
             RELEASE_NAME: (( grab meta.release ))
             RELEASE_ROOT: gh
             REPO_OUT:     pushme
             BRANCH:       (( grab meta.github.branch ))
+            CMD_PKG:      (( grab meta.go.cmd_module ))
+            STATIC_BINARY: (( grab meta.go.force_static_binary ))
 
+      - put: version
+        params: { bump: final }
       - put: git
         params:
           rebase: true
@@ -128,9 +146,6 @@ jobs:
           tag:    gh/tag
           body:   gh/notes.md
           globs: [gh/artifacts/*]
-      - put: version
-        params:
-          bump: patch
 
 resource_types:
   - name: slack-notification
