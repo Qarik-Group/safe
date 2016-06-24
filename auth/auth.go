@@ -1,31 +1,64 @@
 package auth
 
 import (
-	"net/http"
-	"fmt"
+	"bytes"
 	"crypto/tls"
-	"os"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
+	"net/http"
+	"net/url"
+	"os"
 )
 
-func url(url, f string, args ...interface{}) string {
-	return url + fmt.Sprintf(f, args...)
+func authurl(base, f string, args ...interface{}) string {
+	return base + fmt.Sprintf(f, args...)
 }
 
 func authenticate(req *http.Request) (string, error) {
 	client := &http.Client{
-		Transport:  &http.Transport{
+		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: os.Getenv("VAULT_SKIP_VERIFY") != "",
 			},
 		},
 	}
 
-	res, err := client.Do(req)
-	if err != nil {
-		return "", err
+	var (
+		body []byte
+		err  error
+		res  *http.Response
+	)
+	if req.Body != nil {
+		body, err = ioutil.ReadAll(req.Body)
+		if err != nil {
+			return "", err
+		}
 	}
+
+	for i := 0; i < 10; i++ {
+		if req.Body != nil {
+			req.Body = ioutil.NopCloser(bytes.NewReader(body))
+		}
+		res, err = client.Do(req)
+		if err != nil {
+			return "", err
+		}
+
+		// Vault returns a 307 to redirect during HA / Auth
+		if res.StatusCode == 307 {
+			// Note: this does not handle relative Location headers
+			u, err := url.Parse(res.Header.Get("Location"))
+			if err != nil {
+				return "", err
+			}
+			req.URL = u
+			// ... and try again.
+			continue
+		}
+		break
+	}
+
 	if res.StatusCode != 200 {
 		return "", fmt.Errorf("API %s", res.Status)
 	}

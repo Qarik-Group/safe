@@ -1,11 +1,13 @@
 package vault
 
 import (
+	"bytes"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 
@@ -61,8 +63,43 @@ func (v *Vault) url(f string, args ...interface{}) string {
 }
 
 func (v *Vault) request(req *http.Request) (*http.Response, error) {
+	var (
+		body []byte
+		err  error
+	)
+	if req.Body != nil {
+		body, err = ioutil.ReadAll(req.Body)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	req.Header.Add("X-Vault-Token", v.Token)
-	return v.Client.Do(req)
+	for i := 0; i < 10; i++ {
+		if req.Body != nil {
+			req.Body = ioutil.NopCloser(bytes.NewReader(body))
+		}
+		res, err := v.Client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		// Vault returns a 307 to redirect during HA / Auth
+		switch res.StatusCode {
+		case 307:
+			// Note: this does not handle relative Location headers
+			url, err := url.Parse(res.Header.Get("Location"))
+			if err != nil {
+				return nil, err
+			}
+			req.URL = url
+			// ... and try again.
+
+		default:
+			return res, err
+		}
+	}
+
+	return nil, fmt.Errorf("redirection loop detected")
 }
 
 // Read checks the Vault for a Secret at the specified path, and returns it.
