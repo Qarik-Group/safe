@@ -77,7 +77,7 @@ safe set secret/ssh username=system
 ```
 
 If you use a password manager (good for you!) and don't want to
-have to paste passwords twice, use the `passte` subcommand:
+have to paste passwords twice, use the `paste` subcommand:
 
 ```
 safe paste secret/1pass/managed
