@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"io/ioutil"
 	"os"
 	"strings"
 
@@ -15,16 +17,28 @@ func fail(err error) {
 	}
 }
 
-func keyPrompt(key string, confirm bool) (string, string) {
+func keyPrompt(key string, confirm bool) (string, string, error) {
 	if strings.Index(key, "=") >= 0 {
 		l := strings.SplitN(key, "=", 2)
 		if l[1] == "" {
 			l[1] = pr(l[0], confirm)
 		}
 		ansi.Printf("%s: @G{%s}\n", l[0], l[1])
-		return l[0], l[1]
+		return l[0], l[1], nil
+
+	} else if strings.Index(key, "@") >= 0 {
+		l := strings.SplitN(key, "@", 2)
+		if l[1] == "" {
+			return l[0], pr(l[0], confirm), nil
+		}
+		b, err := ioutil.ReadFile(l[1])
+		if err != nil {
+			return l[0], "", fmt.Errorf("Failed to read contents of %s: %s", l[1], err)
+		}
+		ansi.Printf("%s: <@C{%s}\n", l[0], l[1])
+		return l[0], string(b), nil
 	}
-	return key, pr(key, confirm)
+	return key, pr(key, confirm), nil
 }
 
 func pr(label string, confirm bool) string {

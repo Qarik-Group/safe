@@ -256,7 +256,10 @@ func main() {
 			return err
 		}
 		for _, set := range args {
-			k, v := keyPrompt(set, true)
+			k, v, err := keyPrompt(set, true)
+			if err != nil {
+				return err
+			}
 			s.Set(k, v)
 		}
 		return v.Write(path, s)
@@ -274,7 +277,10 @@ func main() {
 			return err
 		}
 		for _, set := range args {
-			k, v := keyPrompt(set, false)
+			k, v, err := keyPrompt(set, false)
+			if err != nil {
+				return err
+			}
 			s.Set(k, v)
 		}
 		return v.Write(path, s)
