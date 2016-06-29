@@ -26,7 +26,7 @@ func rsakey(bits int) (string, string, string, error) {
 	}
 	public := pem.EncodeToMemory(
 		&pem.Block{
-			Type:  "RSA PUBLIC KEY",
+			Type:  "PUBLIC KEY",
 			Bytes: b,
 		},
 	)
