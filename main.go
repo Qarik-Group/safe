@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -151,14 +152,20 @@ func main() {
 			}
 		}
 
-		current := fmt.Sprintf(" @G{%%-%ds}\t@Y{%%s}\n", wide)
-		other := fmt.Sprintf(" %%-%ds\t%%s\n", wide)
+		var keys []string
+		for name, _ := range cfg.Aliases {
+			keys = append(keys, name)
+		}
+
 		fmt.Printf("\n")
-		for name, url := range cfg.Aliases {
+		current := fmt.Sprintf("(*) @G{%%-%ds}\t@Y{%%s}\n", wide)
+		other := fmt.Sprintf("    %%-%ds\t%%s\n", wide)
+		sort.Strings(keys)
+		for _, name := range keys {
 			if name == cfg.Current {
-				ansi.Printf(current, name, url)
+				ansi.Printf(current, name, cfg.Aliases[name])
 			} else {
-				ansi.Printf(other, name, url)
+				ansi.Printf(other, name, cfg.Aliases[name])
 			}
 		}
 		fmt.Printf("\n")
