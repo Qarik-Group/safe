@@ -174,6 +174,14 @@ func main() {
 
 	r.Dispatch("target", func(command string, args ...string) error {
 		cfg := rc.Apply()
+		if len(args) == 0 {
+			if cfg.Current == "" {
+				ansi.Printf("@R{No Vault currently targeted}\n")
+			} else {
+				ansi.Printf("Currently targeting @C{%s} at @C{%s}\n", cfg.Current, cfg.URL())
+			}
+			return nil
+		}
 		if len(args) == 1 {
 			err := cfg.SetCurrent(args[0])
 			if err != nil {
