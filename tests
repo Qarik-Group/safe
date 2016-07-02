@@ -196,7 +196,9 @@ EOF
 	echo
 done
 
-
-
-
-
+if [[ ${rc} -eq 0 ]]; then
+	echo PASSED
+else
+	echo FAILED
+fi
+exit ${rc}
