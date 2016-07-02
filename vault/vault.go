@@ -175,8 +175,24 @@ func (v *Vault) List(path string) (paths []string, err error) {
 	case 200:
 		break
 	case 404:
-		err = NotFound
-		return
+		req, err = http.NewRequest("GET", v.url("/v1/%s", path), nil)
+		if err != nil {
+			return
+		}
+		res, err = v.request(req)
+		if err != nil {
+			return
+		}
+		switch res.StatusCode {
+		case 200:
+			break
+		case 404:
+			err = NotFound
+			return
+		default:
+			err = fmt.Errorf("API %s", res.Status)
+			return
+		}
 	default:
 		err = fmt.Errorf("API %s", res.Status)
 		return

@@ -24,15 +24,21 @@ bail() {
 	exit 2
 }
 testing() {
-	rm -f t/home/got t/home/want t/home/diff
+	rm -f t/home/got t/home/want t/home/diff t/home/errors
 	local v=$1 ; shift
 	echo -n "[$v] $*... "
 }
 diffok() {
-	if ! diff -u t/home/got t/home/want >t/home/diff 2>&1; then
-		echo "FAILED!"
-		cat t/home/diff
+	if [[ -f t/home/errors && -s t/home/errors ]]; then
+		echo "FAILED! (with errors:)"
 		rc=1
+		cat t/home/errors
+		echo ; echo
+	elif ! diff -u t/home/got t/home/want >t/home/diff 2>&1; then
+		echo "FAILED!"
+		rc=1
+		cat t/home/diff
+		echo ; echo
 	else
 		echo "ok"
 	fi
@@ -95,7 +101,7 @@ for version in ${versions[@]}; do
 
 	testing $version basic set/get operation
 	./safe set secret/handshake knock=knock >/dev/null
-	./safe get secret/handshake >t/home/got
+	./safe get secret/handshake >t/home/got 2>t/home/errors
 	cat >t/home/want <<EOF
 --- # secret/handshake
 knock: knock
@@ -104,7 +110,7 @@ EOF
 
 	testing $version multiple-attribute set operation
 	./safe set secret/account username=admin password=sekrit >/dev/null
-	./safe get secret/account >t/home/got
+	./safe get secret/account >t/home/got 2>t/home/errors
 	cat >t/home/want <<EOF
 --- # secret/account
 username: admin
@@ -115,7 +121,7 @@ EOF
 	testing $version password randomization
 	./safe gen secret/random one     >/dev/null
 	./safe gen secret/random another >/dev/null
-	./safe get secret/random | spruce json >t/home/got
+	./safe get secret/random | spruce json >t/home/got 2>t/home/errors
 	one=$(jq -r .one < t/home/got)
 	another=$(jq -r .another < t/home/got)
 	if [[ ${one} == ${another} ]]; then
@@ -136,7 +142,7 @@ EOF
 	./safe gen secret/tree/g/a/m     x >/dev/null
 	./safe gen secret/tree/g/a/m/m   x >/dev/null
 	./safe gen secret/tree/g/a/m/m/a x >/dev/null
-	./safe tree secret/tree >t/home/got
+	./safe tree secret/tree >t/home/got 2>t/home/errors
 	cat >t/home/want <<EOF
 .
 └── secret/tree
@@ -153,11 +159,23 @@ EOF
 EOF
 	diffok
 
+	case ${version} in
+	(0.5.0|0.5.2) ;;
+	(*)
+		testing ${version} tree not found errors
+		./safe tree secret/enoent >t/home/got 2>&1
+		cat >t/home/want <<EOF
+!! secret not found
+EOF
+		diffok
+		;;
+	esac
+
 	testing ${version} tree export
 	./safe set secret/export/admin username=admin password=sekrit         >/dev/null
 	./safe set secret/export/robot username=bot password=beep-boop mark=2 >/dev/null
 	./safe set secret/export/a/b/c subkey='the value given'               >/dev/null
-	./safe export secret/export >t/home/got
+	./safe export secret/export >t/home/got 2>t/home/errors
 	cat >t/home/want <<EOF
 ---
 secret/export/admin:
@@ -186,7 +204,7 @@ secret/import/a/b/c:
   subkey: the value given
 EOF
 	./safe import secret/import <t/home/want >/dev/null
-	./safe export secret/import >t/home/got
+	./safe export secret/import >t/home/got 2>t/home/errors
 	yamlok
 
 
