@@ -1,6 +1,12 @@
 #!/bin/bash
 
-ROOT=$( cd "$( dirname "${BASH_SOURCE[0]}" )/../.." && pwd )
+set -e
 
-cd $ROOT
-make test
+export GOPATH=${PWD}/gopath
+export PATH=${PATH}:${GOPATH}/bin
+cd ${GOPATH}/src/${MODULE}
+
+godep restore
+
+go vet -x ./...
+go test -v ./...
