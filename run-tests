@@ -1,0 +1,202 @@
+#!/bin/bash
+set -u
+
+declare -a versions=(
+	0.5.0
+	0.5.2
+	0.6.0
+)
+rc=0
+platform=
+arch=amd64
+
+case $OSTYPE in
+(darwin*) platform=darwin ;;
+(linux*)  platform=linux  ;;
+(*)
+	echo >&2 "UNRECOGNIZED OSTYPE '$OSTYPE'"
+	exit 1
+	;;
+esac
+
+bail() {
+	echo >&2 $*
+	exit 2
+}
+testing() {
+	rm -f t/home/got t/home/want t/home/diff
+	local v=$1 ; shift
+	echo -n "[$v] $*... "
+}
+diffok() {
+	if ! diff -u t/home/got t/home/want >t/home/diff 2>&1; then
+		echo "FAILED!"
+		cat t/home/diff
+		rc=1
+	else
+		echo "ok"
+	fi
+}
+yamlok() {
+	[ -s t/home/got ] || echo "--- {}" > t/home/got
+	spruce merge t/home/got  > t/home/got.x   ; mv t/home/got.x  t/home/got
+	spruce merge t/home/want > t/home/want.x  ; mv t/home/want.x t/home/want
+	diffok
+}
+
+########################################################################
+
+mkdir -p vaults t/tmp
+trap 'rm -rf t/' INT QUIT TERM EXIT
+
+for version in ${versions[@]}; do
+	killall vault-${version} >/dev/null 2>&1 || true
+done
+for version in ${versions[@]}; do
+	echo "VAULT ${version}"
+	killall vault-${version} >/dev/null 2>&1 || true
+	echo "----------------------------------------------"
+	if [[ ! -f vaults/vault-${version} ]]; then
+		echo "Downloading Vault ${version} CLI..."
+		curl --fail -L > t/tmp/archive.zip \
+			https://releases.hashicorp.com/vault/${version}/vault_${version}_${platform}_${arch}.zip \
+			|| bail "download of vault ${version} failed"
+
+		unzip -d t/tmp t/tmp/archive.zip
+		mv t/tmp/vault vaults/vault-${version}
+		echo "DONE"
+		echo
+	fi
+
+	old_home=$HOME
+	export HOME=${PWD}/t/home
+
+	rm -rf t/home ; mkdir -p t/home
+	#trap "rm -rf t/home" INT TERM QUIT EXIT
+
+	./vaults/vault-${version} server -dev >t/home/log 2>&1 &
+	vault_pid=$!
+	waitfor=600
+	while ! grep -iq '^root token: ' t/home/log; do
+		if [[ $waitfor -gt 0 ]]; then
+			waitfor=$((waitfor - 1))
+			sleep 0.1
+		else
+			echo "FAILED - timed out waiting for vault server (-dev) to start"
+			exit 3 # FIXME: this is the wrong thing to do
+		fi
+	done
+
+	root_token=$(awk '/^Root Token:/ { print $3 }' < t/home/log | head -n1)
+	unseal_key=$(awk '/^Unseal Key:/ { print $3 }' < t/home/log | head -n1)
+
+	./safe target unit-tests http://127.0.0.1:8200
+	./safe auth token <<<${root_token}
+
+	testing $version basic set/get operation
+	./safe set secret/handshake knock=knock >/dev/null
+	./safe get secret/handshake >t/home/got
+	cat >t/home/want <<EOF
+--- # secret/handshake
+knock: knock
+EOF
+	yamlok
+
+	testing $version multiple-attribute set operation
+	./safe set secret/account username=admin password=sekrit >/dev/null
+	./safe get secret/account >t/home/got
+	cat >t/home/want <<EOF
+--- # secret/account
+username: admin
+password: sekrit
+EOF
+	yamlok
+
+	testing $version password randomization
+	./safe gen secret/random one     >/dev/null
+	./safe gen secret/random another >/dev/null
+	./safe get secret/random | spruce json >t/home/got
+	one=$(jq -r .one < t/home/got)
+	another=$(jq -r .another < t/home/got)
+	if [[ ${one} == ${another} ]]; then
+		echo "FAILED"
+		rc=0
+		echo "  ... expected generated password '${one}'"
+		echo "            to not be the same as '${another}'"
+	else
+		echo "ok"
+	fi
+
+	testing $version tree display
+	./safe gen secret/tree/alpha     x >/dev/null
+	./safe gen secret/tree/g         x >/dev/null
+	./safe gen secret/tree/g/a       x >/dev/null
+	./safe gen secret/tree/beta/name x >/dev/null
+	./safe gen secret/tree/beta/env  x >/dev/null
+	./safe gen secret/tree/g/a/m     x >/dev/null
+	./safe gen secret/tree/g/a/m/m   x >/dev/null
+	./safe gen secret/tree/g/a/m/m/a x >/dev/null
+	./safe tree secret/tree >t/home/got
+	cat >t/home/want <<EOF
+.
+└── secret/tree
+    ├── alpha
+    ├── beta/
+    │   ├── env
+    │   └── name
+    └── g
+        └── a
+            └── m
+                └── m
+                    └── a
+
+EOF
+	diffok
+
+	testing ${version} tree export
+	./safe set secret/export/admin username=admin password=sekrit         >/dev/null
+	./safe set secret/export/robot username=bot password=beep-boop mark=2 >/dev/null
+	./safe set secret/export/a/b/c subkey='the value given'               >/dev/null
+	./safe export secret/export >t/home/got
+	cat >t/home/want <<EOF
+---
+secret/export/admin:
+  username: admin
+  password: sekrit
+secret/export/robot:
+  username: bot
+  password: beep-boop
+  mark: "2"
+secret/export/a/b/c:
+  subkey: the value given
+EOF
+	yamlok
+
+	testing ${version} tree import
+	cat <<EOF | spruce json >t/home/want
+---
+secret/import/admin:
+  username: admin
+  password: sekrit
+secret/import/robot:
+  username: bot
+  password: beep-boop
+  mark: "2"
+secret/import/a/b/c:
+  subkey: the value given
+EOF
+	./safe import secret/import <t/home/want >/dev/null
+	./safe export secret/import >t/home/got
+	yamlok
+
+
+	export HOME=${old_home}
+	kill $vault_pid
+	echo
+	echo
+done
+
+
+
+
+

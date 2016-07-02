@@ -9,8 +9,8 @@ build:
 	go build $(GO_LDFLAGS) .
 	./safe -v
 
-test:
-	@echo "no tests..."
+test: build
+	./run-tests
 
 release: build
 	mkdir -p $(RELEASE_ROOT)
