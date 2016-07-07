@@ -23,7 +23,7 @@ func keyPrompt(key string, confirm bool) (string, string, error) {
 		if l[1] == "" {
 			l[1] = pr(l[0], confirm)
 		}
-		ansi.Printf("%s: @G{%s}\n", l[0], l[1])
+		ansi.Fprintf(os.Stderr, "%s: @G{%s}\n", l[0], l[1])
 		return l[0], l[1], nil
 
 	} else if strings.Index(key, "@") >= 0 {
@@ -35,7 +35,7 @@ func keyPrompt(key string, confirm bool) (string, string, error) {
 		if err != nil {
 			return l[0], "", fmt.Errorf("Failed to read contents of %s: %s", l[1], err)
 		}
-		ansi.Printf("%s: <@C{%s}\n", l[0], l[1])
+		ansi.Fprintf(os.Stderr, "%s: <@C{%s}\n", l[0], l[1])
 		return l[0], string(b), nil
 	}
 	return key, pr(key, confirm), nil
@@ -51,9 +51,9 @@ func pr(label string, confirm bool) string {
 		b := prompt.Secure("%s @C{[confirm]:} ", label)
 
 		if a == b && a != "" {
-			ansi.Printf("\n")
+			ansi.Fprintf(os.Stderr, "\n")
 			return a
 		}
-		ansi.Printf("\n@Y{oops, try again }(Ctrl-C to cancel)\n\n")
+		ansi.Fprintf(os.Stderr, "\n@Y{oops, try again }(Ctrl-C to cancel)\n\n")
 	}
 }

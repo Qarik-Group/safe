@@ -51,9 +51,9 @@ func main() {
 	r := NewRunner()
 	r.Dispatch("version", func(command string, args ...string) error {
 		if Version != "" {
-			fmt.Printf("safe v%s\n", Version)
+			fmt.Fprintf(os.Stderr, "safe v%s\n", Version)
 		} else {
-			fmt.Printf("safe (development build)\n")
+			fmt.Fprintf(os.Stderr, "safe (development build)\n")
 		}
 		os.Exit(0)
 		return nil
@@ -157,18 +157,18 @@ func main() {
 			keys = append(keys, name)
 		}
 
-		fmt.Printf("\n")
+		fmt.Fprintf(os.Stderr, "\n")
 		current := fmt.Sprintf("(*) @G{%%-%ds}\t@Y{%%s}\n", wide)
 		other := fmt.Sprintf("    %%-%ds\t%%s\n", wide)
 		sort.Strings(keys)
 		for _, name := range keys {
 			if name == cfg.Current {
-				ansi.Printf(current, name, cfg.Aliases[name])
+				ansi.Fprintf(os.Stderr, current, name, cfg.Aliases[name])
 			} else {
-				ansi.Printf(other, name, cfg.Aliases[name])
+				ansi.Fprintf(os.Stderr, other, name, cfg.Aliases[name])
 			}
 		}
-		fmt.Printf("\n")
+		fmt.Fprintf(os.Stderr, "\n")
 		return nil
 	})
 
@@ -176,9 +176,9 @@ func main() {
 		cfg := rc.Apply()
 		if len(args) == 0 {
 			if cfg.Current == "" {
-				ansi.Printf("@R{No Vault currently targeted}\n")
+				ansi.Fprintf(os.Stderr, "@R{No Vault currently targeted}\n")
 			} else {
-				ansi.Printf("Currently targeting @C{%s} at @C{%s}\n", cfg.Current, cfg.URL())
+				ansi.Fprintf(os.Stderr, "Currently targeting @C{%s} at @C{%s}\n", cfg.Current, cfg.URL())
 			}
 			return nil
 		}
@@ -187,7 +187,7 @@ func main() {
 			if err != nil {
 				return err
 			}
-			ansi.Printf("Now targeting @C{%s} at @C{%s}\n", cfg.Current, cfg.URL())
+			ansi.Fprintf(os.Stderr, "Now targeting @C{%s} at @C{%s}\n", cfg.Current, cfg.URL())
 			return cfg.Write()
 		}
 
@@ -201,7 +201,7 @@ func main() {
 			if err != nil {
 				return err
 			}
-			ansi.Printf("Now targeting @C{%s} at @C{%s}\n", cfg.Current, cfg.URL())
+			ansi.Fprintf(os.Stderr, "Now targeting @C{%s} at @C{%s}\n", cfg.Current, cfg.URL())
 			return cfg.Write()
 		}
 
@@ -210,8 +210,8 @@ func main() {
 
 	r.Dispatch("env", func(command string, args ...string) error {
 		rc.Apply()
-		ansi.Printf("  @B{VAULT_ADDR}  @G{%s}\n", os.Getenv("VAULT_ADDR"))
-		ansi.Printf("  @B{VAULT_TOKEN} @G{%s}\n", os.Getenv("VAULT_TOKEN"))
+		ansi.Fprintf(os.Stderr, "  @B{VAULT_ADDR}  @G{%s}\n", os.Getenv("VAULT_ADDR"))
+		ansi.Fprintf(os.Stderr, "  @B{VAULT_TOKEN} @G{%s}\n", os.Getenv("VAULT_TOKEN"))
 		return nil
 	})
 
@@ -227,7 +227,7 @@ func main() {
 		var token string
 		var err error
 
-		ansi.Printf("Authenticating against @C{%s} at @C{%s}\n", cfg.Current, cfg.URL())
+		ansi.Fprintf(os.Stderr, "Authenticating against @C{%s} at @C{%s}\n", cfg.Current, cfg.URL())
 		switch method {
 		case "token":
 			token, err = auth.Token(os.Getenv("VAULT_ADDR"))
@@ -414,7 +414,7 @@ func main() {
 			if err != nil {
 				return err
 			}
-			fmt.Printf("wrote %s\n", path)
+			fmt.Fprintf(os.Stderr, "wrote %s\n", path)
 		}
 		return nil
 	})
@@ -526,7 +526,7 @@ func main() {
 	})
 
 	r.Dispatch("prompt", func(command string, args ...string) error {
-		fmt.Printf("%s\n", strings.Join(args, " "))
+		fmt.Fprintf(os.Stderr, "%s\n", strings.Join(args, " "))
 		return nil
 	})
 

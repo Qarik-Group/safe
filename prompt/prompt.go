@@ -11,7 +11,7 @@ import (
 )
 
 func Normal(label string, args ...interface{}) string {
-	ansi.Printf(label, args...)
+	ansi.Fprintf(os.Stderr, label, args...)
 	s, _ := bufio.NewReader(os.Stdin).ReadString('\n')
 	return strings.TrimSuffix(s, "\n")
 }
@@ -22,8 +22,8 @@ func Secure(label string, args ...interface{}) string {
 		return strings.TrimSuffix(s, "\n")
 	}
 
-	ansi.Printf(label, args...)
+	ansi.Fprintf(os.Stderr, label, args...)
 	b, _ := terminal.ReadPassword(int(os.Stdin.Fd()))
-	ansi.Printf("\n")
+	ansi.Fprintf(os.Stderr, "\n")
 	return string(b)
 }
