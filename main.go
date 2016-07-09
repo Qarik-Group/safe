@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -354,13 +355,22 @@ func main() {
 
 	r.Dispatch("delete", func(command string, args ...string) error {
 		rc.Apply()
+
+		recurse, args := shouldRecurse(command, args...)
+
 		if len(args) < 1 {
 			return fmt.Errorf("USAGE: delete path [path ...]")
 		}
 		v := connect()
 		for _, path := range args {
-			if err := v.Delete(path); err != nil {
-				return err
+			if recurse {
+				if err := v.DeleteTree(path); err != nil {
+					return err
+				}
+			} else {
+				if err := v.Delete(path); err != nil {
+					return err
+				}
 			}
 		}
 		return nil
@@ -421,20 +431,46 @@ func main() {
 
 	r.Dispatch("move", func(command string, args ...string) error {
 		rc.Apply()
+
+		recurse, args := shouldRecurse(command, args...)
+
 		if len(args) != 2 {
-			return fmt.Errorf("USAGE: move oldpath newpath")
+			return fmt.Errorf("USAGE: move oldpath newpath", args)
 		}
 		v := connect()
-		return v.Move(args[0], args[1])
+
+		if recurse {
+			if err := v.MoveCopyTree(args[0], args[1], v.Move); err != nil {
+				return err
+			}
+		} else {
+			if err := v.Move(args[0], args[1]); err != nil {
+				return err
+			}
+		}
+		return nil
 	}, "mv", "rename")
 
 	r.Dispatch("copy", func(command string, args ...string) error {
 		rc.Apply()
+
+		recurse, args := shouldRecurse(command, args...)
+
 		if len(args) != 2 {
-			return fmt.Errorf("USAGE: copy oldpath newpath")
+			return fmt.Errorf("USAGE: copy oldpath newpath", args)
 		}
 		v := connect()
-		return v.Copy(args[0], args[1])
+
+		if recurse {
+			if err := v.MoveCopyTree(args[0], args[1], v.Copy); err != nil {
+				return err
+			}
+		} else {
+			if err := v.Copy(args[0], args[1]); err != nil {
+				return err
+			}
+		}
+		return nil
 	}, "cp")
 
 	r.Dispatch("gen", func(command string, args ...string) error {
@@ -604,4 +640,39 @@ func main() {
 		}
 		os.Exit(1)
 	}
+}
+
+func shouldRecurse(cmd string, args ...string) (bool, []string) {
+	var recursiveMode, forceMode *bool
+
+	forceMode = getopt.BoolLong("force", 'f', "Disable confirmation prompting")
+	recursiveMode = getopt.BoolLong("recursive", 'R', "Enable recursion")
+
+	args = append([]string{"safe " + cmd}, args...)
+
+	var opts = getopt.CommandLine
+	var parsed []string
+	for {
+		opts.Parse(args)
+		if opts.NArgs() == 0 {
+			break
+		}
+		parsed = append(parsed, opts.Arg(0))
+		args = opts.Args()
+	}
+
+	args = parsed
+
+	if *recursiveMode && !*forceMode {
+		fmt.Printf("Are you sure you wish to recursively %s %s? (y/n) ", cmd, strings.Join(args, " "))
+		reader := bufio.NewReader(os.Stdin)
+		y, _ := reader.ReadString('\n')
+		y = strings.TrimSpace(y)
+		if y != "y" && y != "yes" {
+			fmt.Printf("Aborting...\n")
+			os.Exit(0)
+		}
+	}
+
+	return *recursiveMode, args
 }

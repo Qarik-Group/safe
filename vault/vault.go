@@ -272,6 +272,23 @@ func (v *Vault) Write(path string, s *Secret) error {
 	return nil
 }
 
+func (v *Vault) DeleteTree(root string) error {
+	tree, err := v.Tree(root, false)
+	if err != nil {
+		return err
+	}
+	for _, path := range tree.Paths("/") {
+		if path == root {
+			continue
+		}
+		err = v.DeleteTree(path)
+		if err != nil {
+			return err
+		}
+	}
+	return v.Delete(root)
+}
+
 // Delete removes the secret stored at the specified path.
 func (v *Vault) Delete(path string) error {
 	req, err := http.NewRequest("DELETE", v.url("/v1/%s", path), nil)
@@ -302,6 +319,24 @@ func (v *Vault) Copy(oldpath, newpath string) error {
 		return err
 	}
 	return v.Write(newpath, secret)
+}
+
+func (v *Vault) MoveCopyTree(oldRoot, newRoot string, f func(string, string) error) error {
+	tree, err := v.Tree(oldRoot, false)
+	if err != nil {
+		return err
+	}
+	for _, path := range tree.Paths("/") {
+		if path == oldRoot {
+			continue
+		}
+		newPath := strings.Replace(path, oldRoot, newRoot, 1)
+		err = v.MoveCopyTree(path, newPath, f)
+		if err != nil {
+			return err
+		}
+	}
+	return f(oldRoot, newRoot)
 }
 
 // Move moves secrets from one path to another.
