@@ -242,12 +242,12 @@ func (v *Vault) Tree(path string, ansify bool) (tree.Node, error) {
 			}
 		} else {
 			seen[p] = true
-			kid, err = v.Tree(path+"/"+p, ansify)
 			if ansify {
 				name = ansi.Sprintf("@G{%s}", p)
 			} else {
 				name = p
 			}
+			kid = tree.New(name)
 		}
 		if err != nil {
 			return t, err
@@ -292,10 +292,7 @@ func (v *Vault) DeleteTree(root string) error {
 		return err
 	}
 	for _, path := range tree.Paths("/") {
-		if path == root {
-			continue
-		}
-		err = v.DeleteTree(path)
+		err = v.Delete(path)
 		if err != nil {
 			return err
 		}
@@ -341,16 +338,17 @@ func (v *Vault) MoveCopyTree(oldRoot, newRoot string, f func(string, string) err
 		return err
 	}
 	for _, path := range tree.Paths("/") {
-		if path == oldRoot {
-			continue
-		}
 		newPath := strings.Replace(path, oldRoot, newRoot, 1)
-		err = v.MoveCopyTree(path, newPath, f)
+		err = f(path, newPath)
 		if err != nil {
 			return err
 		}
 	}
-	return f(oldRoot, newRoot)
+
+	if _, err := v.Read(oldRoot); err != NotFound { // run through a copy unless we successfully got a 404 from this node
+		return f(oldRoot, newRoot)
+	}
+	return nil
 }
 
 // Move moves secrets from one path to another.
