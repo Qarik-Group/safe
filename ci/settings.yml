@@ -12,7 +12,7 @@ meta:
     secret_key: (( vault "secret/aws/cfcommunity:secret" ))
 
   github:
-    owner:  jhunt
+    owner:  starkandwayne
     repo:   safe
     private_key:  (( vault "secret/pipelines/safe/github:private" ))
     access_token: (( vault "secret/pipelines/safe/github:token" ))
