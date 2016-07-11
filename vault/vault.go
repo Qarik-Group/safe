@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"os"
 	"strings"
@@ -62,6 +63,11 @@ func (v *Vault) url(f string, args ...interface{}) string {
 	return v.URL + fmt.Sprintf(f, args...)
 }
 
+func shouldDebug() bool {
+	d := strings.ToLower(os.Getenv("DEBUG"))
+	return d != "" && d != "false" && d != "0" && d != "no" && d != "off"
+}
+
 func (v *Vault) request(req *http.Request) (*http.Response, error) {
 	var (
 		body []byte
@@ -79,7 +85,15 @@ func (v *Vault) request(req *http.Request) (*http.Response, error) {
 		if req.Body != nil {
 			req.Body = ioutil.NopCloser(bytes.NewReader(body))
 		}
+		if shouldDebug() {
+			r, _ := httputil.DumpRequest(req, true)
+			fmt.Fprintf(os.Stderr, "Request:\n%s\n----------------\n", r)
+		}
 		res, err := v.Client.Do(req)
+		if shouldDebug() {
+			r, _ := httputil.DumpResponse(res, true)
+			fmt.Fprintf(os.Stderr, "Response:\n%s\n----------------\n", r)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -229,33 +243,35 @@ func (v *Vault) Tree(path string, ansify bool) (tree.Node, error) {
 		return t, err
 	}
 
-	seen := make(map[string]bool)
 	var kid tree.Node
 	for _, p := range l {
+		var shouldAppend bool
 		if p[len(p)-1:len(p)] == "/" {
-			if _, ok := seen[p[0:len(p)-1]]; ok {
-				continue
-			}
 			kid, err = v.Tree(path+"/"+p[0:len(p)-1], ansify)
+			if len(kid.Sub) > 0 {
+				shouldAppend = true
+			}
 			if ansify {
 				name = ansi.Sprintf("@B{%s}", p)
 			} else {
 				name = p[0 : len(p)-1]
 			}
 		} else {
-			seen[p] = true
-			kid, err = v.Tree(path+"/"+p, ansify)
+			shouldAppend = true
 			if ansify {
 				name = ansi.Sprintf("@G{%s}", p)
 			} else {
 				name = p
 			}
+			kid = tree.New(name)
 		}
 		if err != nil {
 			return t, err
 		}
 		kid.Name = name
-		t.Append(kid)
+		if shouldAppend {
+			t.Append(kid)
+		}
 	}
 	return t, nil
 }
@@ -288,6 +304,20 @@ func (v *Vault) Write(path string, s *Secret) error {
 	return nil
 }
 
+func (v *Vault) DeleteTree(root string) error {
+	tree, err := v.Tree(root, false)
+	if err != nil {
+		return err
+	}
+	for _, path := range tree.Paths("/") {
+		err = v.Delete(path)
+		if err != nil {
+			return err
+		}
+	}
+	return v.Delete(root)
+}
+
 // Delete removes the secret stored at the specified path.
 func (v *Vault) Delete(path string) error {
 	req, err := http.NewRequest("DELETE", v.url("/v1/%s", path), nil)
@@ -318,6 +348,25 @@ func (v *Vault) Copy(oldpath, newpath string) error {
 		return err
 	}
 	return v.Write(newpath, secret)
+}
+
+func (v *Vault) MoveCopyTree(oldRoot, newRoot string, f func(string, string) error) error {
+	tree, err := v.Tree(oldRoot, false)
+	if err != nil {
+		return err
+	}
+	for _, path := range tree.Paths("/") {
+		newPath := strings.Replace(path, oldRoot, newRoot, 1)
+		err = f(path, newPath)
+		if err != nil {
+			return err
+		}
+	}
+
+	if _, err := v.Read(oldRoot); err != NotFound { // run through a copy unless we successfully got a 404 from this node
+		return f(oldRoot, newRoot)
+	}
+	return nil
 }
 
 // Move moves secrets from one path to another.
