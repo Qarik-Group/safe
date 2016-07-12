@@ -12,8 +12,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/jhunt/ansi"
-	"github.com/jhunt/tree"
+	"github.com/starkandwayne/goutils/ansi"
+	"github.com/starkandwayne/goutils/tree"
 )
 
 // A Vault represents a means for interacting with a remote Vault

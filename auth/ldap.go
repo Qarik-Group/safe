@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/jhunt/safe/prompt"
+	"github.com/starkandwayne/safe/prompt"
 )
 
 func LDAP(addr string) (string, error) {
