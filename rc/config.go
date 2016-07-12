@@ -9,7 +9,19 @@ import (
 	"github.com/ghodss/yaml"
 )
 
+type Target struct {
+	URL      string   `yaml:"url"`
+	Token    string   `yaml:"token"`
+	Backends []string `yaml:"backends"`
+}
+
 type Config struct {
+	Version string             `yaml:"version"`
+	Target  string             `yaml:"target"`
+	Targets map[string]*Target `yaml:"targets"`
+}
+
+type ConfigV1 struct {
 	Current string                 `yaml:"current"`
 	Targets map[string]interface{} `yaml:"targets"`
 	Aliases map[string]string      `yaml:"aliases"`
@@ -23,27 +35,37 @@ func svtoken() string {
 	return fmt.Sprintf("%s/.svtoken", os.Getenv("HOME"))
 }
 
+func upgrade(v1 ConfigV1) Config {
+	c := Config{}
+	c.Version = "2"
+	c.Target = v1.Current
+	c.Targets = make(map[string]*Target)
+	for name, url := range v1.Aliases {
+		c.Targets[name] = &Target{
+			URL: url,
+		}
+		if tok, ok := v1.Targets[name]; ok {
+			c.Targets[name].Token = tok
+		}
+	}
+	return c
+}
+
 func (c *Config) credentials() (string, string, error) {
-	if c.Current == "" {
+	if c.Target == "" {
 		return "", "", nil
 	}
 
-	url, ok := c.Aliases[c.Current]
+	t, ok := c.Targets[c.Target]
 	if !ok {
-		return "", "", fmt.Errorf("Current target vault '%s' not found in ~/.saferc", c.Current)
+		return "", "", fmt.Errorf("Current target vault '%s' not found in ~/.saferc", c.Target)
 	}
 
-	t, ok := c.Targets[url]
-	if !ok {
-		return "", "", fmt.Errorf("Current target vault '%s' not found in ~/.saferc", c.Current)
+	if t.Token != nil {
+		return t.URL, t.Token.(string), nil
 	}
 
-	token := ""
-	if t != nil {
-		token = t.(string)
-	}
-
-	return url, token, nil
+	return url, "", nil
 }
 
 func Apply() Config {
@@ -52,6 +74,11 @@ func Apply() Config {
 	b, err := ioutil.ReadFile(saferc())
 	if err == nil {
 		yaml.Unmarshal(b, &c)
+		if c.Version == "" {
+			var v1 ConfigV1
+			yaml.Unmarshal(b, &v1)
+			c = upgrade(v1)
+		}
 	}
 
 	c.Apply()
@@ -108,43 +135,40 @@ func (c *Config) Apply() error {
 }
 
 func (c *Config) SetCurrent(alias string) error {
-	if _, ok := c.Aliases[alias]; ok {
-		c.Current = alias
+	if _, ok := c.Targets[alias]; ok {
+		c.Target = alias
 		return nil
 	}
 	return fmt.Errorf("Unknown target '%s'", alias)
 }
 
 func (c *Config) SetTarget(alias, url string) error {
-	if c.Aliases == nil {
-		c.Aliases = make(map[string]string)
-	}
+	// FIXME: Not possible to have error, remove
 	if c.Targets == nil {
-		c.Targets = make(map[string]interface{})
+		c.Targets = make(map[string]*Target)
 	}
-	c.Aliases[alias] = url
-	c.Current = alias
-	if _, ok := c.Targets[url]; !ok {
-		c.Targets[url] = nil
+	c.Targets[alias] = &Target{
+		URL: url,
 	}
+	c.Target = alias
 	return nil
 }
 
 func (c *Config) SetToken(token string) error {
-	if c.Current == "" {
+	if c.Target == "" {
 		return fmt.Errorf("No target selected")
 	}
-	url, ok := c.Aliases[c.Current]
+	t, ok := c.Targets[c.Target]
 	if !ok {
-		return fmt.Errorf("Unknown target '%s'", c.Current)
+		return fmt.Errorf("Unknown target '%s'", c.Target)
 	}
-	c.Targets[url] = token
+	t.Token = token
 	return nil
 }
 
 func (c *Config) URL() string {
-	if url, ok := c.Aliases[c.Current]; ok {
-		return url
+	if t, ok := c.Targets[c.Target]; ok {
+		return t.URL
 	}
 	return ""
 }
