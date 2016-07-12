@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/jhunt/ansi"
-	"github.com/jhunt/safe/prompt"
+	"github.com/starkandwayne/goutils/ansi"
+	"github.com/starkandwayne/safe/prompt"
 )
 
 func fail(err error) {

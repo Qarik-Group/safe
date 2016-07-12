@@ -11,12 +11,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jhunt/ansi"
 	"github.com/pborman/getopt"
+	"github.com/starkandwayne/goutils/ansi"
 
-	"github.com/jhunt/safe/auth"
-	"github.com/jhunt/safe/rc"
-	"github.com/jhunt/safe/vault"
+	"github.com/starkandwayne/safe/auth"
+	"github.com/starkandwayne/safe/rc"
+	"github.com/starkandwayne/safe/vault"
 )
 
 var Version string

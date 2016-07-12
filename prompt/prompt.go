@@ -5,8 +5,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/jhunt/ansi"
 	"github.com/mattn/go-isatty"
+	"github.com/starkandwayne/goutils/ansi"
 	"golang.org/x/crypto/ssh/terminal"
 )
 
