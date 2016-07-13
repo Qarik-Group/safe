@@ -16,6 +16,11 @@ import (
 	"github.com/starkandwayne/goutils/tree"
 )
 
+type seal struct {
+	Sealed    bool `yaml:"sealed"`
+	Threshold int  `yaml:"t"`
+}
+
 // A Vault represents a means for interacting with a remote Vault
 // instance (unsealed and pre-authenticated) to read and write secrets.
 type Vault struct {
@@ -23,6 +28,7 @@ type Vault struct {
 	Host   string
 	Token  string
 	Client *http.Client
+	seal   *seal
 }
 
 // NewVault creates a new Vault object.  If an empty token is specified,
@@ -381,4 +387,49 @@ func (v *Vault) Move(oldpath, newpath string) error {
 		return err
 	}
 	return nil
+}
+
+func (v *Vault) checkSealStatus() {
+	if v.seal == nil {
+		var s seal
+		req, err := http.NewRequest("GET", v.url("/v1/sys/seal-status"), nil)
+		if err != nil {
+			return
+		}
+		res, err := v.request(req)
+		if err != nil {
+			return
+		}
+		if res.StatusCode == 200 {
+			b, err := ioutil.ReadAll(res.Body)
+			if err != nil {
+				return
+			}
+			if err = json.Unmarshal(b, &s); err != nil {
+				return
+			}
+		}
+		v.seal = &s
+	}
+}
+
+func (v *Vault) Sealed() bool {
+	v.checkSealStatus()
+	return v.seal.Sealed
+}
+
+func (v *Vault) SealThreshold() int {
+	v.checkSealStatus()
+	return v.seal.Threshold
+}
+
+func (v *Vault) Seal() {
+	/* seal the vault */
+}
+
+func (v *Vault) Unseal(keys []string) {
+	/* reset the vault seal over at /sys/unseal?reset=1 */
+	/* loop the keys and unseal the vault */
+	/* ... */
+	/* profit! */
 }

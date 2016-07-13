@@ -41,7 +41,7 @@ func connect() *vault.Vault {
 	return vault.NewVault(addr, os.Getenv("VAULT_TOKEN"), os.Getenv("VAULT_SKIP_VERIFY") != "")
 }
 
-func connectMany(hosts []string) []*vault.Vault {
+func connectAll(hosts []string) []*vault.Vault {
 	vaults := make([]*vault.Vault, len(hosts))
 	for i, host := range hosts {
 		vaults[i] = vault.NewVault(host, "", os.Getenv("VAULT_SKIP_VERIFY") != "")
@@ -259,6 +259,64 @@ func main() {
 		return cfg.Write()
 
 	}, "login")
+
+	r.Dispatch("sync", func(command string, args ...string) error {
+		rc.Apply(true)
+		return nil
+	})
+
+	r.Dispatch("seal", func(command string, args ...string) error {
+		cfg := rc.Apply(true)
+
+		if len(args) != 0 {
+			return fmt.Errorf("USAGE: seal")
+		}
+
+		backends := cfg.VaultEndpoints()
+		if len(backends) == 0 {
+			return fmt.Errorf("No backends detected")
+		}
+		for _, v := range connectAll(backends) {
+			v.Seal()
+		}
+
+		ansi.Fprintf(os.Stderr, "The Vaults are sealed!\n")
+		return nil
+	})
+
+	r.Dispatch("unseal", func(command string, args ...string) error {
+		cfg := rc.Apply(true)
+		if len(args) != 0 {
+			return fmt.Errorf("USAGE: unseal")
+		}
+
+		backends := cfg.VaultEndpoints()
+		if len(backends) == 0 {
+			return fmt.Errorf("No backends detected")
+		}
+
+		keys := []string{} // seal keys, to be provided by user
+		for _, v := range connectAll(backends) {
+			if v.Sealed() {
+				continue
+			}
+
+			if len(keys) == 0 {
+				for i := 0; i < v.SealThreshold(); i++ {
+					keys = append(keys, pr(fmt.Sprintf("Seal Key #%d", i+1), false))
+				}
+			}
+
+			v.Unseal(keys)
+		}
+
+		if len(keys) != 0 {
+			ansi.Fprintf(os.Stderr, "Unsealed the Vault(s)\n")
+		} else {
+			ansi.Fprintf(os.Stderr, "Vaults are already unsealed; taking no action.\n")
+		}
+		return nil
+	})
 
 	r.Dispatch("set", func(command string, args ...string) error {
 		rc.Apply(true)

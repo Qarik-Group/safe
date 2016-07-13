@@ -5,11 +5,20 @@ import (
 	"io/ioutil"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 
-	"github.com/ghodss/yaml"
 	"github.com/starkandwayne/safe/vault"
+	"gopkg.in/yaml.v2"
 )
+
+var portStripper *regexp.Regexp
+var hostReplacer *regexp.Regexp
+
+func init() {
+	portStripper = regexp.MustCompile(":[0-9]*$")
+	hostReplacer = regexp.MustCompile("^[^:]+")
+}
 
 type Target struct {
 	URL      string      `yaml:"url"`
@@ -25,9 +34,9 @@ type Config struct {
 }
 
 type ConfigV1 struct {
-	Current string                 `yaml:"current"`
-	Targets map[string]interface{} `yaml:"targets"`
-	Aliases map[string]string      `yaml:"aliases"`
+	Current string                 `yaml:"Current"`
+	Targets map[string]interface{} `yaml:"Targets"`
+	Aliases map[string]string      `yaml:"Aliases"`
 }
 
 func saferc() string {
@@ -47,7 +56,7 @@ func upgrade(v1 ConfigV1) Config {
 		c.Targets[name] = &Target{
 			URL: url,
 		}
-		if tok, ok := v1.Targets[name]; ok {
+		if tok, ok := v1.Targets[url]; ok {
 			c.Targets[name].Token = tok
 		}
 	}
@@ -83,16 +92,23 @@ func (c *Config) credentials() (string, string, error) {
 }
 
 func Apply(sync bool) Config {
+	tr := struct {
+		Version string `yaml:"version"`
+	}{}
 	var c Config
 
 	b, err := ioutil.ReadFile(saferc())
 	if err == nil {
-		yaml.Unmarshal(b, &c)
-		if c.Version == "" {
+		yaml.Unmarshal(b, &tr)
+		if tr.Version == "" || tr.Version == "1" {
+			/* legacy config; upgrade and persist to disk */
 			var v1 ConfigV1
 			yaml.Unmarshal(b, &v1)
 			c = upgrade(v1)
 			c.Write()
+
+		} else {
+			yaml.Unmarshal(b, &c)
 		}
 	}
 
@@ -105,11 +121,13 @@ func Apply(sync bool) Config {
 
 func (c *Config) Sync() {
 	if t, ok := c.Targets[c.Target]; ok {
+		fmt.Printf("found target %s\n", c.Target)
 		/* FIXME: this may not work with non-HA vaults.  investigate + fix */
 		t.Active = nil
 		t.Backends = []string{}
 
-		for _, ip := range c.endpoints() {
+		for _, ip := range c.dnsEndpoints() {
+			fmt.Printf("checking endpoint %s\n", ip)
 			backends, err := vault.Lookup("vaults.service.consul", ip)
 			if err != nil {
 				continue
@@ -126,7 +144,6 @@ func (c *Config) Sync() {
 			}
 			break
 		}
-
 		c.Write()
 	}
 }
@@ -221,9 +238,9 @@ func (c *Config) URL() string {
 	return ""
 }
 
-func (c *Config) endpoints() []string {
+func (c *Config) dnsEndpoints() []string {
 	if t, ok := c.Targets[c.Target]; ok {
-		// we use the backends from DNS first
+		// we use the backends from our last sync first
 		l := make([]string, len(t.Backends))
 		copy(l, t.Backends)
 
@@ -231,7 +248,24 @@ func (c *Config) endpoints() []string {
 		// and pretend its the DNS endpoint (http/https no mo')
 		u, err := url.Parse(t.URL)
 		if err == nil {
-			l = append(l, u.Host)
+			l = append(l, portStripper.ReplaceAllString(u.Host, ""))
+		}
+		return l
+	}
+	return []string{}
+}
+
+func (c *Config) VaultEndpoints() []string {
+	if t, ok := c.Targets[c.Target]; ok {
+		u, err := url.Parse(t.URL)
+		if err != nil {
+			return []string{}
+		}
+
+		l := make([]string, 0)
+		for _, backend := range t.Backends {
+			u.Host = hostReplacer.ReplaceAllString(u.Host, backend)
+			l = append(l, u.String())
 		}
 		return l
 	}
