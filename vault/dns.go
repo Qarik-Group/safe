@@ -6,10 +6,10 @@ import (
 	"strings"
 )
 
-func Lookup(query string, server string) []string {
+func Lookup(query string, server string) ([]string, error) {
 
-	if !strings.HasSuffix(server, ".") {
-		server += "." // has to be fully qualified
+	if !strings.HasSuffix(query, ".") {
+		query += "." // has to be fully qualified
 	}
 
 	c := &dns.Client{}
@@ -19,7 +19,7 @@ func Lookup(query string, server string) []string {
 	m.Question = []dns.Question{dns.Question{query, dns.TypeA, dns.ClassINET}}
 
 	l := make([]string, 0)
-	in, _, err := c.Exchange(m, server)
+	in, _, err := c.Exchange(m, server+":53") // FIXME: is the :53 superfluous?
 	if err != nil {
 		return nil, err
 	} else {
@@ -31,7 +31,7 @@ func Lookup(query string, server string) []string {
 			}
 		}
 	}
-	return l
+	return l, nil
 }
 
 /*

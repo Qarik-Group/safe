@@ -38,12 +38,15 @@ func connect() *vault.Vault {
 		os.Exit(1)
 	}
 
-	v, err := vault.NewVault(addr, os.Getenv("VAULT_TOKEN"))
-	if err != nil {
-		ansi.Fprintf(os.Stderr, "@R{!! %s}\n", err)
-		os.Exit(1)
+	return vault.NewVault(addr, os.Getenv("VAULT_TOKEN"), os.Getenv("VAULT_SKIP_VERIFY") != "")
+}
+
+func connectMany(hosts []string) []*vault.Vault {
+	vaults := make([]*vault.Vault, len(hosts))
+	for i, host := range hosts {
+		vaults[i] = vault.NewVault(host, "", os.Getenv("VAULT_SKIP_VERIFY") != "")
 	}
-	return v
+	return vaults
 }
 
 func main() {
@@ -147,15 +150,12 @@ func main() {
 
 		cfg := rc.Apply()
 		wide := 0
-		for name := range cfg.Aliases {
+		var keys []string
+		for name, _ := range cfg.Targets {
+			keys = append(keys, name)
 			if len(name) > wide {
 				wide = len(name)
 			}
-		}
-
-		var keys []string
-		for name, _ := range cfg.Aliases {
-			keys = append(keys, name)
 		}
 
 		fmt.Fprintf(os.Stderr, "\n")
@@ -163,10 +163,10 @@ func main() {
 		other := fmt.Sprintf("    %%-%ds\t%%s\n", wide)
 		sort.Strings(keys)
 		for _, name := range keys {
-			if name == cfg.Current {
-				ansi.Fprintf(os.Stderr, current, name, cfg.Aliases[name])
+			if name == cfg.Target {
+				ansi.Fprintf(os.Stderr, current, name, cfg.Targets[name].URL)
 			} else {
-				ansi.Fprintf(os.Stderr, other, name, cfg.Aliases[name])
+				ansi.Fprintf(os.Stderr, other, name, cfg.Targets[name].URL)
 			}
 		}
 		fmt.Fprintf(os.Stderr, "\n")
@@ -176,10 +176,10 @@ func main() {
 	r.Dispatch("target", func(command string, args ...string) error {
 		cfg := rc.Apply()
 		if len(args) == 0 {
-			if cfg.Current == "" {
+			if cfg.Target == "" {
 				ansi.Fprintf(os.Stderr, "@R{No Vault currently targeted}\n")
 			} else {
-				ansi.Fprintf(os.Stderr, "Currently targeting @C{%s} at @C{%s}\n", cfg.Current, cfg.URL())
+				ansi.Fprintf(os.Stderr, "Currently targeting @C{%s} at @C{%s}\n", cfg.Target, cfg.URL())
 			}
 			return nil
 		}
@@ -188,7 +188,7 @@ func main() {
 			if err != nil {
 				return err
 			}
-			ansi.Fprintf(os.Stderr, "Now targeting @C{%s} at @C{%s}\n", cfg.Current, cfg.URL())
+			ansi.Fprintf(os.Stderr, "Now targeting @C{%s} at @C{%s}\n", cfg.Target, cfg.URL())
 			return cfg.Write()
 		}
 
@@ -202,7 +202,7 @@ func main() {
 			if err != nil {
 				return err
 			}
-			ansi.Fprintf(os.Stderr, "Now targeting @C{%s} at @C{%s}\n", cfg.Current, cfg.URL())
+			ansi.Fprintf(os.Stderr, "Now targeting @C{%s} at @C{%s}\n", cfg.Target, cfg.URL())
 			return cfg.Write()
 		}
 
@@ -228,7 +228,7 @@ func main() {
 		var token string
 		var err error
 
-		ansi.Fprintf(os.Stderr, "Authenticating against @C{%s} at @C{%s}\n", cfg.Current, cfg.URL())
+		ansi.Fprintf(os.Stderr, "Authenticating against @C{%s} at @C{%s}\n", cfg.Target, cfg.URL())
 		switch method {
 		case "token":
 			token, err = auth.Token(os.Getenv("VAULT_ADDR"))

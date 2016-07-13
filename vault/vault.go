@@ -26,37 +26,27 @@ type Vault struct {
 
 // NewVault creates a new Vault object.  If an empty token is specified,
 // the current user's token is read from ~/.vault-token.
-func NewVault(url, token string) (*Vault, error) {
-	if token == "" {
-		b, err := ioutil.ReadFile(fmt.Sprintf("%s/.vault-token", os.Getenv("HOME")))
-		if err != nil {
-			return nil, err
-		}
-		token = string(b)
-	}
-
-	if token == "" {
-		return nil, fmt.Errorf("no vault token specified; are you authenticated?")
-	}
-
+func NewVault(url, token string, skip_verify bool) *Vault {
 	return &Vault{
 		URL:   url,
 		Token: token,
 		Client: &http.Client{
 			Transport: &http.Transport{
 				TLSClientConfig: &tls.Config{
-					InsecureSkipVerify: os.Getenv("VAULT_SKIP_VERIFY") != "",
+					InsecureSkipVerify: skip_verify,
 				},
 			},
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				if len(via) > 10 {
 					return fmt.Errorf("stopped after 10 redirects")
 				}
-				req.Header.Add("X-Vault-Token", token)
+				if token != "" {
+					req.Header.Add("X-Vault-Token", token)
+				}
 				return nil
 			},
 		},
-	}, nil
+	}
 }
 
 func (v *Vault) url(f string, args ...interface{}) string {
@@ -80,7 +70,9 @@ func (v *Vault) request(req *http.Request) (*http.Response, error) {
 		}
 	}
 
-	req.Header.Add("X-Vault-Token", v.Token)
+	if v.Token != "" {
+		req.Header.Add("X-Vault-Token", v.Token)
+	}
 	for i := 0; i < 10; i++ {
 		if req.Body != nil {
 			req.Body = ioutil.NopCloser(bytes.NewReader(body))

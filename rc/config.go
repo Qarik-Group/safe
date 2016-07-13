@@ -10,9 +10,10 @@ import (
 )
 
 type Target struct {
-	URL      string   `yaml:"url"`
-	Token    string   `yaml:"token"`
-	Backends []string `yaml:"backends"`
+	URL      string      `yaml:"url"`
+	Token    interface{} `yaml:"token"`
+	Active   interface{} `yaml:"active"`
+	Backends []string    `yaml:"backends"`
 }
 
 type Config struct {
@@ -65,10 +66,10 @@ func (c *Config) credentials() (string, string, error) {
 		return t.URL, t.Token.(string), nil
 	}
 
-	return url, "", nil
+	return t.URL, "", nil
 }
 
-func Apply() Config {
+func Apply(sync bool) Config {
 	var c Config
 
 	b, err := ioutil.ReadFile(saferc())
@@ -78,10 +79,38 @@ func Apply() Config {
 			var v1 ConfigV1
 			yaml.Unmarshal(b, &v1)
 			c = upgrade(v1)
+			c.Write()
 		}
 	}
 
 	c.Apply()
+
+	if sync {
+		/* FIXME: this may not work with non-HA vaults.  investigate + fix */
+		c.Targets[c.Target].Active = nil
+		c.Targets[c.Target].Backends = []string{}
+
+		for _, ip := range c.endpoints() {
+			backends, err := vault.Lookup("vaults.service.consul", ip)
+			if err != nil {
+				continue
+			}
+
+			active, err := vault.Lookup("active.vault.service.consul", ip)
+			if err != nil {
+				continue
+			}
+
+			c.Targets[c.Target].Backends = backends
+			if len(active) > 0 {
+				c.Targets[c.Target].Active = active[0]
+			}
+			break
+		}
+
+		c.Write()
+	}
+
 	return c
 }
 
@@ -166,9 +195,28 @@ func (c *Config) SetToken(token string) error {
 	return nil
 }
 
+// Helpers
+
 func (c *Config) URL() string {
 	if t, ok := c.Targets[c.Target]; ok {
 		return t.URL
 	}
 	return ""
+}
+
+func (c *Config) endpoints() []string {
+	if t, ok := c.Targets[c.Target]; ok {
+		// we use the backends from DNS first
+		l := make([]string, len(t.Backends))
+		copy(l, t.Backends)
+
+		// then we "fail back" to the actual endpoint URL
+		// and pretend its the DNS endpoint (http/https no mo')
+		u, err := url.Parse(t.URL)
+		if err == nil {
+			l := append(l, u.Host)
+		}
+		return l
+	}
+	return []string{}
 }
