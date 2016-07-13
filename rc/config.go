@@ -3,10 +3,12 @@ package rc
 import (
 	"fmt"
 	"io/ioutil"
+	"net/url"
 	"os"
 	"strings"
 
 	"github.com/ghodss/yaml"
+	"github.com/starkandwayne/safe/vault"
 )
 
 type Target struct {
@@ -62,11 +64,22 @@ func (c *Config) credentials() (string, string, error) {
 		return "", "", fmt.Errorf("Current target vault '%s' not found in ~/.saferc", c.Target)
 	}
 
-	if t.Token != nil {
-		return t.URL, t.Token.(string), nil
+	addr := t.URL
+	if t.Active != nil {
+		u, err := url.Parse(t.URL)
+		if err != nil {
+			return "", "", err
+		}
+		os.Setenv("VAULT_HOSTNAME", u.Host)
+		u.Host = t.Active.(string)
+		addr = u.String()
 	}
 
-	return t.URL, "", nil
+	if t.Token != nil {
+		return addr, t.Token.(string), nil
+	}
+
+	return addr, "", nil
 }
 
 func Apply(sync bool) Config {
@@ -83,12 +96,18 @@ func Apply(sync bool) Config {
 		}
 	}
 
-	c.Apply()
-
 	if sync {
+		c.Sync()
+	}
+	c.Apply()
+	return c
+}
+
+func (c *Config) Sync() {
+	if t, ok := c.Targets[c.Target]; ok {
 		/* FIXME: this may not work with non-HA vaults.  investigate + fix */
-		c.Targets[c.Target].Active = nil
-		c.Targets[c.Target].Backends = []string{}
+		t.Active = nil
+		t.Backends = []string{}
 
 		for _, ip := range c.endpoints() {
 			backends, err := vault.Lookup("vaults.service.consul", ip)
@@ -101,17 +120,15 @@ func Apply(sync bool) Config {
 				continue
 			}
 
-			c.Targets[c.Target].Backends = backends
+			t.Backends = backends
 			if len(active) > 0 {
-				c.Targets[c.Target].Active = active[0]
+				t.Active = active[0]
 			}
 			break
 		}
 
 		c.Write()
 	}
-
-	return c
 }
 
 func (c *Config) Write() error {
@@ -214,7 +231,7 @@ func (c *Config) endpoints() []string {
 		// and pretend its the DNS endpoint (http/https no mo')
 		u, err := url.Parse(t.URL)
 		if err == nil {
-			l := append(l, u.Host)
+			l = append(l, u.Host)
 		}
 		return l
 	}

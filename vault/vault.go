@@ -20,6 +20,7 @@ import (
 // instance (unsealed and pre-authenticated) to read and write secrets.
 type Vault struct {
 	URL    string
+	Host   string
 	Token  string
 	Client *http.Client
 }
@@ -27,8 +28,10 @@ type Vault struct {
 // NewVault creates a new Vault object.  If an empty token is specified,
 // the current user's token is read from ~/.vault-token.
 func NewVault(url, token string, skip_verify bool) *Vault {
+	h := os.Getenv("VAULT_HOSTNAME") // set by c.credentials()!
 	return &Vault{
 		URL:   url,
+		Host:  h,
 		Token: token,
 		Client: &http.Client{
 			Transport: &http.Transport{
@@ -39,6 +42,9 @@ func NewVault(url, token string, skip_verify bool) *Vault {
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				if len(via) > 10 {
 					return fmt.Errorf("stopped after 10 redirects")
+				}
+				if h != "" {
+					req.Header.Add("Host", h)
 				}
 				if token != "" {
 					req.Header.Add("X-Vault-Token", token)
@@ -70,6 +76,9 @@ func (v *Vault) request(req *http.Request) (*http.Response, error) {
 		}
 	}
 
+	if v.Host != "" {
+		req.Header.Add("Host", v.Host)
+	}
 	if v.Token != "" {
 		req.Header.Add("X-Vault-Token", v.Token)
 	}
