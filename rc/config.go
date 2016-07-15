@@ -39,6 +39,11 @@ type ConfigV1 struct {
 	Aliases map[string]string      `yaml:"Aliases"`
 }
 
+func SwapHost(u *url.URL, host string) string {
+	u.Host = hostReplacer.ReplaceAllString(u.Host, host)
+	return u.String()
+}
+
 func saferc() string {
 	return fmt.Sprintf("%s/.saferc", os.Getenv("HOME"))
 }
@@ -80,8 +85,7 @@ func (c *Config) credentials() (string, string, error) {
 			return "", "", err
 		}
 		os.Setenv("VAULT_HOSTNAME", u.Host)
-		u.Host = t.Active.(string)
-		addr = u.String()
+		addr = SwapHost(u, t.Active.(string))
 	}
 
 	if t.Token != nil {
@@ -121,13 +125,11 @@ func Apply(sync bool) Config {
 
 func (c *Config) Sync() {
 	if t, ok := c.Targets[c.Target]; ok {
-		fmt.Printf("found target %s\n", c.Target)
 		/* FIXME: this may not work with non-HA vaults.  investigate + fix */
 		t.Active = nil
 		t.Backends = []string{}
 
-		for _, ip := range c.dnsEndpoints() {
-			fmt.Printf("checking endpoint %s\n", ip)
+		for _, ip := range c.DNS() {
 			backends, err := vault.Lookup("vaults.service.consul", ip)
 			if err != nil {
 				continue
@@ -238,7 +240,7 @@ func (c *Config) URL() string {
 	return ""
 }
 
-func (c *Config) dnsEndpoints() []string {
+func (c *Config) DNS() []string {
 	if t, ok := c.Targets[c.Target]; ok {
 		// we use the backends from our last sync first
 		l := make([]string, len(t.Backends))
@@ -264,8 +266,7 @@ func (c *Config) VaultEndpoints() []string {
 
 		l := make([]string, 0)
 		for _, backend := range t.Backends {
-			u.Host = hostReplacer.ReplaceAllString(u.Host, backend)
-			l = append(l, u.String())
+			l = append(l, SwapHost(u, backend))
 		}
 		return l
 	}

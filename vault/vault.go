@@ -16,11 +16,6 @@ import (
 	"github.com/starkandwayne/goutils/tree"
 )
 
-type seal struct {
-	Sealed    bool `yaml:"sealed"`
-	Threshold int  `yaml:"t"`
-}
-
 // A Vault represents a means for interacting with a remote Vault
 // instance (unsealed and pre-authenticated) to read and write secrets.
 type Vault struct {
@@ -28,7 +23,6 @@ type Vault struct {
 	Host   string
 	Token  string
 	Client *http.Client
-	seal   *seal
 }
 
 // NewVault creates a new Vault object.  If an empty token is specified,
@@ -389,47 +383,77 @@ func (v *Vault) Move(oldpath, newpath string) error {
 	return nil
 }
 
-func (v *Vault) checkSealStatus() {
-	if v.seal == nil {
-		var s seal
-		req, err := http.NewRequest("GET", v.url("/v1/sys/seal-status"), nil)
-		if err != nil {
-			return
-		}
-		res, err := v.request(req)
-		if err != nil {
-			return
-		}
-		if res.StatusCode == 200 {
-			b, err := ioutil.ReadAll(res.Body)
-			if err != nil {
-				return
-			}
-			if err = json.Unmarshal(b, &s); err != nil {
-				return
-			}
-		}
-		v.seal = &s
+func (v *Vault) CheckSeal() (bool, int, error) {
+	var data = struct {
+		Sealed    bool `json:"sealed"`
+		Threshold int  `json:"t"`
+	}{}
+	req, err := http.NewRequest("GET", v.url("/v1/sys/seal-status"), nil)
+	if err != nil {
+		return false, 0, err
 	}
+	res, err := v.request(req)
+	if err != nil {
+		return false, 0, err
+	}
+	if res.StatusCode == 200 {
+		b, err := ioutil.ReadAll(res.Body)
+		if err != nil {
+			return false, 0, err
+		}
+		if err = json.Unmarshal(b, &data); err != nil {
+			return false, 0, err
+		}
+
+		if data.Threshold < 1 {
+			return false, 0, fmt.Errorf("threshold of %d is suspect; here's the full response:\n%s\n",
+				data.Threshold, string(b))
+		}
+	}
+
+	return data.Sealed, data.Threshold, nil
 }
 
-func (v *Vault) Sealed() bool {
-	v.checkSealStatus()
-	return v.seal.Sealed
-}
-
-func (v *Vault) SealThreshold() int {
-	v.checkSealStatus()
-	return v.seal.Threshold
-}
-
-func (v *Vault) Seal() {
+func (v *Vault) Seal() error {
 	/* seal the vault */
+	req, err := http.NewRequest("POST", v.url("/v1/sys/seal"), nil)
+	if err != nil {
+		return err
+	}
+	res, err := v.request(req)
+	if err != nil {
+		return err
+	}
+	if res.StatusCode == 200 || res.StatusCode == 204 {
+		return nil
+	}
+	return fmt.Errorf(res.Status)
 }
 
-func (v *Vault) Unseal(keys []string) {
-	/* reset the vault seal over at /sys/unseal?reset=1 */
-	/* loop the keys and unseal the vault */
-	/* ... */
-	/* profit! */
+func (v *Vault) doit(req *http.Request, err error) (*http.Response, error) {
+	res, err := v.request(req)
+	if err != nil {
+		return nil, err
+	}
+	if res.StatusCode == 200 || res.StatusCode == 204 {
+		return res, nil
+	}
+	return res, fmt.Errorf(res.Status)
+}
+
+func (v *Vault) Unseal(keys []string) error {
+	_, err := v.doit(http.NewRequest("PUT", v.url("/v1/sys/unseal"),
+		strings.NewReader(`{"reset":true}`)))
+	if err != nil {
+		return err
+	}
+
+	for _, k := range keys {
+		_, err := v.doit(http.NewRequest("PUT", v.url("/v1/sys/unseal"),
+			strings.NewReader(`{"key":"`+k+`"}`)))
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

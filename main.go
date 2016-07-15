@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net/url"
 	"os"
 	"os/exec"
 	"sort"
@@ -15,6 +16,7 @@ import (
 	"github.com/starkandwayne/goutils/ansi"
 
 	"github.com/starkandwayne/safe/auth"
+	"github.com/starkandwayne/safe/dns"
 	"github.com/starkandwayne/safe/rc"
 	"github.com/starkandwayne/safe/vault"
 )
@@ -44,7 +46,7 @@ func connect() *vault.Vault {
 func connectAll(hosts []string) []*vault.Vault {
 	vaults := make([]*vault.Vault, len(hosts))
 	for i, host := range hosts {
-		vaults[i] = vault.NewVault(host, "", os.Getenv("VAULT_SKIP_VERIFY") != "")
+		vaults[i] = vault.NewVault(host, os.Getenv("VAULT_TOKEN"), os.Getenv("VAULT_SKIP_VERIFY") != "")
 	}
 	return vaults
 }
@@ -265,6 +267,31 @@ func main() {
 		return nil
 	})
 
+	r.Dispatch("status", func(command string, args ...string) error {
+		cfg := rc.Apply(true)
+
+		if len(args) != 0 {
+			return fmt.Errorf("USAGE: status")
+		}
+
+		backends := cfg.VaultEndpoints()
+		if len(backends) == 0 {
+			return fmt.Errorf("No backends detected")
+		}
+
+		for _, v := range connectAll(backends) {
+			sealed, _, err := v.CheckSeal()
+			if err != nil {
+				ansi.Fprintf(os.Stderr, "%s: @R{%s}\n", v.URL, err)
+			} else if sealed {
+				ansi.Fprintf(os.Stderr, "%s: @C{SEALED}\n", v.URL)
+			} else {
+				ansi.Fprintf(os.Stderr, "%s: @G{unsealed}\n", v.URL)
+			}
+		}
+		return nil
+	})
+
 	r.Dispatch("seal", func(command string, args ...string) error {
 		cfg := rc.Apply(true)
 
@@ -272,12 +299,37 @@ func main() {
 			return fmt.Errorf("USAGE: seal")
 		}
 
-		backends := cfg.VaultEndpoints()
-		if len(backends) == 0 {
+		servers := cfg.DNS()
+		if len(servers) == 0 {
 			return fmt.Errorf("No backends detected")
 		}
-		for _, v := range connectAll(backends) {
-			v.Seal()
+
+		/* while there are vault.service.consul */
+		for dns.HasRecordsFor("vault.service.consul", servers) {
+			/* wait until there is a active.vault.service.consul entry */
+			active, ok := dns.WaitForChange("active.vault.service.consul", "", 30, servers)
+			if !ok {
+				return fmt.Errorf("Timed out determining the active vault node")
+			}
+			ansi.Printf("@Y{active node is now %s}\n", active)
+
+			/* seal */
+
+			/* FIXME: this is a terrible way of doing this */
+			u, err := url.Parse(cfg.Targets[cfg.Target].URL)
+			if err != nil {
+				return err
+			}
+			v := vault.NewVault(rc.SwapHost(u, active), os.Getenv("VAULT_TOKEN"), os.Getenv("VAULT_SKIP_VERIFY") != "")
+			if err := v.Seal(); err != nil {
+				return fmt.Errorf("%s failed: %s\n", v.URL, err)
+			}
+
+			/* wait until the active.vault.service.consul entry changes */
+			_, ok = dns.WaitForChange("active.vault.service.consul", active, 30, servers)
+			if !ok {
+				return fmt.Errorf("Timed out waiting for a new active vault node")
+			}
 		}
 
 		ansi.Fprintf(os.Stderr, "The Vaults are sealed!\n")
@@ -297,13 +349,17 @@ func main() {
 
 		keys := []string{} // seal keys, to be provided by user
 		for _, v := range connectAll(backends) {
-			if v.Sealed() {
+			sealed, threshold, err := v.CheckSeal()
+			if err != nil {
+				return err
+			}
+			if !sealed {
 				continue
 			}
 
 			if len(keys) == 0 {
-				for i := 0; i < v.SealThreshold(); i++ {
-					keys = append(keys, pr(fmt.Sprintf("Seal Key #%d", i+1), false))
+				for i := 0; i < threshold; i++ {
+					keys = append(keys, pr(ansi.Sprintf("Seal Key @M{#%d}", i+1), false))
 				}
 			}
 
