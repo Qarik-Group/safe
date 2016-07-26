@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net/http/httputil"
 	"os"
 	"os/exec"
 	"sort"
@@ -606,6 +607,24 @@ func main() {
 		}
 
 		return v.Write(path, s)
+	})
+
+	r.Dispatch("curl", func(command string, args ...string) error {
+		rc.Apply()
+
+		if len(args) < 2 {
+			return fmt.Errorf("USAGE: curl method path [data]")
+		}
+
+		v := connect()
+		res, err := v.Curl(strings.ToUpper(args[0]), args[1], []byte(strings.Join(args[2:], " ")))
+		if err != nil {
+			return err
+		}
+
+		r, _ := httputil.DumpResponse(res, true)
+		fmt.Fprintf(os.Stdout, "%s\n", r)
+		return nil
 	})
 
 	insecure := getopt.BoolLong("insecure", 'k', "Disable SSL/TLS certificate validation")

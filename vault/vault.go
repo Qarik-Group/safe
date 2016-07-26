@@ -116,6 +116,14 @@ func (v *Vault) request(req *http.Request) (*http.Response, error) {
 	return nil, fmt.Errorf("redirection loop detected")
 }
 
+func (v *Vault) Curl(method string, path string, body []byte) (*http.Response, error) {
+	req, err := http.NewRequest(method, v.url("/v1/%s", path), bytes.NewBuffer(body))
+	if err != nil {
+		return nil, err
+	}
+	return v.request(req)
+}
+
 // Read checks the Vault for a Secret at the specified path, and returns it.
 // If there is nothing at that path, a nil *Secret will be returned, with no
 // error.
