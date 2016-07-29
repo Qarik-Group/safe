@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/starkandwayne/safe/vault"
+	"github.com/starkandwayne/safe/dns"
 	"gopkg.in/yaml.v2"
 )
 
@@ -130,12 +130,12 @@ func (c *Config) Sync() {
 		t.Backends = []string{}
 
 		for _, ip := range c.DNS() {
-			backends, err := vault.Lookup("vaults.service.consul", ip)
+			backends, err := dns.Lookup("vaults.service.consul", ip)
 			if err != nil {
 				continue
 			}
 
-			active, err := vault.Lookup("active.vault.service.consul", ip)
+			active, err := dns.Lookup("active.vault.service.consul", ip)
 			if err != nil {
 				continue
 			}
