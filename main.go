@@ -305,9 +305,10 @@ func main() {
 		}
 
 		/* while there are vault.service.consul */
+		fmt.Fprintf(os.Stderr, "looking up unsealed vaults to seal...\n")
 		for dns.HasRecordsFor("vault.service.consul", servers) {
 			/* wait until there is a active.vault.service.consul entry */
-			active, ok := dns.WaitForChange("active.vault.service.consul", "", 30, servers)
+			active, ok := dns.WaitForChange("active.vault.service.consul", "", 300, servers)
 			if !ok {
 				return fmt.Errorf("Timed out determining the active vault node")
 			}
@@ -320,6 +321,7 @@ func main() {
 			if err != nil {
 				return err
 			}
+			fmt.Fprintf(os.Stderr, "sealing host %s\n", rc.SwapHost(u, active))
 			v := vault.NewVault(rc.SwapHost(u, active), os.Getenv("VAULT_TOKEN"), os.Getenv("VAULT_SKIP_VERIFY") != "")
 			if err := v.Seal(); err != nil {
 				return fmt.Errorf("%s failed: %s\n", v.URL, err)

@@ -11,7 +11,6 @@ func Lookup(query string, server string) ([]string, error) {
 		query += "." // has to be fully qualified
 	}
 
-	fmt.Printf("trying lookup of %s against %s\n", query, server)
 	c := &dns.Client{}
 	m := &dns.Msg{}
 	m.Id = dns.Id()

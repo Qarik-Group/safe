@@ -17,14 +17,17 @@ func HasRecordsFor(query string, servers []string) bool {
 
 func WaitForChange(query string, current string, timeout int, servers []string) (string, bool) {
 	agents := make([]chan int, len(servers))
-	response := make(chan string, 0)
+	response := make(chan string, len(servers))
 
 	for i, server := range servers {
 		agents[i] = make(chan int, 0)
-		go func(in chan int, out chan string, have string) {
+		go func(n int, in chan int, out chan string, have string) {
 			for {
-				if _, ok := <-in; ok {
+				select {
+				case <-in:
 					return
+				default:
+					break
 				}
 
 				rr, err := Lookup(query, server)
@@ -39,15 +42,16 @@ func WaitForChange(query string, current string, timeout int, servers []string) 
 
 				if got != have {
 					out <- got
+					<-in
 					return
 				}
 
 				time.Sleep(250 * time.Millisecond)
 			}
-		}(agents[i], response, current)
+		}(i, agents[i], response, current)
 	}
 
-	t := time.NewTimer(30 * time.Second)
+	t := time.NewTimer(time.Duration(timeout) * time.Second)
 
 	select {
 	case rr := <-response:
