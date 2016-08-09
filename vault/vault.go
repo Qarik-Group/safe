@@ -389,3 +389,40 @@ func (v *Vault) Move(oldpath, newpath string) error {
 	}
 	return nil
 }
+
+func (v *Vault) RetrievePem(path string) ([]byte, error) {
+	res, err := v.Curl("GET", "/pki/"+path+"/pem", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	if res.StatusCode != 200 {
+		var raw map[string]interface{}
+		if err = json.Unmarshal(body, &raw); err != nil {
+			return nil, fmt.Errorf("Received non-200 with non-JSON payload:\n%s\n", body)
+		}
+
+		if rawErrors, ok := raw["errors"]; ok {
+			var errors []string
+			if elems, ok := rawErrors.([]interface{}); ok {
+				for _, elem := range elems {
+					if err, ok := elem.(string); ok {
+						errors = append(errors, err)
+					}
+				}
+				return nil, fmt.Errorf(strings.Join(errors, "\n"))
+			} else {
+				return nil, fmt.Errorf("Received unexpected format of Vault error messages:\n%v\n", errors)
+			}
+		} else {
+			return nil, fmt.Errorf("Received non-200 with no error messagess:\n%v\n", raw)
+		}
+	}
+
+	return body, nil
+}

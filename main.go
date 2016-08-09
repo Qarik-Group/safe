@@ -123,6 +123,14 @@ func main() {
            to each path. Both keys will be PEM-encoded DER. (nbits defaults
            to 2048 bits)
 
+    ca-pem
+           Retrieves the PEM-encoded CA cert used in Vault's PKI backend for signing
+           and issuing certificates.
+
+    crl-pem
+           Retrieves the PEM-encoded Certificate Revocation List managed by
+           Vaults PKI backend.
+
     prompt ...
            Echo the arguments, space-separated, as a single line to the terminal.
 
@@ -607,6 +615,38 @@ func main() {
 		}
 
 		return v.Write(path, s)
+	})
+
+	r.Dispatch("crl-pem", func(command string, args ...string) error {
+		rc.Apply()
+
+		v := connect()
+		pem, err := v.RetrievePem("crl")
+		if err != nil {
+			return err
+		}
+		if len(pem) == 0 {
+			ansi.Fprintf(os.Stderr, "@Y{No CRL exists yet}\n")
+		} else {
+			fmt.Fprintf(os.Stdout, "%s\n", pem)
+		}
+		return nil
+	})
+
+	r.Dispatch("ca-pem", func(command string, args ...string) error {
+		rc.Apply()
+
+		v := connect()
+		pem, err := v.RetrievePem("ca")
+		if err != nil {
+			return err
+		}
+		if len(pem) == 0 {
+			ansi.Fprintf(os.Stderr, "@Y{No CA exists yet}\n")
+		} else {
+			fmt.Fprintf(os.Stdout, "%s\n", pem)
+		}
+		return nil
 	})
 
 	r.Dispatch("curl", func(command string, args ...string) error {
