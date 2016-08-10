@@ -505,3 +505,39 @@ func (v *Vault) CreateSignedCertificate(role, path string, params CertOptions) e
 	}
 	return nil
 }
+
+func (v *Vault) RevokeCertificate(serial string) error {
+	if strings.ContainsRune(serial, '/') {
+		secret, err := v.Read(serial)
+		if err != nil {
+			return err
+		}
+		if !secret.Has("serial") {
+			return fmt.Errorf("Certificate specified using path %s, but no serial secret was found there", serial)
+		}
+		serial = secret.Get("serial")
+	}
+
+	d := struct {
+		Serial string `json:"serial_number"`
+	}{Serial: serial}
+
+	data, err := json.Marshal(d)
+	if err != nil {
+		return err
+	}
+
+	res, err := v.Curl("POST", "pki/revoke", data)
+	if err != nil {
+		return err
+	}
+
+	if res.StatusCode >= 400 {
+		body, err := ioutil.ReadAll(res.Body)
+		if err != nil {
+			return err
+		}
+		return fmt.Errorf("Unable to revoke certificate %s: %s\n", serial, DecodeErrorResponse(body))
+	}
+	return nil
+}

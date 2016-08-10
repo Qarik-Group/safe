@@ -133,6 +133,13 @@ func main() {
            The --ttl, --ip-sans, --alt-names, and --exclude-cn-from-sans flags can
            be specified to customize how the certificate is generated.
 
+
+    revoke path|serial
+           Revokes a certificate from Vaults PKI backend, using the specified serial,
+           or path to a secret containing the serial of the certificate. Once revoked,
+           the CRL will be automatically updated inside Vault, but anything consuming
+           the CRL should pull a new copy.
+
     ca-pem
            Retrieves the PEM-encoded CA cert used in Vault's PKI backend for signing
            and issuing certificates.
@@ -696,6 +703,17 @@ func main() {
 		v := connect()
 		role, path := args[0], args[1]
 		return v.CreateSignedCertificate(role, path, params)
+	})
+
+	r.Dispatch("revoke", func(command string, args ...string) error {
+		rc.Apply()
+
+		if len(args) != 1 {
+			return fmt.Errorf("USAGE: revoke path|serial")
+		}
+
+		v := connect()
+		return v.RevokeCertificate(args[0])
 	})
 
 	r.Dispatch("curl", func(command string, args ...string) error {
