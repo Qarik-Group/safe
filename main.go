@@ -123,6 +123,16 @@ func main() {
            to each path. Both keys will be PEM-encoded DER. (nbits defaults
            to 2048 bits)
 
+    cert role path
+           Generates a signed Certificate using Vault's PKI backend + Certifiate
+           Authority using the provided role. The common name is derived from the
+           last part of the path provided. Once issued, safe will store the
+           private key, signed certificate, and serial number in the secret backend,
+           located at the specified path.
+
+           The --ttl, --ip-sans, --alt-names, and --exclude-cn-from-sans flags can
+           be specified to customize how the certificate is generated.
+
     ca-pem
            Retrieves the PEM-encoded CA cert used in Vault's PKI backend for signing
            and issuing certificates.
@@ -647,6 +657,45 @@ func main() {
 			fmt.Fprintf(os.Stdout, "%s\n", pem)
 		}
 		return nil
+	})
+
+	r.Dispatch("cert", func(command string, args ...string) error {
+		rc.Apply()
+
+		ttl := getopt.StringLong("ttl", 0, "", "Vault-compatible time specification for the length the Cert is valid for")
+		ip_sans := getopt.StringLong("ip-sans", 0, "", "Comma-separated list of IP SANs")
+		alt_names := getopt.StringLong("alt-names", 0, "", "Comma-separated list of SANs")
+		exclude_cn_from_sans := getopt.BoolLong("exclude-cn-from-sans", 0, "", "Exclude the common_name from DNS or Email SANs")
+
+		args = append([]string{"safe " + command}, args...)
+
+		var opts = getopt.CommandLine
+		var parsed []string
+		for {
+			opts.Parse(args)
+			if opts.NArgs() == 0 {
+				break
+			}
+			parsed = append(parsed, opts.Arg(0))
+			args = opts.Args()
+		}
+
+		args = parsed
+
+		params := vault.CertOptions{
+			TTL:               *ttl,
+			IPSans:            *ip_sans,
+			AltNames:          *alt_names,
+			ExcludeCNFromSans: *exclude_cn_from_sans,
+		}
+
+		if len(args) != 2 {
+			return fmt.Errorf("USAGE: cert role path")
+		}
+
+		v := connect()
+		role, path := args[0], args[1]
+		return v.CreateSignedCertificate(role, path, params)
 	})
 
 	r.Dispatch("curl", func(command string, args ...string) error {
