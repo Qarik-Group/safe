@@ -389,3 +389,155 @@ func (v *Vault) Move(oldpath, newpath string) error {
 	}
 	return nil
 }
+
+func (v *Vault) RetrievePem(path string) ([]byte, error) {
+	res, err := v.Curl("GET", "/pki/"+path+"/pem", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	if res.StatusCode != 200 {
+		return nil, DecodeErrorResponse(body)
+	}
+
+	return body, nil
+}
+
+func DecodeErrorResponse(body []byte) error {
+	var raw map[string]interface{}
+
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return fmt.Errorf("Received non-200 with non-JSON payload:\n%s\n", body)
+	}
+
+	if rawErrors, ok := raw["errors"]; ok {
+		var errors []string
+		if elems, ok := rawErrors.([]interface{}); ok {
+			for _, elem := range elems {
+				if err, ok := elem.(string); ok {
+					errors = append(errors, err)
+				}
+			}
+			return fmt.Errorf(strings.Join(errors, "\n"))
+		} else {
+			return fmt.Errorf("Received unexpected format of Vault error messages:\n%v\n", errors)
+		}
+	} else {
+		return fmt.Errorf("Received non-200 with no error messagess:\n%v\n", raw)
+	}
+}
+
+type CertOptions struct {
+	CN                string `json:"common_name"`
+	TTL               string `json:"ttl,omitempty"`
+	AltNames          string `json:"alt_names,omitempty"`
+	IPSans            string `json:"ip_sans,omitempty"`
+	ExcludeCNFromSans bool   `json:"exclude_cn_from_sans,omitempty"`
+}
+
+func (v *Vault) CreateSignedCertificate(role, path string, params CertOptions) error {
+	parts := strings.Split(path, "/")
+	cn := parts[len(parts)-1]
+	params.CN = cn
+
+	data, err := json.Marshal(params)
+	if err != nil {
+		return err
+	}
+	res, err := v.Curl("POST", fmt.Sprintf("pki/issue/%s", role), data)
+	if err != nil {
+		return err
+	}
+
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return err
+	}
+
+	if res.StatusCode >= 400 {
+		return fmt.Errorf("Unable to create certificate %s: %s\n", cn, DecodeErrorResponse(body))
+	}
+
+	var raw map[string]interface{}
+	if err = json.Unmarshal(body, &raw); err == nil {
+		if d, ok := raw["data"]; ok {
+			if data, ok := d.(map[string]interface{}); ok {
+				var cert, key, serial string
+				var c, k, s interface{}
+				var ok bool
+				if c, ok = data["certificate"]; !ok {
+					return fmt.Errorf("No certificate found when issuing certificate %s:\n%v\n", cn, data)
+				}
+				if cert, ok = c.(string); !ok {
+					return fmt.Errorf("Invalid data type for certificate %s:\n%v\n", cn, data)
+				}
+				if k, ok = data["private_key"]; !ok {
+					return fmt.Errorf("No private_key found when issuing certificate %s:\n%v\n", cn, data)
+				}
+				if key, ok = k.(string); !ok {
+					return fmt.Errorf("Invalid data type for private_key %s:\n%v\n", cn, data)
+				}
+				if s, ok = data["serial_number"]; !ok {
+					return fmt.Errorf("No serial_number found when issuing certificate %s:\n%v\n", cn, data)
+				}
+				if serial, ok = s.(string); !ok {
+					return fmt.Errorf("Invalid data type for serial_number %s:\n%v\n", cn, data)
+				}
+
+				secret := NewSecret()
+				secret.Set("cert", cert)
+				secret.Set("key", key)
+				secret.Set("serial", serial)
+				return v.Write(path, secret)
+			} else {
+				fmt.Errorf("Invalid response datatype requesting certificate %s:\n%v\n", cn, d)
+			}
+		} else {
+			fmt.Errorf("No data found when requesting certificate %s:\n%v\n", cn, d)
+		}
+	} else {
+		return fmt.Errorf("Unparseable json creating certificate %s:\n%s\n", cn, body)
+	}
+	return nil
+}
+
+func (v *Vault) RevokeCertificate(serial string) error {
+	if strings.ContainsRune(serial, '/') {
+		secret, err := v.Read(serial)
+		if err != nil {
+			return err
+		}
+		if !secret.Has("serial") {
+			return fmt.Errorf("Certificate specified using path %s, but no serial secret was found there", serial)
+		}
+		serial = secret.Get("serial")
+	}
+
+	d := struct {
+		Serial string `json:"serial_number"`
+	}{Serial: serial}
+
+	data, err := json.Marshal(d)
+	if err != nil {
+		return err
+	}
+
+	res, err := v.Curl("POST", "pki/revoke", data)
+	if err != nil {
+		return err
+	}
+
+	if res.StatusCode >= 400 {
+		body, err := ioutil.ReadAll(res.Body)
+		if err != nil {
+			return err
+		}
+		return fmt.Errorf("Unable to revoke certificate %s: %s\n", serial, DecodeErrorResponse(body))
+	}
+	return nil
+}
