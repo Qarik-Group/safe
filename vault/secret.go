@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+
 	"github.com/ghodss/yaml"
 	"github.com/kless/osutil/user/crypt/sha512_crypt"
 )
@@ -61,6 +62,15 @@ func (s *Secret) Format(oldKey, newKey, fmtType string) error {
 		return fmt.Errorf("%s is not a valid encoding for the `safe fmt` command", fmtType)
 	}
 
+	return nil
+}
+
+func (s *Secret) DHParam(length int) error {
+	dhparam, err := genDHParam(length)
+	if err != nil {
+		return err
+	}
+	s.Set("dhparam-pem", dhparam)
 	return nil
 }
 

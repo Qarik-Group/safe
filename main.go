@@ -140,13 +140,20 @@ func main() {
            the CRL will be automatically updated inside Vault, but anything consuming
            the CRL should pull a new copy.
 
-    ca-pem
+    ca-pem [path]
            Retrieves the PEM-encoded CA cert used in Vault's PKI backend for signing
-           and issuing certificates.
+           and issuing certificates. If path is supplied, sets the "ca-pem" key using the
+           current CA cert inside the secret backend, at <path>.
 
-    crl-pem
+    crl-pem [path]
            Retrieves the PEM-encoded Certificate Revocation List managed by
-           Vaults PKI backend.
+           Vaults PKI backend. If path is supplied, sets the "crl-pem" key using the
+           current CRL inside the secret backend, at <path>.
+
+    dhparam [bits] path
+           Generates DH Params using OpenSSL, and the specified bit length. Defaults
+           to 2048 bit primes. Primes are then stored in <path> under the 'dhparam-pem'
+           key.
 
     prompt ...
            Echo the arguments, space-separated, as a single line to the terminal.
@@ -587,6 +594,33 @@ func main() {
 		return nil
 	})
 
+	r.Dispatch("dhparam", func(command string, args ...string) error {
+		rc.Apply()
+		bits := 2048
+
+		if len(args) > 0 {
+			if u, err := strconv.ParseUint(args[0], 10, 16); err == nil {
+				bits = int(u)
+				args = args[1:]
+			}
+		}
+
+		if len(args) < 1 {
+			return fmt.Errorf("USAGE: dhparam [bits] path")
+		}
+
+		path := args[0]
+		v := connect()
+		s, err := v.Read(path)
+		if err != nil && err != vault.NotFound {
+			return err
+		}
+		if err = s.DHParam(bits); err != nil {
+			return err
+		}
+		return v.Write(path, s)
+	}, "dh", "dhparams")
+
 	r.Dispatch("prompt", func(command string, args ...string) error {
 		fmt.Fprintf(os.Stderr, "%s\n", strings.Join(args, " "))
 		return nil
@@ -642,10 +676,21 @@ func main() {
 		if err != nil {
 			return err
 		}
-		if len(pem) == 0 {
-			ansi.Fprintf(os.Stderr, "@Y{No CRL exists yet}\n")
+
+		if len(args) > 0 {
+			path := args[0]
+			s, err := v.Read(path)
+			if err != nil && err != vault.NotFound {
+				return err
+			}
+			s.Set("crl-pem", string(pem))
+			return v.Write(path, s)
 		} else {
-			fmt.Fprintf(os.Stdout, "%s\n", pem)
+			if len(pem) == 0 {
+				ansi.Fprintf(os.Stderr, "@Y{No CRL exists yet}\n")
+			} else {
+				fmt.Fprintf(os.Stdout, "%s\n", pem)
+			}
 		}
 		return nil
 	})
@@ -658,10 +703,26 @@ func main() {
 		if err != nil {
 			return err
 		}
-		if len(pem) == 0 {
-			ansi.Fprintf(os.Stderr, "@Y{No CA exists yet}\n")
+
+		if len(args) > 0 {
+			path := args[0]
+			s, err := v.Read(path)
+			if err != nil && err != vault.NotFound {
+				return err
+			}
+			s.Set("ca-pem", string(pem))
+			return v.Write(path, s)
 		} else {
-			fmt.Fprintf(os.Stdout, "%s\n", pem)
+			if len(pem) == 0 {
+				ansi.Fprintf(os.Stderr, "@Y{No CA exists yet}\n")
+			} else {
+				fmt.Fprintf(os.Stdout, "%s\n", pem)
+				if len(pem) == 0 {
+					ansi.Fprintf(os.Stderr, "@Y{No CA exists yet}\n")
+				} else {
+					fmt.Fprintf(os.Stdout, "%s\n", pem)
+				}
+			}
 		}
 		return nil
 	})
