@@ -489,7 +489,10 @@ func (v *Vault) CreateSignedCertificate(role, path string, params CertOptions) e
 					return fmt.Errorf("Invalid data type for serial_number %s:\n%v\n", cn, data)
 				}
 
-				secret := NewSecret()
+				secret, err := v.Read(path)
+				if err != nil && err != NotFound {
+					return err
+				}
 				secret.Set("cert", cert)
 				secret.Set("key", key)
 				secret.Set("serial", serial)
