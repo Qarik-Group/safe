@@ -1,19 +1,15 @@
 # New Features
 
-- Added `safe curl` command for arbitrarily executing HTTP queries
-  against a safe target. This allows you to authenticate to Vault,
-  and hit the raw APIs for experimentation.
+- Added `safe dhparam` for generating randomized DH params,
+  and storing the PEM data in the secret backend.
 
-- Added `safe cert` command for issuing signed certificates using
-  Vault's PKI backend.
+# Improvements
 
-- Added `safe revoke` command for revoking certificates issued
-  using Vault's PKI backend.
+- `safe crl-pem` and `safe ca-pem` now support a path argument,
+  triggering `safe` to store the corresponding PEM data in the
+  secret backend, at `path`.
 
-- Added `safe crl-pem` command for displaying the Certificate
-  Revocation List (CRL) in PEM format, pulled from Vault's
-  PKI backend.
+# Bug Fixes
 
-- Added `safe ca-pem` command for displaying the Certificate
-  Authority certificiate in PEM format, pulled from Vault's PKI
-  backend.
+- `safe cert` no longer stomps on pre-existing values stored
+  in the path at which the cert is being generated.
