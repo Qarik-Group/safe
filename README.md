@@ -1,6 +1,8 @@
 safe - A Vault CLI
 ==================
 
+Questions? Pop in our [slack channel](https://cloudfoundry.slack.com/messages/vault/)!
+
 ![SAFE](docs/safe.png)
 
 [Vault][vault] is an awesome project and it comes with superb
