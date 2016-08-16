@@ -85,6 +85,12 @@ func main() {
            This can be used for more sensitive credentials like passwords,
            PINs, etc.
 
+    paste path key[=value] [key ...]
+           Works the same way as 'safe set', except that it does not
+           prompt for confirmation of any values. This is used when you are
+           pasting in data from an external source, and do not expect to
+           mis-paste the data, to save a little time + headache.
+
     paths path [path ... ]
            Provide a flat listing of all reachable keys for each path.
 
@@ -317,7 +323,7 @@ func main() {
 	r.Dispatch("paste", func(command string, args ...string) error {
 		rc.Apply()
 		if len(args) < 2 {
-			return fmt.Errorf("USAGE: set path key[=value] [key ...]")
+			return fmt.Errorf("USAGE: paste path key[=value] [key ...]")
 		}
 		v := connect()
 		path, args := args[0], args[1:]

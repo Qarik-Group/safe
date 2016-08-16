@@ -157,6 +157,10 @@ safe set secret/root username=root password
 <prompts for 'password' here...>
 ```
 
+Similarly, `safe paste` works the same way, but does not have a confirmation
+prompt for your value. It assumes you have pasted in the value from a known-good
+source.
+
 ### get path \[path ...\]
 
 Retrieve and print the values of one or more paths, to standard
