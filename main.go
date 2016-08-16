@@ -312,28 +312,7 @@ func main() {
 			s.Set(k, v)
 		}
 		return v.Write(path, s)
-	}, "write")
-
-	r.Dispatch("paste", func(command string, args ...string) error {
-		rc.Apply()
-		if len(args) < 2 {
-			return fmt.Errorf("USAGE: set path key[=value] [key ...]")
-		}
-		v := connect()
-		path, args := args[0], args[1:]
-		s, err := v.Read(path)
-		if err != nil && err != vault.NotFound {
-			return err
-		}
-		for _, set := range args {
-			k, v, err := keyPrompt(set, false)
-			if err != nil {
-				return err
-			}
-			s.Set(k, v)
-		}
-		return v.Write(path, s)
-	})
+	}, "write", "paste")
 
 	r.Dispatch("get", func(command string, args ...string) error {
 		rc.Apply()
