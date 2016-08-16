@@ -15,6 +15,8 @@
   triggering `safe` to store the corresponding PEM data in the
   secret backend, at `path`.
 
+- Merged `safe set` and `safe paste` into a single function using aliasing.
+
 # Bug Fixes
 
 - `safe cert` no longer stomps on pre-existing values stored
