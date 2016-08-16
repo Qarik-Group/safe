@@ -128,6 +128,12 @@ func (v *Vault) Curl(method string, path string, body []byte) (*http.Response, e
 // If there is nothing at that path, a nil *Secret will be returned, with no
 // error.
 func (v *Vault) Read(path string) (secret *Secret, err error) {
+	s := strings.SplitN(path, ":", 2)
+	var key string
+	if len(s) == 2 {
+		path = s[0]
+		key = s[1]
+	}
 	secret = NewSecret()
 	req, err := http.NewRequest("GET", v.url("/v1/%s", path), nil)
 	if err != nil {
@@ -162,14 +168,16 @@ func (v *Vault) Read(path string) (secret *Secret, err error) {
 	if rawdata, ok := raw["data"]; ok {
 		if data, ok := rawdata.(map[string]interface{}); ok {
 			for k, v := range data {
-				if s, ok := v.(string); ok {
-					secret.data[k] = s
-				} else {
-					b, err = json.Marshal(v)
-					if err != nil {
-						return
+				if (key != "" && k == key) || key == "" {
+					if s, ok := v.(string); ok {
+						secret.data[k] = s
+					} else {
+						b, err = json.Marshal(v)
+						if err != nil {
+							return
+						}
+						secret.data[k] = string(b)
 					}
-					secret.data[k] = string(b)
 				}
 			}
 
