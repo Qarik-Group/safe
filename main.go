@@ -717,7 +717,7 @@ func main() {
 	})
 
 	r.Dispatch("dhparam", func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(true)
 		bits := 2048
 
 		if len(args) > 0 {
@@ -791,7 +791,7 @@ func main() {
 	})
 
 	r.Dispatch("crl-pem", func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(true)
 
 		v := connect()
 		pem, err := v.RetrievePem("crl")
@@ -818,7 +818,7 @@ func main() {
 	})
 
 	r.Dispatch("ca-pem", func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(true)
 
 		v := connect()
 		pem, err := v.RetrievePem("ca")
@@ -850,7 +850,7 @@ func main() {
 	})
 
 	r.Dispatch("cert", func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(true)
 
 		ttl := getopt.StringLong("ttl", 0, "", "Vault-compatible time specification for the length the Cert is valid for")
 		ip_sans := getopt.StringLong("ip-sans", 0, "", "Comma-separated list of IP SANs")
@@ -889,7 +889,7 @@ func main() {
 	})
 
 	r.Dispatch("revoke", func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(true)
 
 		if len(args) != 1 {
 			return fmt.Errorf("USAGE: revoke path|serial")
@@ -900,7 +900,7 @@ func main() {
 	})
 
 	r.Dispatch("curl", func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(true)
 
 		if len(args) < 2 {
 			return fmt.Errorf("USAGE: curl method path [data]")
