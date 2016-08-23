@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http/httputil"
+	"net/url"
 	"os"
 	"os/exec"
 	"sort"
@@ -16,6 +17,7 @@ import (
 	"github.com/starkandwayne/goutils/ansi"
 
 	"github.com/starkandwayne/safe/auth"
+	"github.com/starkandwayne/safe/dns"
 	"github.com/starkandwayne/safe/rc"
 	"github.com/starkandwayne/safe/vault"
 )
@@ -39,12 +41,15 @@ func connect() *vault.Vault {
 		os.Exit(1)
 	}
 
-	v, err := vault.NewVault(addr, os.Getenv("VAULT_TOKEN"))
-	if err != nil {
-		ansi.Fprintf(os.Stderr, "@R{!! %s}\n", err)
-		os.Exit(1)
+	return vault.NewVault(addr, os.Getenv("VAULT_TOKEN"), os.Getenv("VAULT_SKIP_VERIFY") != "")
+}
+
+func connectAll(hosts []string) []*vault.Vault {
+	vaults := make([]*vault.Vault, len(hosts))
+	for i, host := range hosts {
+		vaults[i] = vault.NewVault(host, os.Getenv("VAULT_TOKEN"), os.Getenv("VAULT_SKIP_VERIFY") != "")
 	}
-	return v
+	return vaults
 }
 
 func main() {
@@ -184,17 +189,14 @@ func main() {
 			return fmt.Errorf("USAGE: targets")
 		}
 
-		cfg := rc.Apply()
+		cfg := rc.Apply(false)
 		wide := 0
-		for name := range cfg.Aliases {
+		var keys []string
+		for name, _ := range cfg.Targets {
+			keys = append(keys, name)
 			if len(name) > wide {
 				wide = len(name)
 			}
-		}
-
-		var keys []string
-		for name, _ := range cfg.Aliases {
-			keys = append(keys, name)
 		}
 
 		fmt.Fprintf(os.Stderr, "\n")
@@ -202,10 +204,10 @@ func main() {
 		other := fmt.Sprintf("    %%-%ds\t%%s\n", wide)
 		sort.Strings(keys)
 		for _, name := range keys {
-			if name == cfg.Current {
-				ansi.Fprintf(os.Stderr, current, name, cfg.Aliases[name])
+			if name == cfg.Target {
+				ansi.Fprintf(os.Stderr, current, name, cfg.Targets[name].URL)
 			} else {
-				ansi.Fprintf(os.Stderr, other, name, cfg.Aliases[name])
+				ansi.Fprintf(os.Stderr, other, name, cfg.Targets[name].URL)
 			}
 		}
 		fmt.Fprintf(os.Stderr, "\n")
@@ -213,12 +215,12 @@ func main() {
 	})
 
 	r.Dispatch("target", func(command string, args ...string) error {
-		cfg := rc.Apply()
+		cfg := rc.Apply(false)
 		if len(args) == 0 {
-			if cfg.Current == "" {
+			if cfg.Target == "" {
 				ansi.Fprintf(os.Stderr, "@R{No Vault currently targeted}\n")
 			} else {
-				ansi.Fprintf(os.Stderr, "Currently targeting @C{%s} at @C{%s}\n", cfg.Current, cfg.URL())
+				ansi.Fprintf(os.Stderr, "Currently targeting @C{%s} at @C{%s}\n", cfg.Target, cfg.URL())
 			}
 			return nil
 		}
@@ -227,7 +229,7 @@ func main() {
 			if err != nil {
 				return err
 			}
-			ansi.Fprintf(os.Stderr, "Now targeting @C{%s} at @C{%s}\n", cfg.Current, cfg.URL())
+			ansi.Fprintf(os.Stderr, "Now targeting @C{%s} at @C{%s}\n", cfg.Target, cfg.URL())
 			return cfg.Write()
 		}
 
@@ -241,7 +243,7 @@ func main() {
 			if err != nil {
 				return err
 			}
-			ansi.Fprintf(os.Stderr, "Now targeting @C{%s} at @C{%s}\n", cfg.Current, cfg.URL())
+			ansi.Fprintf(os.Stderr, "Now targeting @C{%s} at @C{%s}\n", cfg.Target, cfg.URL())
 			return cfg.Write()
 		}
 
@@ -249,14 +251,14 @@ func main() {
 	})
 
 	r.Dispatch("env", func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(true)
 		ansi.Fprintf(os.Stderr, "  @B{VAULT_ADDR}  @G{%s}\n", os.Getenv("VAULT_ADDR"))
 		ansi.Fprintf(os.Stderr, "  @B{VAULT_TOKEN} @G{%s}\n", os.Getenv("VAULT_TOKEN"))
 		return nil
 	})
 
 	r.Dispatch("auth", func(command string, args ...string) error {
-		cfg := rc.Apply()
+		cfg := rc.Apply(true)
 
 		method := "token"
 		if len(args) > 0 {
@@ -267,7 +269,7 @@ func main() {
 		var token string
 		var err error
 
-		ansi.Fprintf(os.Stderr, "Authenticating against @C{%s} at @C{%s}\n", cfg.Current, cfg.URL())
+		ansi.Fprintf(os.Stderr, "Authenticating against @C{%s} at @C{%s}\n", cfg.Target, cfg.URL())
 		switch method {
 		case "token":
 			token, err = auth.Token(os.Getenv("VAULT_ADDR"))
@@ -299,8 +301,122 @@ func main() {
 
 	}, "login")
 
+	r.Dispatch("sync", func(command string, args ...string) error {
+		rc.Apply(true)
+		return nil
+	})
+
+	r.Dispatch("status", func(command string, args ...string) error {
+		cfg := rc.Apply(true)
+
+		if len(args) != 0 {
+			return fmt.Errorf("USAGE: status")
+		}
+
+		backends := cfg.VaultEndpoints()
+		if len(backends) == 0 {
+			return fmt.Errorf("No backends detected")
+		}
+
+		for _, v := range connectAll(backends) {
+			sealed, _, err := v.CheckSeal()
+			if err != nil {
+				ansi.Fprintf(os.Stderr, "%s: @R{%s}\n", v.URL, err)
+			} else if sealed {
+				ansi.Fprintf(os.Stderr, "%s: @C{SEALED}\n", v.URL)
+			} else {
+				ansi.Fprintf(os.Stderr, "%s: @G{unsealed}\n", v.URL)
+			}
+		}
+		return nil
+	})
+
+	r.Dispatch("seal", func(command string, args ...string) error {
+		cfg := rc.Apply(true)
+
+		if len(args) != 0 {
+			return fmt.Errorf("USAGE: seal")
+		}
+
+		servers := cfg.DNS()
+		if len(servers) == 0 {
+			return fmt.Errorf("No backends detected")
+		}
+
+		/* while there are vault.service.consul */
+		fmt.Fprintf(os.Stderr, "looking up unsealed vaults to seal...\n")
+		for dns.HasRecordsFor("vault.service.consul", servers) {
+			/* wait until there is a active.vault.service.consul entry */
+			active, ok := dns.WaitForChange("active.vault.service.consul", "", 300, servers)
+			if !ok {
+				return fmt.Errorf("Timed out determining the active vault node")
+			}
+			ansi.Printf("@Y{active node is now %s}\n", active)
+
+			/* seal */
+
+			/* FIXME: this is a terrible way of doing this */
+			u, err := url.Parse(cfg.Targets[cfg.Target].URL)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(os.Stderr, "sealing host %s\n", rc.SwapHost(u, active))
+			v := vault.NewVault(rc.SwapHost(u, active), os.Getenv("VAULT_TOKEN"), os.Getenv("VAULT_SKIP_VERIFY") != "")
+			if err := v.Seal(); err != nil {
+				return fmt.Errorf("%s failed: %s\n", v.URL, err)
+			}
+
+			/* wait until the active.vault.service.consul entry changes */
+			_, ok = dns.WaitForChange("active.vault.service.consul", active, 30, servers)
+			if !ok {
+				return fmt.Errorf("Timed out waiting for a new active vault node")
+			}
+		}
+
+		ansi.Fprintf(os.Stderr, "The Vaults are sealed!\n")
+		return nil
+	})
+
+	r.Dispatch("unseal", func(command string, args ...string) error {
+		cfg := rc.Apply(true)
+		if len(args) != 0 {
+			return fmt.Errorf("USAGE: unseal")
+		}
+
+		backends := cfg.VaultEndpoints()
+		if len(backends) == 0 {
+			return fmt.Errorf("No backends detected")
+		}
+
+		keys := []string{} // seal keys, to be provided by user
+		for _, v := range connectAll(backends) {
+			sealed, threshold, err := v.CheckSeal()
+			if err != nil {
+				return err
+			}
+			if !sealed {
+				continue
+			}
+
+			if len(keys) == 0 {
+				for i := 0; i < threshold; i++ {
+					keys = append(keys, pr(ansi.Sprintf("Seal Key @M{#%d}", i+1), false))
+				}
+			}
+
+			v.Unseal(keys)
+		}
+
+		if len(keys) != 0 {
+			ansi.Fprintf(os.Stderr, "Unsealed the Vault(s)\n")
+		} else {
+			ansi.Fprintf(os.Stderr, "Vaults are already unsealed; taking no action.\n")
+		}
+		return nil
+	})
+
 	r.Dispatch("set", func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(true)
 		if len(args) < 2 {
 			return fmt.Errorf("USAGE: set path key[=value] [key ...]")
 		}
@@ -321,7 +437,7 @@ func main() {
 	}, "write")
 
 	r.Dispatch("paste", func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(true)
 		if len(args) < 2 {
 			return fmt.Errorf("USAGE: paste path key[=value] [key ...]")
 		}
@@ -342,7 +458,7 @@ func main() {
 	})
 
 	r.Dispatch("get", func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(true)
 		if len(args) < 1 {
 			return fmt.Errorf("USAGE: get path [path ...]")
 		}
@@ -359,7 +475,7 @@ func main() {
 	}, "read", "cat")
 
 	r.Dispatch("tree", func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(true)
 		if len(args) == 0 {
 			args = append(args, "secret")
 		}
@@ -375,7 +491,7 @@ func main() {
 	})
 
 	r.Dispatch("paths", func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(true)
 		if len(args) < 1 {
 			return fmt.Errorf("USAGE: paths path [path ...]")
 		}
@@ -393,7 +509,7 @@ func main() {
 	})
 
 	r.Dispatch("delete", func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(true)
 
 		recurse, args := shouldRecurse(command, args...)
 
@@ -416,7 +532,7 @@ func main() {
 	}, "rm")
 
 	r.Dispatch("export", func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(true)
 		if len(args) < 1 {
 			return fmt.Errorf("USAGE: export path [path ...]")
 		}
@@ -446,7 +562,7 @@ func main() {
 	})
 
 	r.Dispatch("import", func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(true)
 		b, err := ioutil.ReadAll(os.Stdin)
 		if err != nil {
 			return err
@@ -469,7 +585,7 @@ func main() {
 	})
 
 	r.Dispatch("move", func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(true)
 
 		recurse, args := shouldRecurse(command, args...)
 
@@ -491,7 +607,7 @@ func main() {
 	}, "mv", "rename")
 
 	r.Dispatch("copy", func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(true)
 
 		recurse, args := shouldRecurse(command, args...)
 
@@ -513,7 +629,7 @@ func main() {
 	}, "cp")
 
 	r.Dispatch("gen", func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(true)
 		length := 64
 		if len(args) > 0 {
 			if u, err := strconv.ParseUint(args[0], 10, 16); err == nil {
@@ -541,7 +657,7 @@ func main() {
 	}, "auto")
 
 	r.Dispatch("ssh", func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(true)
 		bits := 2048
 		if len(args) > 0 {
 			if u, err := strconv.ParseUint(args[0], 10, 16); err == nil {
@@ -571,7 +687,7 @@ func main() {
 	})
 
 	r.Dispatch("rsa", func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(true)
 		bits := 2048
 		if len(args) > 0 {
 			if u, err := strconv.ParseUint(args[0], 10, 16); err == nil {
@@ -633,7 +749,7 @@ func main() {
 	})
 
 	r.Dispatch("vault", func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(true)
 
 		cmd := exec.Command("vault", args...)
 		cmd.Stdin = os.Stdin
@@ -648,7 +764,7 @@ func main() {
 	})
 
 	r.Dispatch("fmt", func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(true)
 
 		if len(args) != 4 {
 			return fmt.Errorf("USAGE: fmt format_type path oldkey newkey")

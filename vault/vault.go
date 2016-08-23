@@ -20,43 +20,39 @@ import (
 // instance (unsealed and pre-authenticated) to read and write secrets.
 type Vault struct {
 	URL    string
+	Host   string
 	Token  string
 	Client *http.Client
 }
 
 // NewVault creates a new Vault object.  If an empty token is specified,
 // the current user's token is read from ~/.vault-token.
-func NewVault(url, token string) (*Vault, error) {
-	if token == "" {
-		b, err := ioutil.ReadFile(fmt.Sprintf("%s/.vault-token", os.Getenv("HOME")))
-		if err != nil {
-			return nil, err
-		}
-		token = string(b)
-	}
-
-	if token == "" {
-		return nil, fmt.Errorf("no vault token specified; are you authenticated?")
-	}
-
+func NewVault(url, token string, skip_verify bool) *Vault {
+	h := os.Getenv("VAULT_HOSTNAME") // set by c.credentials()!
 	return &Vault{
 		URL:   url,
+		Host:  h,
 		Token: token,
 		Client: &http.Client{
 			Transport: &http.Transport{
 				TLSClientConfig: &tls.Config{
-					InsecureSkipVerify: os.Getenv("VAULT_SKIP_VERIFY") != "",
+					InsecureSkipVerify: skip_verify,
 				},
 			},
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				if len(via) > 10 {
 					return fmt.Errorf("stopped after 10 redirects")
 				}
-				req.Header.Add("X-Vault-Token", token)
+				if h != "" {
+					req.Header.Add("Host", h)
+				}
+				if token != "" {
+					req.Header.Add("X-Vault-Token", token)
+				}
 				return nil
 			},
 		},
-	}, nil
+	}
 }
 
 func (v *Vault) url(f string, args ...interface{}) string {
@@ -80,7 +76,12 @@ func (v *Vault) request(req *http.Request) (*http.Response, error) {
 		}
 	}
 
-	req.Header.Add("X-Vault-Token", v.Token)
+	if v.Host != "" {
+		req.Header.Add("Host", v.Host)
+	}
+	if v.Token != "" {
+		req.Header.Add("X-Vault-Token", v.Token)
+	}
 	for i := 0; i < 10; i++ {
 		if req.Body != nil {
 			req.Body = ioutil.NopCloser(bytes.NewReader(body))
@@ -542,13 +543,87 @@ func (v *Vault) RevokeCertificate(serial string) error {
 	if err != nil {
 		return err
 	}
-
 	if res.StatusCode >= 400 {
 		body, err := ioutil.ReadAll(res.Body)
 		if err != nil {
 			return err
 		}
 		return fmt.Errorf("Unable to revoke certificate %s: %s\n", serial, DecodeErrorResponse(body))
+	}
+	return nil
+}
+
+func (v *Vault) CheckSeal() (bool, int, error) {
+	var data = struct {
+		Sealed    bool `json:"sealed"`
+		Threshold int  `json:"t"`
+	}{}
+	req, err := http.NewRequest("GET", v.url("/v1/sys/seal-status"), nil)
+	if err != nil {
+		return false, 0, err
+	}
+	res, err := v.request(req)
+	if err != nil {
+		return false, 0, err
+	}
+	if res.StatusCode == 200 {
+		b, err := ioutil.ReadAll(res.Body)
+		if err != nil {
+			return false, 0, err
+		}
+		if err = json.Unmarshal(b, &data); err != nil {
+			return false, 0, err
+		}
+
+		if data.Threshold < 1 {
+			return false, 0, fmt.Errorf("threshold of %d is suspect; here's the full response:\n%s\n",
+				data.Threshold, string(b))
+		}
+	}
+
+	return data.Sealed, data.Threshold, nil
+}
+
+func (v *Vault) Seal() error {
+	/* seal the vault */
+	req, err := http.NewRequest("POST", v.url("/v1/sys/seal"), nil)
+	if err != nil {
+		return err
+	}
+	res, err := v.request(req)
+	if err != nil {
+		return err
+	}
+	if res.StatusCode == 200 || res.StatusCode == 204 {
+		return nil
+	}
+	return fmt.Errorf(res.Status)
+}
+
+func (v *Vault) doit(req *http.Request, err error) (*http.Response, error) {
+	res, err := v.request(req)
+	if err != nil {
+		return nil, err
+	}
+	if res.StatusCode == 200 || res.StatusCode == 204 {
+		return res, nil
+	}
+	return res, fmt.Errorf(res.Status)
+}
+
+func (v *Vault) Unseal(keys []string) error {
+	_, err := v.doit(http.NewRequest("PUT", v.url("/v1/sys/unseal"),
+		strings.NewReader(`{"reset":true}`)))
+	if err != nil {
+		return err
+	}
+
+	for _, k := range keys {
+		_, err := v.doit(http.NewRequest("PUT", v.url("/v1/sys/unseal"),
+			strings.NewReader(`{"key":"`+k+`"}`)))
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
