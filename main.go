@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http/httputil"
-	"net/url"
 	"os"
 	"os/exec"
 	"sort"
@@ -17,7 +16,6 @@ import (
 	"github.com/starkandwayne/goutils/ansi"
 
 	"github.com/starkandwayne/safe/auth"
-	"github.com/starkandwayne/safe/dns"
 	"github.com/starkandwayne/safe/rc"
 	"github.com/starkandwayne/safe/vault"
 )
@@ -338,38 +336,17 @@ func main() {
 			return fmt.Errorf("USAGE: seal")
 		}
 
-		servers := cfg.DNS()
+		fmt.Fprintf(os.Stderr, "sealing all vaults in the cluster...\n")
+		servers := cfg.VaultEndpoints()
 		if len(servers) == 0 {
 			return fmt.Errorf("No backends detected")
 		}
 
-		/* while there are vault.service.consul */
-		fmt.Fprintf(os.Stderr, "looking up unsealed vaults to seal...\n")
-		for dns.HasRecordsFor("vault.service.consul", servers) {
-			/* wait until there is a active.vault.service.consul entry */
-			active, ok := dns.WaitForChange("active.vault.service.consul", "", 300, servers)
-			if !ok {
-				return fmt.Errorf("Timed out determining the active vault node")
-			}
-			ansi.Printf("@Y{active node is now %s}\n", active)
-
-			/* seal */
-
-			/* FIXME: this is a terrible way of doing this */
-			u, err := url.Parse(cfg.Targets[cfg.Target].URL)
-			if err != nil {
-				return err
-			}
-			fmt.Fprintf(os.Stderr, "sealing host %s\n", rc.SwapHost(u, active))
-			v := vault.NewVault(rc.SwapHost(u, active), os.Getenv("VAULT_TOKEN"), os.Getenv("VAULT_SKIP_VERIFY") != "")
+		for _, server := range servers {
+			fmt.Fprintf(os.Stderr, "sealing host %s\n", server)
+			v := vault.NewVault(server, os.Getenv("VAULT_TOKEN"), os.Getenv("VAULT_SKIP_VERIFY") != "")
 			if err := v.Seal(); err != nil {
 				return fmt.Errorf("%s failed: %s\n", v.URL, err)
-			}
-
-			/* wait until the active.vault.service.consul entry changes */
-			_, ok = dns.WaitForChange("active.vault.service.consul", active, 30, servers)
-			if !ok {
-				return fmt.Errorf("Timed out waiting for a new active vault node")
 			}
 		}
 

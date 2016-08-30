@@ -59,7 +59,7 @@ func (v *Vault) url(f string, args ...interface{}) string {
 	return v.URL + fmt.Sprintf(f, args...)
 }
 
-func shouldDebug() bool {
+func ShouldDebug() bool {
 	d := strings.ToLower(os.Getenv("DEBUG"))
 	return d != "" && d != "false" && d != "0" && d != "no" && d != "off"
 }
@@ -86,12 +86,12 @@ func (v *Vault) request(req *http.Request) (*http.Response, error) {
 		if req.Body != nil {
 			req.Body = ioutil.NopCloser(bytes.NewReader(body))
 		}
-		if shouldDebug() {
+		if ShouldDebug() {
 			r, _ := httputil.DumpRequest(req, true)
 			fmt.Fprintf(os.Stderr, "Request:\n%s\n----------------\n", r)
 		}
 		res, err := v.Client.Do(req)
-		if shouldDebug() {
+		if ShouldDebug() {
 			r, _ := httputil.DumpResponse(res, true)
 			fmt.Fprintf(os.Stderr, "Response:\n%s\n----------------\n", r)
 		}

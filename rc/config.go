@@ -3,12 +3,16 @@ package rc
 import (
 	"fmt"
 	"io/ioutil"
+	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"os"
 	"regexp"
 	"strings"
+	"time"
 
-	"github.com/starkandwayne/safe/dns"
+	"github.com/starkandwayne/goutils/botta"
+	"github.com/starkandwayne/safe/vault"
 	"gopkg.in/yaml.v2"
 )
 
@@ -28,9 +32,10 @@ type Target struct {
 }
 
 type Config struct {
-	Version string             `yaml:"version"`
-	Target  string             `yaml:"target"`
-	Targets map[string]*Target `yaml:"targets"`
+	Version   string             `yaml:"version"`
+	HATimeout int                `yaml:"ha_timeout"`
+	Target    string             `yaml:"target"`
+	Targets   map[string]*Target `yaml:"targets"`
 }
 
 type ConfigV1 struct {
@@ -116,6 +121,10 @@ func Apply(sync bool) Config {
 		}
 	}
 
+	if c.HATimeout == 0 {
+		c.HATimeout = 1
+	}
+
 	if sync {
 		c.Sync()
 	}
@@ -125,24 +134,69 @@ func Apply(sync bool) Config {
 
 func (c *Config) Sync() {
 	if t, ok := c.Targets[c.Target]; ok {
-		/* FIXME: this may not work with non-HA vaults.  investigate + fix */
-		t.Active = nil
-		t.Backends = []string{}
+		var backends []string
+		client := http.Client{
+			Timeout: time.Duration(c.HATimeout) * time.Second,
+		}
+		botta.SetClient(&client)
 
-		for _, ip := range c.DNS() {
-			backends, err := dns.Lookup("vaults.service.consul", ip)
+		urls := c.VaultEndpoints()
+		if len(urls) == 0 {
+			urls = []string{t.URL}
+		}
+
+		for _, host := range urls {
+			host = portStripper.ReplaceAllString(host, ":8500")
+			req, err := botta.Get(host + "/v1/catalog/service/vault")
+			if err != nil {
+				continue
+			}
+			if vault.ShouldDebug() {
+				r, _ := httputil.DumpRequest(req, true)
+				fmt.Fprintf(os.Stderr, "Request:\n%s\n----------------\n", r)
+			}
+
+			r, err := botta.Client().Do(req)
+			if err != nil {
+				continue
+			}
+			if vault.ShouldDebug() {
+				dump, _ := httputil.DumpResponse(r, true)
+				fmt.Fprintf(os.Stderr, "Response:\n%s\n----------------\n", dump)
+			}
+			res, err := botta.ParseResponse(r)
 			if err != nil {
 				continue
 			}
 
-			active, err := dns.Lookup("active.vault.service.consul", ip)
+			objs, err := res.ArrayVal("$")
 			if err != nil {
 				continue
 			}
+			for _, e := range objs {
+				if obj, ok := e.(map[string]interface{}); ok {
+					var addr string
+					if addr, ok = obj["Address"].(string); !ok {
+						continue
+					}
+					if addr == "" {
+						continue
+					}
 
-			t.Backends = backends
-			if len(active) > 0 {
-				t.Active = active[0]
+					backends = append(backends, addr)
+
+					if tags, ok := obj["ServiceTags"].([]interface{}); ok {
+						for _, tag := range tags {
+							if tag == "active" {
+								t.Active = addr
+							}
+						}
+					}
+				}
+			}
+
+			if len(backends) > 0 {
+				t.Backends = backends
 			}
 			break
 		}
