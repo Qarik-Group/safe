@@ -199,15 +199,19 @@ func (c *Config) Sync() {
 			break
 		}
 		if t.Active == nil {
-			u, err := url.Parse(t.URL)
-			if err != nil {
-				u = &url.URL{}
-			}
-			host := portStripper.ReplaceAllString(u.Host, "")
-			fmt.Printf("No active backend detected, failing back to '%s'\n", host)
+			if len(backends) == 0 {
+				u, err := url.Parse(t.URL)
+				if err != nil {
+					u = &url.URL{}
+				}
+				host := portStripper.ReplaceAllString(u.Host, "")
+				fmt.Printf("No active backend detected, failing back to '%s'\n", host)
 
-			t.Active = host
-			t.Backends = []string{host}
+				t.Active = host
+				t.Backends = []string{host}
+			} else {
+				t.Active = t.Backends[0]
+			}
 		}
 		c.Write()
 	}
