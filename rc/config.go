@@ -134,6 +134,7 @@ func Apply(sync bool) Config {
 
 func (c *Config) Sync() {
 	if t, ok := c.Targets[c.Target]; ok {
+		t.Active = nil
 		var backends []string
 		client := http.Client{
 			Timeout: time.Duration(c.HATimeout) * time.Second,
@@ -141,9 +142,6 @@ func (c *Config) Sync() {
 		botta.SetClient(&client)
 
 		urls := c.VaultEndpoints()
-		if len(urls) == 0 {
-			urls = []string{t.URL}
-		}
 
 		for _, host := range urls {
 			host = portStripper.ReplaceAllString(host, ":8500")
@@ -199,6 +197,17 @@ func (c *Config) Sync() {
 				t.Backends = backends
 			}
 			break
+		}
+		if t.Active == nil {
+			u, err := url.Parse(t.URL)
+			if err != nil {
+				u = &url.URL{}
+			}
+			host := portStripper.ReplaceAllString(u.Host, "")
+			fmt.Printf("No active backend detected, failing back to '%s'\n", host)
+
+			t.Active = host
+			t.Backends = []string{host}
 		}
 		c.Write()
 	}
@@ -294,6 +303,7 @@ func (c *Config) URL() string {
 	return ""
 }
 
+/*
 func (c *Config) DNS() []string {
 	if t, ok := c.Targets[c.Target]; ok {
 		// we use the backends from our last sync first
@@ -310,6 +320,7 @@ func (c *Config) DNS() []string {
 	}
 	return []string{}
 }
+*/
 
 func (c *Config) VaultEndpoints() []string {
 	if t, ok := c.Targets[c.Target]; ok {
@@ -321,6 +332,9 @@ func (c *Config) VaultEndpoints() []string {
 		l := make([]string, 0)
 		for _, backend := range t.Backends {
 			l = append(l, SwapHost(u, backend))
+		}
+		if len(l) == 0 {
+			l = []string{t.URL}
 		}
 		return l
 	}
