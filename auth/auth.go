@@ -18,6 +18,7 @@ func authurl(base, f string, args ...interface{}) string {
 func authenticate(req *http.Request) (string, error) {
 	client := &http.Client{
 		Transport: &http.Transport{
+			Proxy: http.ProxyFromEnvironment,
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: os.Getenv("VAULT_SKIP_VERIFY") != "",
 			},

@@ -44,6 +44,7 @@ func NewVault(url, token string) (*Vault, error) {
 		Token: token,
 		Client: &http.Client{
 			Transport: &http.Transport{
+				Proxy: http.ProxyFromEnvironment,
 				TLSClientConfig: &tls.Config{
 					InsecureSkipVerify: os.Getenv("VAULT_SKIP_VERIFY") != "",
 				},
