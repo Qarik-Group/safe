@@ -1,6 +1,9 @@
 {
 	"ImportPath": "github.com/starkandwayne/safe",
 	"GoVersion": "go1.5",
+	"Packages": [
+		"./..."
+	],
 	"Deps": [
 		{
 			"ImportPath": "github.com/ghodss/yaml",
@@ -28,11 +31,15 @@
 		},
 		{
 			"ImportPath": "github.com/starkandwayne/goutils/ansi",
-			"Rev": "1af0d9806cdff1eaa84c422f7bea313f3c4d073f"
+			"Rev": "6fde490f64c2112f5d858389293170b6542eb013"
+		},
+		{
+			"ImportPath": "github.com/starkandwayne/goutils/botta",
+			"Rev": "6fde490f64c2112f5d858389293170b6542eb013"
 		},
 		{
 			"ImportPath": "github.com/starkandwayne/goutils/tree",
-			"Rev": "1af0d9806cdff1eaa84c422f7bea313f3c4d073f"
+			"Rev": "6fde490f64c2112f5d858389293170b6542eb013"
 		},
 		{
 			"ImportPath": "golang.org/x/crypto/curve25519",
