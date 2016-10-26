@@ -128,12 +128,9 @@ func (v *Vault) Curl(method string, path string, body []byte) (*http.Response, e
 // If there is nothing at that path, a nil *Secret will be returned, with no
 // error.
 func (v *Vault) Read(path string) (secret *Secret, err error) {
-	s := strings.SplitN(path, ":", 2)
-	var key string
-	if len(s) == 2 {
-		path = s[0]
-		key = s[1]
-	}
+	//split at last colon, if present
+	path, key := ParsePath(path)
+
 	secret = NewSecret()
 	req, err := http.NewRequest("GET", v.url("/v1/%s", path), nil)
 	if err != nil {
@@ -148,7 +145,7 @@ func (v *Vault) Read(path string) (secret *Secret, err error) {
 	case 200:
 		break
 	case 404:
-		err = NotFound
+		err = NewSecretNotFoundError(path)
 		return
 	default:
 		err = fmt.Errorf("API %s", res.Status)
@@ -181,6 +178,9 @@ func (v *Vault) Read(path string) (secret *Secret, err error) {
 				}
 			}
 
+			if key != "" && len(secret.data) == 0 {
+				err = NewKeyNotFoundError(path, key)
+			}
 			return
 		}
 	}
@@ -217,7 +217,7 @@ func (v *Vault) List(path string) (paths []string, err error) {
 		case 200:
 			break
 		case 404:
-			err = NotFound
+			err = NewSecretNotFoundError(path)
 			return
 		default:
 			err = fmt.Errorf("API %s", res.Status)
@@ -379,7 +379,7 @@ func (v *Vault) MoveCopyTree(oldRoot, newRoot string, f func(string, string) err
 		}
 	}
 
-	if _, err := v.Read(oldRoot); err != NotFound { // run through a copy unless we successfully got a 404 from this node
+	if _, err := v.Read(oldRoot); !IsNotFound(err) { // run through a copy unless we successfully got a 404 from this node
 		return f(oldRoot, newRoot)
 	}
 	return nil
@@ -498,7 +498,7 @@ func (v *Vault) CreateSignedCertificate(role, path string, params CertOptions) e
 				}
 
 				secret, err := v.Read(path)
-				if err != nil && err != NotFound {
+				if err != nil && !IsNotFound(err) {
 					return err
 				}
 				secret.Set("cert", cert)
