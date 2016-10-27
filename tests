@@ -169,7 +169,7 @@ EOF
 		testing ${version} tree not found errors
 		./safe tree secret/enoent >t/home/got 2>&1
 		cat >t/home/want <<EOF
-!! secret not found
+!! no secret exists at path \`secret/enoent\`
 EOF
 		diffok
 		;;
