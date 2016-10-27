@@ -14,6 +14,7 @@ func TestSingleValue(t *testing.T) {
 		{map[string]string{"": "value"}, "value", false},
 		{map[string]string{}, "", true},
 		{nil, "", true},
+		{map[string]string{"secret": "multi\nline\nstring"}, "multi\nline\nstring", false},
 	} {
 		//TEST CODE
 		value, err := (&Secret{data: test.data}).SingleValue()
