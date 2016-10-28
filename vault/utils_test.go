@@ -13,6 +13,7 @@ func TestParsePath(t *testing.T) {
 		{"just/a/secret", "just/a/secret", ""},
 		{"secret/with/colon:", "secret/with/colon", ""},
 		{":", "", ""},
+		{"a:", "a", ""},
 		{"", "", ""},
 		{"secret/and:key", "secret/and", "key"},
 		{":justakey", "", "justakey"},
