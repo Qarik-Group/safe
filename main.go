@@ -94,8 +94,11 @@ func main() {
     paths path [path ... ]
            Provide a flat listing of all reachable keys for each path.
 
-    tree path [path ...]
+    tree [-d] path [path ...]
            Provide a tree hierarchy listing of all reachable keys for each path.
+           The optional -d argument will hide the leaf nodes in the tree, and
+           only print the interior (directory) nodes.  This can lead to much more
+           concise output, useful when you're trying to get your bearings.
 
     delete path [path ...]
            Remove multiple paths from the Vault.
@@ -360,12 +363,19 @@ func main() {
 
 	r.Dispatch("tree", func(command string, args ...string) error {
 		rc.Apply()
+		opt := vault.TreeOptions{
+			UseANSI: true,
+		}
+		if len(args) > 0 && args[0] == "-d" {
+			args = args[1:]
+			opt.HideLeaves = true
+		}
 		if len(args) == 0 {
 			args = append(args, "secret")
 		}
 		v := connect()
 		for _, path := range args {
-			tree, err := v.Tree(path, true)
+			tree, err := v.Tree(path, opt)
 			if err != nil {
 				return err
 			}
@@ -381,7 +391,9 @@ func main() {
 		}
 		v := connect()
 		for _, path := range args {
-			tree, err := v.Tree(path, false)
+			tree, err := v.Tree(path, vault.TreeOptions{
+				UseANSI: false,
+			})
 			if err != nil {
 				return err
 			}
@@ -423,7 +435,7 @@ func main() {
 		v := connect()
 		data := make(map[string]*vault.Secret)
 		for _, path := range args {
-			tree, err := v.Tree(path, false)
+			tree, err := v.Tree(path, vault.TreeOptions{})
 			if err != nil {
 				return err
 			}
