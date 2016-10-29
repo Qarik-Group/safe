@@ -241,54 +241,60 @@ func (v *Vault) List(path string) (paths []string, err error) {
 	return r.Data.Keys, nil
 }
 
-type Node struct {
-	Path     string
-	Children []Node
+type TreeOptions struct {
+	UseANSI     bool /* Use ANSI colorizing sequences */
+	HideLeaves  bool /* Hide leaf nodes of the tree (actual secrets) */
 }
 
-// Tree returns a tree that represents the hierarhcy of paths contained
-// below the given path, inside of the Vault.
-func (v *Vault) Tree(path string, ansify bool) (tree.Node, error) {
-	name := path
-	if ansify {
-		name = ansi.Sprintf("@C{%s}", path)
-	}
-	t := tree.New(name)
-
+func (v *Vault) walktree(path string, options TreeOptions) (tree.Node, int, error) {
+	t := tree.New(path)
 	l, err := v.List(path)
 	if err != nil {
-		return t, err
+		return t, 0, err
 	}
 
-	var kid tree.Node
 	for _, p := range l {
-		var shouldAppend bool
 		if p[len(p)-1:len(p)] == "/" {
-			kid, err = v.Tree(path+"/"+p[0:len(p)-1], ansify)
-			if len(kid.Sub) > 0 {
-				shouldAppend = true
+			kid, n, err := v.walktree(path+"/"+p[0:len(p)-1], options)
+			if err != nil {
+				return t, 0, err
 			}
-			if ansify {
-				name = ansi.Sprintf("@B{%s}", p)
+			if n == 0 {
+				continue
+			}
+			if options.UseANSI {
+				kid.Name = ansi.Sprintf("@B{%s}", p)
 			} else {
-				name = p[0 : len(p)-1]
+				kid.Name = p[0 : len(p)-1]
 			}
+			t.Append(kid)
+
+		} else if (options.HideLeaves) {
+			continue
+
 		} else {
-			shouldAppend = true
-			if ansify {
+			var name string
+			if options.UseANSI {
 				name = ansi.Sprintf("@G{%s}", p)
 			} else {
 				name = p
 			}
-			kid = tree.New(name)
+			t.Append(tree.New(name))
 		}
-		if err != nil {
-			return t, err
-		}
-		kid.Name = name
-		if shouldAppend {
-			t.Append(kid)
-		}
+	}
+	return t, len(l), nil
+}
+// Tree returns a tree that represents the hierarchy of paths contained
+// below the given path, inside of the Vault.
+func (v *Vault) Tree(path string, options TreeOptions) (tree.Node, error) {
+	t, _, err := v.walktree(path, options)
+	if err != nil {
+		return t, err
+	}
+	if options.UseANSI {
+		t.Name = ansi.Sprintf("@C{%s}", path)
+	} else {
+		t.Name = path
 	}
 	return t, nil
 }
@@ -322,7 +328,7 @@ func (v *Vault) Write(path string, s *Secret) error {
 }
 
 func (v *Vault) DeleteTree(root string) error {
-	tree, err := v.Tree(root, false)
+	tree, err := v.Tree(root, TreeOptions{})
 	if err != nil {
 		return err
 	}
@@ -368,7 +374,7 @@ func (v *Vault) Copy(oldpath, newpath string) error {
 }
 
 func (v *Vault) MoveCopyTree(oldRoot, newRoot string, f func(string, string) error) error {
-	tree, err := v.Tree(oldRoot, false)
+	tree, err := v.Tree(oldRoot, TreeOptions{})
 	if err != nil {
 		return err
 	}
