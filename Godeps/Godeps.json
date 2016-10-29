@@ -1,6 +1,10 @@
 {
 	"ImportPath": "github.com/starkandwayne/safe",
-	"GoVersion": "go1.5",
+	"GoVersion": "go1.7",
+	"GodepVersion": "v74",
+	"Packages": [
+		"./..."
+	],
 	"Deps": [
 		{
 			"ImportPath": "github.com/ghodss/yaml",
