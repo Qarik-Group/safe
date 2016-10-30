@@ -125,6 +125,24 @@ func (v *Vault) Curl(method string, path string, body []byte) (*http.Response, e
 	return v.request(req)
 }
 
+func (v *Vault) Configure(path string, params map[string]string) error {
+	data, err := json.Marshal(params)
+	if err != nil {
+		return err
+	}
+
+	res, err := v.Curl("POST", path, data)
+	if err != nil {
+		return err
+	}
+
+	if res.StatusCode != 200 && res.StatusCode != 204 {
+		return fmt.Errorf("configuration via '%s' failed", path)
+	}
+
+	return nil
+}
+
 // Read checks the Vault for a Secret at the specified path, and returns it.
 // If there is nothing at that path, a nil *Secret will be returned, with no
 // error.
@@ -242,8 +260,8 @@ func (v *Vault) List(path string) (paths []string, err error) {
 }
 
 type TreeOptions struct {
-	UseANSI     bool /* Use ANSI colorizing sequences */
-	HideLeaves  bool /* Hide leaf nodes of the tree (actual secrets) */
+	UseANSI    bool /* Use ANSI colorizing sequences */
+	HideLeaves bool /* Hide leaf nodes of the tree (actual secrets) */
 }
 
 func (v *Vault) walktree(path string, options TreeOptions) (tree.Node, int, error) {
@@ -269,7 +287,7 @@ func (v *Vault) walktree(path string, options TreeOptions) (tree.Node, int, erro
 			}
 			t.Append(kid)
 
-		} else if (options.HideLeaves) {
+		} else if options.HideLeaves {
 			continue
 
 		} else {
@@ -284,6 +302,7 @@ func (v *Vault) walktree(path string, options TreeOptions) (tree.Node, int, erro
 	}
 	return t, len(l), nil
 }
+
 // Tree returns a tree that represents the hierarchy of paths contained
 // below the given path, inside of the Vault.
 func (v *Vault) Tree(path string, options TreeOptions) (tree.Node, error) {
@@ -405,6 +424,94 @@ func (v *Vault) Move(oldpath, newpath string) error {
 	return nil
 }
 
+type mountpoint struct {
+	Type        string                 `json:"type"`
+	Description string                 `json:"description"`
+	Config      map[string]interface{} `json:"config"`
+}
+
+func (v *Vault) IsMounted(typ, path string) (bool, error) {
+	res, err := v.Curl("GET", "sys/mounts", nil)
+	if err != nil {
+		return false, err
+	}
+
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return false, err
+	}
+
+	if res.StatusCode != 200 {
+		return false, DecodeErrorResponse(body)
+	}
+
+	mm := make(map[string]mountpoint)
+	if err := json.Unmarshal(body, &mm); err != nil {
+		return false, fmt.Errorf("Received invalid JSON '%s' from Vault: %s\n",
+			body, err)
+	}
+
+	for k, m := range mm {
+		if k == path && m.Type == typ {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (v *Vault) Mount(typ, path string, params map[string]interface{}) error {
+	mounted, err := v.IsMounted(typ, path)
+	if err != nil {
+		return err
+	}
+
+	if !mounted {
+		p := mountpoint{
+			Type:        typ,
+			Description: "(managed by safe)",
+			Config:      params,
+		}
+		data, err := json.Marshal(p)
+		if err != nil {
+			return err
+		}
+
+		res, err := v.Curl("POST", fmt.Sprintf("sys/mounts/%s", path), data)
+		if err != nil {
+			return err
+		}
+
+		if res.StatusCode != 204 {
+			body, err := ioutil.ReadAll(res.Body)
+			if err != nil {
+				return err
+			}
+			return DecodeErrorResponse(body)
+		}
+
+	} else {
+		data, err := json.Marshal(params)
+		if err != nil {
+			return err
+		}
+
+		res, err := v.Curl("POST", fmt.Sprintf("sys/mounts/%s/tune", path), data)
+		if err != nil {
+			return err
+		}
+
+		if res.StatusCode != 204 {
+			body, err := ioutil.ReadAll(res.Body)
+			if err != nil {
+				return err
+			}
+			return DecodeErrorResponse(body)
+		}
+	}
+
+	return nil
+}
+
 func (v *Vault) RetrievePem(path string) ([]byte, error) {
 	res, err := v.Curl("GET", "/pki/"+path+"/pem", nil)
 	if err != nil {
@@ -510,6 +617,7 @@ func (v *Vault) CreateSignedCertificate(role, path string, params CertOptions) e
 				}
 				secret.Set("cert", cert)
 				secret.Set("key", key)
+				secret.Set("combined", cert + key)
 				secret.Set("serial", serial)
 				return v.Write(path, secret)
 			} else {

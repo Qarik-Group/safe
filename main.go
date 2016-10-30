@@ -8,6 +8,7 @@ import (
 	"net/http/httputil"
 	"os"
 	"os/exec"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"github.com/starkandwayne/goutils/ansi"
 
 	"github.com/starkandwayne/safe/auth"
+	"github.com/starkandwayne/safe/prompt"
 	"github.com/starkandwayne/safe/rc"
 	"github.com/starkandwayne/safe/vault"
 )
@@ -131,6 +133,12 @@ func main() {
            Generate a new RSA keypair, adding the keys "private" and "public"
            to each path. Both keys will be PEM-encoded DER. (nbits defaults
            to 2048 bits)
+
+    pki init
+           Configure your Vault to do PKI via the other safe PKI commands.
+           You have to run this command first, before you can use the 'cert',
+           'revoke', 'ca-pem' and 'crl-pem' commands (unless you've already
+           set up the pki backend on your Vault, in which case, cheers!)
 
     cert role path
            Generates a signed Certificate using Vault's PKI backend + Certifiate
@@ -686,10 +694,102 @@ func main() {
 		return v.Write(path, s)
 	})
 
+	r.Dispatch("pki", func(command string, args ...string) error {
+		if len(args) != 1 || args[0] != "init" {
+			return fmt.Errorf("USAGE: pki setup")
+		}
+
+		rc.Apply()
+		inAltUnits := regexp.MustCompile(`^(\d+)([dDyY])$`)
+
+		v := connect()
+		params := make(map[string]interface{})
+
+		ttl := prompt.Normal("@C{Certificate Lifetime}: ")
+		if ttl == "" {
+			ttl = "10y"
+		}
+		if match := inAltUnits.FindStringSubmatch(ttl); len(match) == 3 {
+			u, err := strconv.ParseUint(match[1], 10, 16)
+			if err != nil {
+				return err
+			}
+
+			switch match[2] {
+			case "d":
+				fallthrough
+			case "D":
+				ttl = fmt.Sprintf("%dh", u*24)
+
+			case "y":
+				fallthrough
+			case "Y":
+				ttl = fmt.Sprintf("%dh", u*365*24)
+
+			default:
+				return fmt.Errorf("Unrecognized time unit '%s'\n", match[2])
+			}
+		}
+		params["max_lease_ttl"] = ttl
+
+		mounted, err := v.IsMounted("pki", "pki")
+		if err != nil {
+			return err
+		}
+
+		/* Mount the PKI backend to `pki/` */
+		err = v.Mount("pki", "pki", params)
+		if err != nil {
+			return err
+		}
+
+		if !mounted {
+			/* First Time! */
+			common_name := prompt.Normal("@C{Common Name (FQDN)}: ")
+
+			/* Generate the CA certificate */
+			m := make(map[string]string)
+			m["common_name"] = common_name
+			m["ttl"] = ttl
+
+			err := v.Configure("pki/root/generate/internal", m)
+			if err != nil {
+				return err
+			}
+
+			/* Advertise the CRL / Issuer URLs */
+			m = make(map[string]string)
+			m["issuing_certificates"] = fmt.Sprintf("%s/v1/pki/ca", v.URL)
+			m["crl_distribution_points"] = fmt.Sprintf("%s/v1/pki/crl", v.URL)
+
+			err = v.Configure("pki/config/urls", m)
+			if err != nil {
+				return err
+			}
+
+			/* Set up a default role, with the same domain as the CA */
+			m = make(map[string]string)
+			m["allowed_domains"] = common_name
+			m["allow_subdomains"] = "true"
+			m["max_ttl"] = ttl
+
+			err = v.Configure("pki/roles/default", m)
+			if err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+
 	r.Dispatch("crl-pem", func(command string, args ...string) error {
 		rc.Apply()
 
 		v := connect()
+		if mounted, _ := v.IsMounted("pki", "pki"); !mounted {
+			return fmt.Errorf("The PKI backend has not been configured.  Try running `safe pki init`\n")
+		}
+
 		pem, err := v.RetrievePem("crl")
 		if err != nil {
 			return err
@@ -717,6 +817,10 @@ func main() {
 		rc.Apply()
 
 		v := connect()
+		if mounted, _ := v.IsMounted("pki", "pki"); !mounted {
+			return fmt.Errorf("The PKI backend has not been configured.  Try running `safe pki init`\n")
+		}
+
 		pem, err := v.RetrievePem("ca")
 		if err != nil {
 			return err
@@ -734,11 +838,10 @@ func main() {
 			if len(pem) == 0 {
 				ansi.Fprintf(os.Stderr, "@Y{No CA exists yet}\n")
 			} else {
-				fmt.Fprintf(os.Stdout, "%s\n", pem)
 				if len(pem) == 0 {
 					ansi.Fprintf(os.Stderr, "@Y{No CA exists yet}\n")
 				} else {
-					fmt.Fprintf(os.Stdout, "%s\n", pem)
+					fmt.Fprintf(os.Stdout, "%s", pem)
 				}
 			}
 		}
@@ -780,6 +883,10 @@ func main() {
 		}
 
 		v := connect()
+		if mounted, _ := v.IsMounted("pki", "pki"); !mounted {
+			return fmt.Errorf("The PKI backend has not been configured.  Try running `safe pki init`\n")
+		}
+
 		role, path := args[0], args[1]
 		return v.CreateSignedCertificate(role, path, params)
 	})
@@ -792,6 +899,10 @@ func main() {
 		}
 
 		v := connect()
+		if mounted, _ := v.IsMounted("pki", "pki"); !mounted {
+			return fmt.Errorf("The PKI backend has not been configured.  Try running `safe pki init`\n")
+		}
+
 		return v.RevokeCertificate(args[0])
 	})
 
