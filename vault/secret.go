@@ -46,7 +46,7 @@ func (s *Secret) Set(key, value string) {
 
 func (s *Secret) Format(oldKey, newKey, fmtType string) error {
 	if !s.Has(oldKey) {
-		return NotFound
+		return NewSecretNotFoundError(oldKey)
 	}
 	oldVal := s.Get(oldKey)
 	switch fmtType {
@@ -130,4 +130,18 @@ func (s *Secret) YAML() string {
 		return ""
 	}
 	return string(b)
+}
+
+// SingleValue converts a secret to a string representing the value extracted.
+// Returns an error if there are not exactly one results in the secret
+// object
+func (s *Secret) SingleValue() (string, error) {
+	if len(s.data) != 1 {
+		return "", fmt.Errorf("%d results in secret, 1 expected", len(s.data))
+	}
+	var ret string
+	for _, v := range s.data {
+		ret = v
+	}
+	return ret, nil
 }

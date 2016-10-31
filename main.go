@@ -318,7 +318,7 @@ func main() {
 		v := connect()
 		path, args := args[0], args[1:]
 		s, err := v.Read(path)
-		if err != nil && err != vault.NotFound {
+		if err != nil && !vault.IsNotFound(err) {
 			return err
 		}
 		for _, set := range args {
@@ -339,7 +339,7 @@ func main() {
 		v := connect()
 		path, args := args[0], args[1:]
 		s, err := v.Read(path)
-		if err != nil && err != vault.NotFound {
+		if err != nil && !vault.IsNotFound(err) {
 			return err
 		}
 		for _, set := range args {
@@ -364,7 +364,17 @@ func main() {
 				return err
 			}
 			fmt.Printf("--- # %s\n", path)
-			fmt.Printf("%s\n\n", s.YAML())
+			//Don't show key if specific key was requested
+			if _, key := vault.ParsePath(path); key != "" {
+				value, err := s.SingleValue()
+				if err != nil {
+					return err
+				}
+				fmt.Println(value)
+			} else {
+				fmt.Println(s.YAML())
+			}
+			fmt.Println()
 		}
 		return nil
 	}, "read", "cat")
@@ -549,7 +559,7 @@ func main() {
 		v := connect()
 		path, key := args[0], args[1]
 		s, err := v.Read(path)
-		if err != nil && err != vault.NotFound {
+		if err != nil && !vault.IsNotFound(err) {
 			return err
 		}
 		s.Password(key, length)
@@ -577,7 +587,7 @@ func main() {
 		v := connect()
 		for _, path := range args {
 			s, err := v.Read(path)
-			if err != nil && err != vault.NotFound {
+			if err != nil && !vault.IsNotFound(err) {
 				return err
 			}
 			if err = s.SSHKey(bits); err != nil {
@@ -607,7 +617,7 @@ func main() {
 		v := connect()
 		for _, path := range args {
 			s, err := v.Read(path)
-			if err != nil && err != vault.NotFound {
+			if err != nil && !vault.IsNotFound(err) {
 				return err
 			}
 			if err = s.RSAKey(bits); err != nil {
@@ -638,7 +648,7 @@ func main() {
 		path := args[0]
 		v := connect()
 		s, err := v.Read(path)
-		if err != nil && err != vault.NotFound {
+		if err != nil && !vault.IsNotFound(err) {
 			return err
 		}
 		if err = s.DHParam(bits); err != nil {
@@ -685,7 +695,7 @@ func main() {
 			return err
 		}
 		if err = s.Format(oldKey, newKey, fmtType); err != nil {
-			if err == vault.NotFound {
+			if vault.IsNotFound(err) {
 				return fmt.Errorf("%s:%s does not exist, cannot create %s encoded copy at %s:%s", path, oldKey, fmtType, path, newKey)
 			}
 			return fmt.Errorf("Error encoding %s:%s as %s: %s", path, oldKey, fmtType, err)
@@ -798,7 +808,7 @@ func main() {
 		if len(args) > 0 {
 			path := args[0]
 			s, err := v.Read(path)
-			if err != nil && err != vault.NotFound {
+			if err != nil && !vault.IsNotFound(err) {
 				return err
 			}
 			s.Set("crl-pem", string(pem))
@@ -829,7 +839,7 @@ func main() {
 		if len(args) > 0 {
 			path := args[0]
 			s, err := v.Read(path)
-			if err != nil && err != vault.NotFound {
+			if err != nil && !vault.IsNotFound(err) {
 				return err
 			}
 			s.Set("ca-pem", string(pem))
