@@ -347,5 +347,62 @@ VAULT_ADDR=$OLD_VAULT safe export secret/sub/tree | \
   VAULT_ADDR=$NEW_VAULT safe import
 ```
 
+A Note On PKI
+-------------
+
+If you want to use the X.509  / PKI commands (`safe cert`, `safe
+revoke`, and friends), you will have to set up your Vault a little
+bit first.
+
+The easy way is to run `safe pki init` and let safe handle the
+setup and configuration for you, but if you want to do it the
+old-fashioned way, read on.
+
+Before you can interact with the PKI backend, you need to mount it
+first, and tune it:
+
+```
+safe vault mount pki
+safe vault mount-tune -max-lease-ttl=87600h
+```
+
+(Feel free to change the value for `-max-lease-ttl`, the above
+example sets a 10-year expiration on issued certificates)
+
+Next up, configure and store the Certificate Authority (CA)
+signing certificate:
+
+```
+safe vault write pki/root/generate/default \
+                   common_name=vault.example.com \
+                   ttl=87600h
+
+The `ttl` you choose (here, `87600h`, or about 10 years) ought to
+match the max lease time for the PKI backend.
+
+Change the `common_name` value to the domain name you want to show
+up in the issuer line of your X.509 certificates.
+
+Now we can configure Vault to tell clients where to get the CA and
+CRL certificates (i.e., itself):
+
+```
+safe vault write pki/config/urls \
+                 issuing_certificates="${VAULT_ADDRESS}/v1/pki/ca" \
+                 crl_distribution_points="${VAULT_ADDRESS}/v1/pki/crl"
+```
+
+Now, you can use the rest of the `safe` commands for dealing with
+X.509 PKI certificates, keys and revocation lists:
+
+```
+safe ca-pem
+safe crl-pem
+safe cert default secret/path/to/common.name.of.certificate
+safe revoke secret/path/to/common.name.of.certificate
+```
+
+
+
 [vault]:  https://vaultproject.io
 [spruce]: https://github.com/geofffranks/spruce
