@@ -126,7 +126,7 @@ EOF
 	another=$(jq -r .another < t/home/got)
 	if [[ ${one} == ${another} ]]; then
 		echo "FAILED"
-		rc=0
+		rc=1
 		echo "  ... expected generated password '${one}'"
 		echo "            to not be the same as '${another}'"
 	else
