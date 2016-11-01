@@ -133,6 +133,18 @@ EOF
 		echo "ok"
 	fi
 
+	testing $version single-value retrieval
+	./safe set secret/single/value foo=bar baz=quux >/dev/null
+	foo=$(./safe get secret/single/value:foo)
+	if [[ ${foo} != "bar" ]]; then
+		echo "FAILED"
+		rc=1
+		echo "  ... expected foo='bar'"
+		echo "               got '${foo}'"
+	else
+		echo "ok"
+	fi
+
 	testing $version tree display
 	./safe gen secret/tree/alpha     x >/dev/null
 	./safe gen secret/tree/g         x >/dev/null
