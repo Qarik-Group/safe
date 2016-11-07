@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"time"
 	"io/ioutil"
 	"net/http/httputil"
 	"os"
@@ -76,6 +77,15 @@ func main() {
 
     auth [token|ldap|github]
            Authenticate against the currently targeted Vault.
+
+    status
+           Print the status of all backends to the current target.
+
+    seal
+           Seal all backend Vaults for the current target.
+
+    unseal
+           Unseal all backend Vaults for the current target.
 
     get path [path ...]
            Retrieve and print the values of one or more paths.
@@ -257,6 +267,116 @@ func main() {
 		}
 
 		return fmt.Errorf("USAGE: target [vault-address] name")
+	})
+
+	r.Dispatch("status", func(command string, args ...string) error {
+		rc.Apply()
+		v := connect()
+		st, err := v.Strongbox()
+		if err != nil {
+			return fmt.Errorf("%s; are you targeting a `safe' installation?")
+		}
+
+		for addr, state := range st {
+			if state == "sealed" {
+				ansi.Printf("@R{%s is sealed}\n", addr)
+			} else {
+				ansi.Printf("@G{%s is unsealed}\n", addr)
+			}
+		}
+		return nil
+	})
+
+	r.Dispatch("unseal", func(command string, args ...string) error {
+		rc.Apply()
+		v := connect()
+		st, err := v.Strongbox()
+		if err != nil {
+			return fmt.Errorf("%s; are you targeting a `safe' installation?")
+		}
+
+		n := 0
+		nkeys := 0
+		for addr, state := range st {
+			if state == "sealed" {
+				n++
+				v.URL = addr
+				nkeys, err = v.SealKeys()
+				if err != nil {
+					return err
+				}
+			}
+		}
+
+		if n == 0 {
+			ansi.Printf("@C{all vaults are already unsealed!}\n")
+		} else {
+			ansi.Printf("You need %d key(s) to unseal the vaults.\n\n", nkeys)
+			keys := make([]string, nkeys)
+
+			for i := 0; i < nkeys; i++ {
+				_, key, err := keyPrompt(fmt.Sprintf("Key #%d", i+1), false)
+				if err != nil {
+					return err
+				}
+				keys[i] = key
+			}
+
+			for addr, state := range st {
+				if state == "sealed" {
+					ansi.Printf("unsealing @G{%s}...\n", addr)
+					v.URL = addr
+					if err = v.Unseal(keys); err != nil {
+						return err
+					}
+				}
+			}
+		}
+
+		return nil
+	})
+
+	r.Dispatch("seal", func(command string, args ...string) error {
+		rc.Apply()
+		v := connect()
+		st, err := v.Strongbox()
+		if err != nil {
+			return fmt.Errorf("%s; are you targeting a `safe' installation?")
+		}
+
+		n := 0
+		for _, state := range st {
+			if state == "unsealed" {
+				n++
+			}
+		}
+
+		if n == 0 {
+			ansi.Printf("@C{all vaults are already sealed!}\n")
+		}
+
+		for n > 0 {
+			for addr, state := range st {
+				if state == "unsealed" {
+					v.URL = addr
+
+					sealed, err := v.Seal();
+					if err != nil {
+						return err
+					}
+					if sealed {
+						ansi.Printf("sealed @G{%s}...\n", addr)
+						st[addr] = "sealed"
+						n--
+					}
+				}
+			}
+			if n != 0 {
+			time.Sleep(500 * time.Millisecond)
+			}
+		}
+
+		return nil
 	})
 
 	r.Dispatch("env", func(command string, args ...string) error {
