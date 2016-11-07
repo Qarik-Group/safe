@@ -64,128 +64,215 @@ func main() {
 	})
 
 	r.Dispatch("help", func(command string, args ...string) error {
-		fmt.Fprintf(os.Stderr, `Usage: safe <cmd> <args ...>
 
-    Valid subcommands are:
+		if len(args) == 0 {
+			fmt.Fprint(os.Stderr, `Usage: safe <cmd> <args ...>
 
-    targets
-           List all Vaults that have been targeted.
+For more help on command, use 'safe help <command>'.
 
-    target [vault-address] name
-           Target a new or existing Vault.
+Valid subcommands are:
 
-    auth [token|ldap|github]
-           Authenticate against the currently targeted Vault.
+  targets : Show Vaults
 
-    get path [path ...]
-           Retrieve and print the values of one or more paths.
+  target  : Target a Vault
 
-    set path key[=value] [key ...]
-           Update a single path with new keys.  Any existing keys that are
-           not specified on the command line are left intact. You will be
-           prompted to enter values for any keys that do not have values.
-           This can be used for more sensitive credentials like passwords,
-           PINs, etc.
+  auth    : Authenticate against a vault
 
-    paste path key[=value] [key ...]
-           Works the same way as 'safe set', except that it does not
-           prompt for confirmation of any values. This is used when you are
-           pasting in data from an external source, and do not expect to
-           mis-paste the data, to save a little time + headache.
+  get     : Retrieve/Print value at path
 
-    paths path [path ... ]
-           Provide a flat listing of all reachable keys for each path.
+  set     : Update path with new keys
 
-    tree [-d] path [path ...]
-           Provide a tree hierarchy listing of all reachable keys for each path.
-           The optional -d argument will hide the leaf nodes in the tree, and
-           only print the interior (directory) nodes.  This can lead to much more
-           concise output, useful when you're trying to get your bearings.
+  paste   : 'set' with no confirmation
 
-    delete path [path ...]
-           Remove multiple paths from the Vault.
+  paths   : Show possible keys from path
 
-    move oldpath newpath
-           Move a secret from oldpath to newpath, a rename of sorts.
+  tree    : Prints hierarchy of keys
 
-    copy oldpath newpath
-           Copy a secret from oldpath to newpath.
+  delete  : Remove one or more paths
 
-    fmt format_type path oldkey newkey
-           Take the value found at path:oldkey, and reformat it based
-           on the provided flags (such as base64 encoding or crypt
-           hashing). The resultant value will be stored into path:newkey.
+  move    : Move a path to another
 
-           Valid format_types include the following:
-           - crypt-sha512
-           - base64
+  copy    : Copy one path to another
 
-    gen [length] path key
-           Generate a new, random password (length defaults to 64 chars).
+  fmt     : Reformat a path to another
 
-    ssh [nbits] path [path ...]
-           Generate a new SSH RSA keypair, adding the keys "private" and
-           "public" to each path. The public key will be encoded as an
-           authorized keys. The private key is a PEM-encoded DER private
-           key. (nbits defaults to 2048 bits)
+  gen     : Generate a new random password
 
-    rsa [nbits] path [path ...]
-           Generate a new RSA keypair, adding the keys "private" and "public"
-           to each path. Both keys will be PEM-encoded DER. (nbits defaults
-           to 2048 bits)
+  ssh     : Generate a new SSH RSA keypair
 
-    pki init
-           Configure your Vault to do PKI via the other safe PKI commands.
-           You have to run this command first, before you can use the 'cert',
-           'revoke', 'ca-pem' and 'crl-pem' commands (unless you've already
-           set up the pki backend on your Vault, in which case, cheers!)
+  rsa     : Generate a new RSA keypair
 
-    cert role path
-           Generates a signed Certificate using Vault's PKI backend + Certifiate
-           Authority using the provided role. The common name is derived from the
-           last part of the path provided. Once issued, safe will store the
-           private key, signed certificate, and serial number in the secret backend,
-           located at the specified path.
+  pki     : Initialize vault to use PKI commands
 
-           The --ttl, --ip-sans, --alt-names, and --exclude-cn-from-sans flags can
-           be specified to customize how the certificate is generated.
+  cert    : Generates signed Cert
 
+  revoke  : Revokes a certificate
 
-    revoke path|serial
-           Revokes a certificate from Vaults PKI backend, using the specified serial,
-           or path to a secret containing the serial of the certificate. Once revoked,
-           the CRL will be automatically updated inside Vault, but anything consuming
-           the CRL should pull a new copy.
+  ca-pem  : Retrieve a CA from the Vault
 
-    ca-pem [path]
-           Retrieves the PEM-encoded CA cert used in Vault's PKI backend for signing
-           and issuing certificates. If path is supplied, sets the "ca-pem" key using the
-           current CA cert inside the secret backend, at <path>.
+  crl-pem : Retrieve CA Revocation List
 
-    crl-pem [path]
-           Retrieves the PEM-encoded Certificate Revocation List managed by
-           Vaults PKI backend. If path is supplied, sets the "crl-pem" key using the
-           current CRL inside the secret backend, at <path>.
+  dhparam : Generates DH Params
 
-    dhparam [bits] path
-           Generates DH Params using OpenSSL, and the specified bit length. Defaults
-           to 2048 bit primes. Primes are then stored in <path> under the 'dhparam-pem'
-           key.
+  prompt  : Echo whatever passed
 
-    prompt ...
-           Echo the arguments, space-separated, as a single line to the terminal.
+  import  : Import a file and its information into vault
 
-    import <export.file
-           Read from STDIN an export file and write all of the secrets contained
-           therein to the same paths inside the Vault
+  export  : Export path(s) to a file
 
-    export path [path ...]
-           Export the given subtree(s) in a format suitable for migration (via a
-           future import call), or long-term storage offline.
+  vault   : Run vault commands through safe
+			`)
+		}
 
-    vault  ...
-           Runs arbitrary commands through the vault cli.
-`)
+		if len(args) == 1 {
+			switch args[0] {
+			case `targets`:
+				fmt.Fprintf(os.Stderr, `Usage: safe targets
+  List all Vaults that have been targeted.
+				`)
+
+			case `target`:
+				fmt.Fprintf(os.Stderr, `Usage: safe target [vault-address] name
+  Target a new or existing Vault.
+				`)
+
+			case `auth`:
+				fmt.Fprintf(os.Stderr, `Usage: safe auth [token|ldap|github]
+  Authenticate against the currently targeted Vault.
+			 	`)
+			case `get`:
+				fmt.Fprintf(os.Stderr, `Usage: safe get path [path ...]
+  Retrieve and print the values of one or more paths.
+				`)
+			case `set`:
+				fmt.Fprintf(os.Stderr, `Usage: safe set path key[=value] [key ...]
+  Update a single path with new keys.  Any existing keys that are
+  not specified on the command line are left intact. You will be
+  prompted to enter values for any keys that do not have values.
+  This can be used for more sensitive credentials like passwords,
+  PINs, etc.
+				`)
+			case `paste`:
+				fmt.Fprintf(os.Stderr, `Usage: safe paste path key[=value] [key ...]
+  Works the same way as 'safe set', except that it does not
+  prompt for confirmation of any values. This is used when you are
+  pasting in data from an external source, and do not expect to
+  mis-paste the data, to save a little time + headache.
+				`)
+			case `paths`:
+				fmt.Fprintf(os.Stderr, `Usage: safe paths path [path ... ]
+  Provide a flat listing of all reachable keys for each path.
+			  `)
+			case `tree`:
+				fmt.Fprintf(os.Stderr, `Usage: safe tree [-d] path [path ...]
+  Provide a tree hierarchy listing of all reachable keys for each path.
+  The optional -d argument will hide the leaf nodes in the tree, and
+  only print the interior (directory) nodes.  This can lead to much more
+  concise output, useful when you're trying to get your bearings.
+			  `)
+			case `delete`:
+				fmt.Fprintf(os.Stderr, `Usage: safe delete path [path ...]
+  Remove multiple paths from the Vault.
+				`)
+
+			case `move`:
+				fmt.Fprintf(os.Stderr, `Usage: safe move oldpath newpath
+  Move a secret from oldpath to newpath, a rename of sorts.
+				`)
+			case `copy`:
+				fmt.Fprintf(os.Stderr, `Usage: safe copy oldpath newpath
+  Copy a secret from oldpath to newpath.
+			  `)
+			case `fmt`:
+				fmt.Fprintf(os.Stderr, `Usage: safe fmt format_type path oldkey newkey
+  Take the value found at path:oldkey, and reformat it based
+  on the provided flags (such as base64 encoding or crypt
+  hashing). The resultant value will be stored into path:newkey.
+
+  Valid format_types include the following:
+    - crypt-sha512
+    - base64
+				`)
+			case `gen`:
+				fmt.Fprintf(os.Stderr, `Usage: safe gen [length] path key
+  Generate a new, random password (length defaults to 64 chars).
+				`)
+			case `ssh`:
+				fmt.Fprintf(os.Stderr, `Usage: safe ssh [nbits] path [path ...]
+  Generate a new SSH RSA keypair, adding the keys "private" and
+  "public" to each path. The public key will be encoded as an
+  authorized keys. The private key is a PEM-encoded DER private
+  key. (nbits defaults to 2048 bits)
+			  `)
+			case `rsa`:
+				fmt.Fprintf(os.Stderr, `Usage: safe rsa [nbits] path [path ...]
+  Generate a new RSA keypair, adding the keys "private" and "public"
+  to each path. Both keys will be PEM-encoded DER. (nbits defaults
+  to 2048 bits)
+				`)
+			case `pki`:
+				fmt.Fprintf(os.Stderr, `Usage: safe pki init
+  Configure your Vault to do PKI via the other safe PKI commands.
+  You have to run this command first, before you can use the 'cert',
+  'revoke', 'ca-pem' and 'crl-pem' commands (unless you've already
+  set up the pki backend on your Vault, in which case, cheers!)
+					`)
+			case `cert`:
+				fmt.Fprintf(os.Stderr, `Usage: safe cert role path
+  Generates a signed Certificate using Vault's PKI backend + Certifiate
+  Authority using the provided role. The common name is derived from the
+  last part of the path provided. Once issued, safe will store the
+  private key, signed certificate, and serial number in the secret backend,
+  located at the specified path.
+
+  The --ttl, --ip-sans, --alt-names, and --exclude-cn-from-sans flags can
+  be specified to customize how the certificate is generated.
+					`)
+			case `revoke`:
+				fmt.Fprintf(os.Stderr, `Usage: safe revoke path|serial
+  Revokes a certificate from Vaults PKI backend, using the specified serial,
+  or path to a secret containing the serial of the certificate. Once revoked,
+  the CRL will be automatically updated inside Vault, but anything consuming
+  the CRL should pull a new copy.
+				`)
+			case `ca-pem`:
+				fmt.Fprintf(os.Stderr, `Usage: safe ca-pem [path]
+  Retrieves the PEM-encoded CA cert used in Vault's PKI backend for signing
+  and issuing certificates. If path is supplied, sets the "ca-pem" key using the
+  current CA cert inside the secret backend, at <path>.
+			  `)
+			case `crl-pem`:
+				fmt.Fprintf(os.Stderr, `Usage: safe crl-pem [path]
+  Retrieves the PEM-encoded Certificate Revocation List managed by
+  Vaults PKI backend. If path is supplied, sets the "crl-pem" key using the
+  current CRL inside the secret backend, at <path>.
+				`)
+			case `dhparam`:
+				fmt.Fprintf(os.Stderr, `Usage: safe dhparam [bits] path
+  Generates DH Params using OpenSSL, and the specified bit length. Defaults
+  to 2048 bit primes. Primes are then stored in <path> under the 'dhparam-pem'
+  key.
+			`)
+			case `prompt`:
+				fmt.Fprintf(os.Stderr, `Usage: safe prompt ...
+  Echo the arguments, space-separated, as a single line to the terminal.
+			`)
+			case `import`:
+				fmt.Fprintf(os.Stderr, `Usage: safe import <export.file
+  Read from STDIN an export file and write all of the secrets contained
+  therein to the same paths inside the Vault
+			  `)
+			case `export`:
+				fmt.Fprintf(os.Stderr, `Usage: safe export path [path ...]
+  Export the given subtree(s) in a format suitable for migration (via a
+  future import call), or long-term storage offline.
+			  `)
+			case `vault`:
+				fmt.Fprintf(os.Stderr, `Usage: safe vault  ...
+  Runs arbitrary commands through the vault cli.
+			  `)
+			}
+		}
 		os.Exit(0)
 		return nil
 	})
