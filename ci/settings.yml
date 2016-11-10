@@ -19,4 +19,4 @@ meta:
 
   slack:
     webhook: (( vault "secret/pipelines/safe/slack:webhook" ))
-    channel: '#botspam'
+    channel: '#vault'
