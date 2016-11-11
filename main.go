@@ -136,15 +136,19 @@ Try 'safe help <thing>' for detailed information,
 		}
 
 		fmt.Fprintf(os.Stderr, "\n")
-		current := fmt.Sprintf("(*) @G{%%-%ds}\t@Y{%%s}\n", wide)
-		other := fmt.Sprintf("    %%-%ds\t%%s\n", wide)
+		current := fmt.Sprintf("(*) @G{%%-%ds}\t@Y{%%s}@R{%%s}\n", wide)
+		other := fmt.Sprintf("    %%-%ds\t%%s@R{%%s}\n", wide)
 		sort.Strings(keys)
 		for _, name := range keys {
-			if name == cfg.Current {
-				ansi.Fprintf(os.Stderr, current, name, cfg.Aliases[name])
-			} else {
-				ansi.Fprintf(os.Stderr, other, name, cfg.Aliases[name])
+			skip := ""
+			if skipverify, ok := cfg.SkipVerify[cfg.Aliases[name]]; ok && skipverify {
+				skip = " (insecure)"
 			}
+			format := other
+			if name == cfg.Current {
+				format = current
+			}
+			ansi.Fprintf(os.Stderr, format, name, cfg.Aliases[name], skip)
 		}
 		fmt.Fprintf(os.Stderr, "\n")
 		return nil
@@ -152,33 +156,46 @@ Try 'safe help <thing>' for detailed information,
 
 	r.Dispatch("target", &Help{
 		Summary: "Target a new Vault, or set your current Vault target",
-		Usage:   "safe target [URL] [ALIAS]",
+		Usage:   "safe target [-k] [URL] [ALIAS]",
 		Type:    AdministrativeCommand,
 	}, func(command string, args ...string) error {
 		cfg := rc.Apply()
+		skipverify := false
+		if os.Getenv("SAFE_SKIP_VERIFY") == "1" {
+			skipverify = true
+		}
+
 		if len(args) == 0 {
 			if cfg.Current == "" {
 				ansi.Fprintf(os.Stderr, "@R{No Vault currently targeted}\n")
 			} else {
-				ansi.Fprintf(os.Stderr, "Currently targeting @C{%s} at @C{%s}\n", cfg.Current, cfg.URL())
+				skip := ""
+				if !cfg.Verified() {
+					skip = " (skipping TLS certificate verification)"
+				}
+				ansi.Fprintf(os.Stderr, "Currently targeting @C{%s} at @C{%s}@R{%s}\n", cfg.Current, cfg.URL(), skip)
 			}
 			return nil
 		}
 		if len(args) == 1 {
-			err := cfg.SetCurrent(args[0])
+			err := cfg.SetCurrent(args[0], skipverify)
 			if err != nil {
 				return err
 			}
-			ansi.Fprintf(os.Stderr, "Now targeting @C{%s} at @C{%s}\n", cfg.Current, cfg.URL())
+			skip := ""
+			if !cfg.Verified() {
+				skip = " (skipping TLS certificate verification)"
+			}
+			ansi.Fprintf(os.Stderr, "Now targeting @C{%s} at @C{%s}@R{%s}\n", cfg.Current, cfg.URL(), skip)
 			return cfg.Write()
 		}
 
 		if len(args) == 2 {
 			var err error
 			if strings.HasPrefix(args[1], "http://") || strings.HasPrefix(args[1], "https://") {
-				err = cfg.SetTarget(args[0], args[1])
+				err = cfg.SetTarget(args[0], args[1], skipverify)
 			} else {
-				err = cfg.SetTarget(args[1], args[0])
+				err = cfg.SetTarget(args[1], args[0], skipverify)
 			}
 			if err != nil {
 				return err
@@ -1288,8 +1305,10 @@ sent as DATA.
 		args = []string{"help", "commands"}
 	}
 
+	os.Unsetenv("SAFE_SKIP_VERIFY")
 	if *insecure {
 		os.Setenv("VAULT_SKIP_VERIFY", "1")
+		os.Setenv("SAFE_SKIP_VERIFY", "1")
 	}
 
 	if err := r.Run(args...); err != nil {

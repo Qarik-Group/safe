@@ -14,6 +14,12 @@
   scripts, by providing a non-zero exit code if a secret does not
   exist in the currently targeted Vault.
 
+- Targets now remember whether you targeted them with the `-k`
+  flag or not, so that if you wish to skip verification on a given
+  Vault, you can do so indefinitely.  `safe target` and `safe
+  targets` now sport sufficiently alarming messages indicating
+  that certificate validation is not being performed.
+
 
 [strongbox]: https://github.com/jhunt/go-strongbox
 [bosh]:      https://github.com/cloudfoundry-community/safe-boshrelease

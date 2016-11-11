@@ -13,6 +13,7 @@ type Config struct {
 	Current string                 `yaml:"current"`
 	Targets map[string]interface{} `yaml:"targets"`
 	Aliases map[string]string      `yaml:"aliases"`
+	SkipVerify map[string]bool `yaml:"skip_verify"`
 }
 
 func saferc() string {
@@ -23,19 +24,19 @@ func svtoken() string {
 	return fmt.Sprintf("%s/.svtoken", os.Getenv("HOME"))
 }
 
-func (c *Config) credentials() (string, string, error) {
+func (c *Config) credentials() (string, string, bool, error) {
 	if c.Current == "" {
-		return "", "", nil
+		return "", "", false, nil
 	}
 
 	url, ok := c.Aliases[c.Current]
 	if !ok {
-		return "", "", fmt.Errorf("Current target vault '%s' not found in ~/.saferc", c.Current)
+		return "", "", false, fmt.Errorf("Current target vault '%s' not found in ~/.saferc", c.Current)
 	}
 
 	t, ok := c.Targets[url]
 	if !ok {
-		return "", "", fmt.Errorf("Current target vault '%s' not found in ~/.saferc", c.Current)
+		return "", "", false, fmt.Errorf("Current target vault '%s' not found in ~/.saferc", c.Current)
 	}
 
 	token := ""
@@ -43,7 +44,12 @@ func (c *Config) credentials() (string, string, error) {
 		token = t.(string)
 	}
 
-	return url, token, nil
+	skipverify, ok := c.SkipVerify[url]
+	if !ok {
+		skipverify = false
+	}
+
+	return url, token, skipverify, nil
 }
 
 func Apply() Config {
@@ -69,7 +75,7 @@ func (c *Config) Write() error {
 		return err
 	}
 
-	url, token, err := c.credentials()
+	url, token, skipverify, err := c.credentials()
 	if err != nil {
 		return err
 	}
@@ -78,7 +84,8 @@ func (c *Config) Write() error {
 		struct {
 			URL   string `json:"vault"`
 			Token string `json:"token"`
-		}{url, token})
+			SkipVerify bool `json:"skip_verify"`
+		}{url, token, skipverify})
 	if err != nil {
 		return err
 	}
@@ -87,7 +94,7 @@ func (c *Config) Write() error {
 }
 
 func (c *Config) Apply() error {
-	url, token, err := c.credentials()
+	url, token, skipverify, err := c.credentials()
 	if err != nil {
 		return err
 	}
@@ -95,6 +102,9 @@ func (c *Config) Apply() error {
 	if url != "" {
 		os.Setenv("VAULT_ADDR", url)
 		os.Setenv("VAULT_TOKEN", token)
+		if skipverify {
+			os.Setenv("VAULT_SKIP_VERIFY", "1")
+		}
 	} else {
 		if os.Getenv("VAULT_TOKEN") == "" {
 			tokenFile := fmt.Sprintf("%s/.vault-token", os.Getenv("HOME"))
@@ -107,25 +117,34 @@ func (c *Config) Apply() error {
 	return nil
 }
 
-func (c *Config) SetCurrent(alias string) error {
-	if _, ok := c.Aliases[alias]; ok {
+func (c *Config) SetCurrent(alias string, reskip bool) error {
+	if url, ok := c.Aliases[alias]; ok {
 		c.Current = alias
+		if reskip {
+			c.SkipVerify[url] = true
+		}
 		return nil
 	}
 	return fmt.Errorf("Unknown target '%s'", alias)
 }
 
-func (c *Config) SetTarget(alias, url string) error {
+func (c *Config) SetTarget(alias, url string, skipverify bool) error {
 	if c.Aliases == nil {
 		c.Aliases = make(map[string]string)
 	}
 	if c.Targets == nil {
 		c.Targets = make(map[string]interface{})
 	}
+	if c.SkipVerify == nil {
+		c.SkipVerify = make(map[string]bool)
+	}
 	c.Aliases[alias] = url
 	c.Current = alias
+
+	c.SkipVerify[url] = skipverify
 	if _, ok := c.Targets[url]; !ok {
 		c.Targets[url] = nil
+		c.SkipVerify[url] = false
 	}
 	return nil
 }
@@ -147,4 +166,14 @@ func (c *Config) URL() string {
 		return url
 	}
 	return ""
+}
+
+func (c *Config) Verified() bool {
+	if url, ok := c.Aliases[c.Current]; ok {
+		if skip, ok := c.SkipVerify[url]; ok && skip {
+			return false
+		}
+		return true
+	}
+	return false
 }
