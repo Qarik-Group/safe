@@ -376,6 +376,7 @@ signing certificate:
 safe vault write pki/root/generate/default \
                    common_name=vault.example.com \
                    ttl=87600h
+```
 
 The `ttl` you choose (here, `87600h`, or about 10 years) ought to
 match the max lease time for the PKI backend.
