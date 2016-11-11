@@ -442,6 +442,39 @@ like 1password or Lastpass.
 		return v.Write(path, s)
 	})
 
+	r.Dispatch("exists", &Help{
+		Summary: "Check to see if a secret exists in the Vault",
+		Usage:   "safe exists PATH",
+		Type:    NonDestructiveCommand,
+		Description: `
+When you want to see if a secret has been defined, but don't need to know
+what its value is, you can use 'safe exists'.  PATH can either be a partial
+path (i.e. 'secret/accounts/users/admin') or a fully-qualified path that
+incudes a name (like 'secret/accounts/users/admin:username').
+
+'safe exists' does not produce any output, and is suitable for use in scripts.
+
+The process will exit 0 (zero) if PATH exists in the current Vault.
+Otherwise, it will exit 1 (one).  If unrelated errors, like network timeouts,
+certificate validation failure, etc. occur, they will be printed as well.
+`,
+	}, func(command string, args ...string) error {
+		rc.Apply()
+		if len(args) != 1 {
+			r.ExitWithUsage("exists")
+		}
+		v := connect()
+		_, err := v.Read(args[0])
+		if err != nil {
+			if vault.IsNotFound(err) {
+				os.Exit(1)
+			}
+			return err
+		}
+		os.Exit(0)
+		return nil
+	}, "check")
+
 	r.Dispatch("get", &Help{
 		Summary: "Retrieve and print the values of one or more paths",
 		Usage:   "safe get PATH [PATH ...]",

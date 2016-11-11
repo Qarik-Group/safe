@@ -10,6 +10,10 @@
   commands` will list all of the known commands, and a `safe help
   <command>` will show detailed help specific to a single command.
 
+- New `safe exists` command allows you to write better tie-in
+  scripts, by providing a non-zero exit code if a secret does not
+  exist in the currently targeted Vault.
+
 
 [strongbox]: https://github.com/jhunt/go-strongbox
 [bosh]:      https://github.com/cloudfoundry-community/safe-boshrelease

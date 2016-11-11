@@ -49,6 +49,16 @@ yamlok() {
 	spruce merge t/home/want > t/home/want.x  ; mv t/home/want.x t/home/want
 	diffok
 }
+exitok() {
+	if [[ $1 -eq $2 ]]; then
+		echo "ok"
+	else
+		echo "FAILED!"
+		rc=1
+		echo " expected process to exit $2"
+		echo "   but it actually exited $1"
+	fi
+}
 
 ########################################################################
 
@@ -107,6 +117,13 @@ for version in ${versions[@]}; do
 knock: knock
 EOF
 	yamlok
+
+	testing $version basic check/exists operation
+	./safe exists secret/handshake        ; exitok $? 0
+	./safe exists secret/handshake:knock  ; exitok $? 0
+	./safe exists secret/handshake:enoent ; exitok $? 1
+	./safe exists secret/enoent           ; exitok $? 1
+	./safe exists secret/enoent:sub       ; exitok $? 1
 
 	testing $version multiple-attribute set operation
 	./safe set secret/account username=admin password=sekrit >/dev/null
