@@ -163,6 +163,14 @@ Similarly, `safe paste` works the same way, but does not have a confirmation
 prompt for your value. It assumes you have pasted in the value from a known-good
 source.
 
+Setting key to context of a file
+
+Example:
+
+```
+safe set secret/root ssl_key:@ssl_key_file
+```
+
 ### get path \[path ...\]
 
 Retrieve and print the values of one or more paths, to standard
