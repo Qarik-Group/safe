@@ -156,7 +156,7 @@ Try 'safe help <thing>' for detailed information,
 
 	r.Dispatch("target", &Help{
 		Summary: "Target a new Vault, or set your current Vault target",
-		Usage:   "safe target [-k] [URL] [ALIAS]",
+		Usage:   "safe [-k] target [URL] [ALIAS]",
 		Type:    AdministrativeCommand,
 	}, func(command string, args ...string) error {
 		cfg := rc.Apply()
