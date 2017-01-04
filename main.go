@@ -54,35 +54,6 @@ func main() {
 	go Signals()
 
 	r := NewRunner()
-	r.HelpTopic("usage", `Usage: safe <command> [options...]
-
-Valid subcommands are:
-
-    @C{targets}     List all Vaults that have been targeted
-    @C{target}      Target a new or existing Vault
-    @C{auth}        Authenticate against the currently targeted Vault
-
-    @G{tree}        Print a tree listing of all reachable keys for each path
-
-    @G{read}        Retrieve and print the values of one or more paths
-    @R{write}       Update a single path with new keys
-
-    @R{delete}      Remove multiple paths from the Vault
-    @R{move}        Move a secret from one path to another
-    @R{copy}        Copy a secret from one path to another
-
-    @R{gen}         Generate a new, random secret
-    @R{ssh}         Generate a new SSH RSA keypair
-    @R{rsa}         Generate a new RSA keypair
-
-    @G{export}      Export one or more paths to a backup file
-    @R{import}      Import a Vault backup file
-
-    @R{vault}       Run arbitrary commands through the Vault CLI
-
-Try 'safe help <thing>' for detailed information,
- or 'safe commands' for a list of all commands.
-`)
 
 	r.Dispatch("version", &Help{
 		Summary: "Print the version of the safe CLI",
@@ -100,7 +71,7 @@ Try 'safe help <thing>' for detailed information,
 
 	r.Dispatch("help", nil, func(command string, args ...string) error {
 		if len(args) == 0 {
-			args = append(args, "usage")
+			args = append(args, "commands")
 		}
 		if len(args) > 1 {
 			ansi.Fprintf(os.Stderr, "@R{too many arguments to `safe help'}\n")
@@ -1301,7 +1272,7 @@ sent as DATA.
 		args = opts.Args()
 	}
 
-	if len(args) == 1 && args[0] == "commands" {
+	if len(args) == 1 && (args[0] == "commands" || args[0] == "usage") {
 		args = []string{"help", "commands"}
 	}
 
