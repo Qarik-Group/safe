@@ -5,7 +5,6 @@ TARGETS      ?= linux/amd64 darwin/amd64 windows/amd64
 GO_LDFLAGS := -ldflags="-X main.Version=$(VERSION)"
 
 build:
-	godep restore
 	go build $(GO_LDFLAGS) .
 	./safe -v
 
