@@ -75,13 +75,13 @@ func (s *Secret) DHParam(length int) error {
 }
 
 // Password creates and stores a new randomized password.
-func (s *Secret) Password(key string, length int) {
-	s.data[key] = random(length)
+func (s *Secret) Password(key string, length int, policy string) {
+	s.data[key] = random(length, policy)
 }
 
 func crypt_sha512(pass string) (string, error) {
 	c := sha512_crypt.New()
-	sha, err := c.Generate([]byte(pass), []byte("$6$"+random(16)))
+	sha, err := c.Generate([]byte(pass), []byte("$6$"+random(16, "a-zA-Z")))
 	if err != nil {
 		return "", fmt.Errorf("Error generating crypt for password: %s\n", err)
 	}
