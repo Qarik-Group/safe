@@ -452,7 +452,7 @@ func (v *Vault) IsMounted(typ, path string) (bool, error) {
 	}
 
 	for k, m := range mm {
-		if k == path && m.Type == typ {
+		if (k == path || k == path+"/") && m.Type == typ {
 			return true, nil
 		}
 	}
@@ -617,7 +617,7 @@ func (v *Vault) CreateSignedCertificate(role, path string, params CertOptions) e
 				}
 				secret.Set("cert", cert)
 				secret.Set("key", key)
-				secret.Set("combined", cert + key)
+				secret.Set("combined", cert+key)
 				secret.Set("serial", serial)
 				return v.Write(path, secret)
 			} else {
