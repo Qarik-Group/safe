@@ -149,6 +149,44 @@ func main() {
 			return nil
 		}
 		if len(args) == 1 {
+			if (args[0] == "-i" || args[0] == "--interactive") {
+				for {
+					if len(cfg.Targets) == 0 {
+						ansi.Fprintf(os.Stderr, "@R{No Vaults have been targeted yet.}\n\n")
+						ansi.Fprintf(os.Stderr, "You will need to target a Vault manually first.\n\n");
+						ansi.Fprintf(os.Stderr, "Try something like this:\n");
+						ansi.Fprintf(os.Stderr, "     @C{safe target ops https://address.of.your.vault}\n")
+						ansi.Fprintf(os.Stderr, "     @C{safe auth (github|token|ldap)}\n")
+						ansi.Fprintf(os.Stderr, "\n")
+						os.Exit(1)
+					}
+					r.Run("targets")
+					ansi.Fprintf(os.Stderr, "\n")
+					if cfg.Current == "" {
+						ansi.Fprintf(os.Stderr, "@R{No Vault currently targeted}\n")
+					} else {
+						skip := ""
+						if !cfg.Verified() {
+							skip = " (skipping TLS certificate verification)"
+						}
+						ansi.Fprintf(os.Stderr, "Currently targeting @C{%s} at @C{%s}@R{%s}\n", cfg.Current, cfg.URL(), skip)
+					}
+
+					ansi.Fprintf(os.Stderr, "\nWhich Vault would you like to target?\n")
+					t := prompt.Normal("@G{%s> }", cfg.Current)
+					err := cfg.SetCurrent(t, skipverify)
+					if err != nil {
+						ansi.Fprintf(os.Stderr, "@R{%s}\n", err);
+						continue
+					}
+					err = cfg.Write()
+					if err != nil {
+						return err
+					}
+
+					return r.Run("target");
+				}
+			}
 			err := cfg.SetCurrent(args[0], skipverify)
 			if err != nil {
 				return err
