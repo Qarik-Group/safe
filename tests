@@ -4,7 +4,7 @@ set -u
 declare -a versions=(
 	0.5.0
 	0.5.2
-	0.6.0
+	0.6.4
 )
 rc=0
 platform=
