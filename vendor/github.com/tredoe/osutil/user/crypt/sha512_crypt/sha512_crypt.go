@@ -17,8 +17,8 @@ import (
 	"crypto/sha512"
 	"strconv"
 
-	"github.com/kless/osutil/user/crypt"
-	"github.com/kless/osutil/user/crypt/common"
+	"github.com/tredoe/osutil/user/crypt"
+	"github.com/tredoe/osutil/user/crypt/common"
 )
 
 func init() {

@@ -4,5 +4,5 @@
 
 ### Other authors
 
-[Jonas mg](https://github.com/kless)
+[Jonas mg](https://github.com/tredoe)
 

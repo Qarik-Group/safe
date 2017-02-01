@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/ghodss/yaml"
-	"github.com/kless/osutil/user/crypt/sha512_crypt"
+	"github.com/tredoe/osutil/user/crypt/sha512_crypt"
 )
 
 // A Secret contains a set of key/value pairs that store anything you

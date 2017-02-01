@@ -11,16 +11,16 @@
 			"Rev": "73d445a93680fa1a78ae23a5839bad48f32ba1ee"
 		},
 		{
-			"ImportPath": "github.com/kless/osutil/user/crypt",
-			"Rev": "3ac994847c4376a4b905fc0a19f450c5a4bec647"
+			"ImportPath": "github.com/tredoe/osutil/user/crypt",
+			"Rev": "7d3ee1afa71c90fd1514c8f557ae6c5f414208eb"
 		},
 		{
-			"ImportPath": "github.com/kless/osutil/user/crypt/common",
-			"Rev": "3ac994847c4376a4b905fc0a19f450c5a4bec647"
+			"ImportPath": "github.com/tredoe/osutil/user/crypt/common",
+			"Rev": "7d3ee1afa71c90fd1514c8f557ae6c5f414208eb"
 		},
 		{
-			"ImportPath": "github.com/kless/osutil/user/crypt/sha512_crypt",
-			"Rev": "3ac994847c4376a4b905fc0a19f450c5a4bec647"
+			"ImportPath": "github.com/tredoe/osutil/user/crypt/sha512_crypt",
+			"Rev": "7d3ee1afa71c90fd1514c8f557ae6c5f414208eb"
 		},
 		{
 			"ImportPath": "github.com/mattn/go-isatty",
