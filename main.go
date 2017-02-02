@@ -226,7 +226,7 @@ func main() {
 		v := connect()
 		st, err := v.Strongbox()
 		if err != nil {
-			return fmt.Errorf("%s; are you targeting a `safe' installation?")
+			return fmt.Errorf("%s; are you targeting a `safe' installation?", err)
 		}
 
 		for addr, state := range st {
