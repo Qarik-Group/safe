@@ -143,8 +143,7 @@ func (c *Config) SetTarget(alias, url string, skipverify bool) error {
 
 	c.SkipVerify[url] = skipverify
 	if _, ok := c.Targets[url]; !ok {
-		c.Targets[url] = nil
-		c.SkipVerify[url] = false
+		c.Targets[url] = nil // no token yet...
 	}
 	return nil
 }
