@@ -401,6 +401,7 @@ func main() {
 	r.Dispatch("ask", &Help{
 		Summary: "Create or update an insensitive configuration value",
 		Usage:   "safe ask PATH NAME=[VALUE] [NAME ...]",
+		Type:    DestructiveCommand,
 		Description: `
 Update a single path in the Vault with new or updated named attributes.
 Any existing name/value pairs not specified on the command-line will
