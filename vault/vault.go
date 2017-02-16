@@ -430,6 +430,29 @@ type mountpoint struct {
 	Config      map[string]interface{} `json:"config"`
 }
 
+func convertMountpoint(o interface{}) (mountpoint, bool) {
+	mount := mountpoint{}
+	if m, ok := o.(map[string]interface{}); ok {
+		if t, ok := m["type"].(string); ok {
+			mount.Type = t
+		} else {
+			return mount, false
+		}
+		if d, ok := m["description"].(string); ok {
+			mount.Description = d
+		} else {
+			return mount, false
+		}
+		if c, ok := m["config"].(map[string]interface{}); ok {
+			mount.Config = c
+		} else {
+			return mount, false
+		}
+		return mount, true
+	}
+	return mount, false
+}
+
 func (v *Vault) IsMounted(typ, path string) (bool, error) {
 	res, err := v.Curl("GET", "sys/mounts", nil)
 	if err != nil {
@@ -445,15 +468,19 @@ func (v *Vault) IsMounted(typ, path string) (bool, error) {
 		return false, DecodeErrorResponse(body)
 	}
 
-	mm := make(map[string]mountpoint)
+	mm := make(map[string]interface{})
 	if err := json.Unmarshal(body, &mm); err != nil {
 		return false, fmt.Errorf("Received invalid JSON '%s' from Vault: %s\n",
 			body, err)
 	}
 
 	for k, m := range mm {
-		if (k == path || k == path+"/") && m.Type == typ {
-			return true, nil
+		if mount, ok := convertMountpoint(m); ok {
+			if (k == path || k == path+"/") && mount.Type == typ {
+				return true, nil
+			}
+		} else {
+			fmt.Fprintf(os.Stderr, "%s is not a mountpoint\n", k)
 		}
 	}
 	return false, nil
