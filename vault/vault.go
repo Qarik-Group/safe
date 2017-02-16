@@ -479,8 +479,6 @@ func (v *Vault) IsMounted(typ, path string) (bool, error) {
 			if (k == path || k == path+"/") && mount.Type == typ {
 				return true, nil
 			}
-		} else {
-			fmt.Fprintf(os.Stderr, "%s is not a mountpoint\n", k)
 		}
 	}
 	return false, nil
