@@ -149,12 +149,12 @@ func main() {
 			return nil
 		}
 		if len(args) == 1 {
-			if (args[0] == "-i" || args[0] == "--interactive") {
+			if args[0] == "-i" || args[0] == "--interactive" {
 				for {
 					if len(cfg.Targets) == 0 {
 						ansi.Fprintf(os.Stderr, "@R{No Vaults have been targeted yet.}\n\n")
-						ansi.Fprintf(os.Stderr, "You will need to target a Vault manually first.\n\n");
-						ansi.Fprintf(os.Stderr, "Try something like this:\n");
+						ansi.Fprintf(os.Stderr, "You will need to target a Vault manually first.\n\n")
+						ansi.Fprintf(os.Stderr, "Try something like this:\n")
 						ansi.Fprintf(os.Stderr, "     @C{safe target ops https://address.of.your.vault}\n")
 						ansi.Fprintf(os.Stderr, "     @C{safe auth (github|token|ldap)}\n")
 						ansi.Fprintf(os.Stderr, "\n")
@@ -176,7 +176,7 @@ func main() {
 					t := prompt.Normal("@G{%s> }", cfg.Current)
 					err := cfg.SetCurrent(t, skipverify)
 					if err != nil {
-						ansi.Fprintf(os.Stderr, "@R{%s}\n", err);
+						ansi.Fprintf(os.Stderr, "@R{%s}\n", err)
 						continue
 					}
 					err = cfg.Write()
@@ -184,7 +184,7 @@ func main() {
 						return err
 					}
 
-					return r.Run("target");
+					return r.Run("target")
 				}
 			}
 			err := cfg.SetCurrent(args[0], skipverify)
@@ -271,7 +271,7 @@ func main() {
 			keys := make([]string, nkeys)
 
 			for i := 0; i < nkeys; i++ {
-				_, key, err := keyPrompt(fmt.Sprintf("Key #%d", i+1), false)
+				_, key, err := keyPrompt(fmt.Sprintf("Key #%d", i+1), false, true)
 				if err != nil {
 					return err
 				}
@@ -398,6 +398,39 @@ func main() {
 
 	}, "login")
 
+	r.Dispatch("ask", &Help{
+		Summary: "Create or update an insensitive configuration value",
+		Usage:   "safe ask PATH NAME=[VALUE] [NAME ...]",
+		Description: `
+Update a single path in the Vault with new or updated named attributes.
+Any existing name/value pairs not specified on the command-line will
+be left alone, with their original values.
+
+You will be prompted to provide (without confirmation) any values that
+are omitted. Unlike the 'safe set' and 'safe paste' commands, data entry
+is NOT obscured.
+`,
+	}, func(command string, args ...string) error {
+		rc.Apply()
+		if len(args) < 2 {
+			r.ExitWithUsage("ask")
+		}
+		v := connect()
+		path, args := args[0], args[1:]
+		s, err := v.Read(path)
+		if err != nil && !vault.IsNotFound(err) {
+			return err
+		}
+		for _, ask := range args {
+			k, v, err := keyPrompt(ask, false, false)
+			if err != nil {
+				return err
+			}
+			s.Set(k, v)
+		}
+		return v.Write(path, s)
+	})
+
 	r.Dispatch("set", &Help{
 		Summary: "Create or update a secret",
 		Usage:   "safe set PATH NAME=[VALUE] [NAME ...]",
@@ -424,7 +457,7 @@ process table.
 			return err
 		}
 		for _, set := range args {
-			k, v, err := keyPrompt(set, true)
+			k, v, err := keyPrompt(set, true, true)
 			if err != nil {
 				return err
 			}
@@ -459,7 +492,7 @@ like 1password or Lastpass.
 			return err
 		}
 		for _, set := range args {
-			k, v, err := keyPrompt(set, false)
+			k, v, err := keyPrompt(set, false, true)
 			if err != nil {
 				return err
 			}
