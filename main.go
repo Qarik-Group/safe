@@ -102,7 +102,7 @@ func main() {
 		}
 
 		var keys []string
-		for name, _ := range cfg.Aliases {
+		for name := range cfg.Aliases {
 			keys = append(keys, name)
 		}
 
@@ -733,10 +733,33 @@ to get your bearings.
 		Type:    DestructiveCommand,
 		Description: `
 LENGTH defaults to 64 characters.
+
+The following options are recognized:
+
+  --policy                 A Reg-exp that defines the characters to be generated
 `,
 	}, func(command string, args ...string) error {
 		rc.Apply()
+
+		policy := getopt.StringLong("policy", 0, "a-zA-Z", "A Reg-exp that defines the characters to be generated")
+
+		args = append([]string{"safe " + command}, args...)
+
+		var opts = getopt.CommandLine
+		var parsed []string
+		for {
+			opts.Parse(args)
+			if opts.NArgs() == 0 {
+				break
+			}
+			parsed = append(parsed, opts.Arg(0))
+			args = opts.Args()
+		}
+
+		args = parsed
+
 		length := 64
+
 		if len(args) > 0 {
 			if u, err := strconv.ParseUint(args[0], 10, 16); err == nil {
 				length = int(u)
@@ -745,6 +768,7 @@ LENGTH defaults to 64 characters.
 		}
 
 		if len(args) != 2 {
+			fmt.Println("Not 2 options")
 			r.ExitWithUsage("gen")
 		}
 
@@ -754,7 +778,7 @@ LENGTH defaults to 64 characters.
 		if err != nil && !vault.IsNotFound(err) {
 			return err
 		}
-		s.Password(key, length)
+		s.Password(key, length, *policy)
 
 		if err = v.Write(path, s); err != nil {
 			return err

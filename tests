@@ -150,6 +150,23 @@ EOF
 		echo "ok"
 	fi
 
+	testing $version custom password runes randomization
+
+	./safe gen --policy "1-9" 64 secret/random one #    >/dev/null
+	./safe get secret/random | spruce json >t/home/runed # 2>t/home/errors
+
+	one=$(jq -r .one < t/home/runed)
+	if [[ "$one" =~ ^[1-9]+$ ]]; then
+		echo "ok"
+	else
+		echo "FAILED"
+		rc=1
+		echo "	expected generated password:"
+		echo "		|"$one"|"
+		echo "	to only contain:"
+		echo "	1-9"
+	fi
+
 	testing $version single-value retrieval
 	./safe set secret/single/value foo=bar baz=quux >/dev/null
 	foo=$(./safe get secret/single/value:foo)
