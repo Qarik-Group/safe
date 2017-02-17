@@ -588,10 +588,6 @@ type CertOptions struct {
 }
 
 func (v *Vault) CreateSignedCertificate(role, path string, params CertOptions) error {
-	parts := strings.Split(path, "/")
-	cn := parts[len(parts)-1]
-	params.CN = cn
-
 	data, err := json.Marshal(params)
 	if err != nil {
 		return err
@@ -607,7 +603,7 @@ func (v *Vault) CreateSignedCertificate(role, path string, params CertOptions) e
 	}
 
 	if res.StatusCode >= 400 {
-		return fmt.Errorf("Unable to create certificate %s: %s\n", cn, DecodeErrorResponse(body))
+		return fmt.Errorf("Unable to create certificate %s: %s\n", params.CN, DecodeErrorResponse(body))
 	}
 
 	var raw map[string]interface{}
@@ -618,22 +614,22 @@ func (v *Vault) CreateSignedCertificate(role, path string, params CertOptions) e
 				var c, k, s interface{}
 				var ok bool
 				if c, ok = data["certificate"]; !ok {
-					return fmt.Errorf("No certificate found when issuing certificate %s:\n%v\n", cn, data)
+					return fmt.Errorf("No certificate found when issuing certificate %s:\n%v\n", params.CN, data)
 				}
 				if cert, ok = c.(string); !ok {
-					return fmt.Errorf("Invalid data type for certificate %s:\n%v\n", cn, data)
+					return fmt.Errorf("Invalid data type for certificate %s:\n%v\n", params.CN, data)
 				}
 				if k, ok = data["private_key"]; !ok {
-					return fmt.Errorf("No private_key found when issuing certificate %s:\n%v\n", cn, data)
+					return fmt.Errorf("No private_key found when issuing certificate %s:\n%v\n", params.CN, data)
 				}
 				if key, ok = k.(string); !ok {
-					return fmt.Errorf("Invalid data type for private_key %s:\n%v\n", cn, data)
+					return fmt.Errorf("Invalid data type for private_key %s:\n%v\n", params.CN, data)
 				}
 				if s, ok = data["serial_number"]; !ok {
-					return fmt.Errorf("No serial_number found when issuing certificate %s:\n%v\n", cn, data)
+					return fmt.Errorf("No serial_number found when issuing certificate %s:\n%v\n", params.CN, data)
 				}
 				if serial, ok = s.(string); !ok {
-					return fmt.Errorf("Invalid data type for serial_number %s:\n%v\n", cn, data)
+					return fmt.Errorf("Invalid data type for serial_number %s:\n%v\n", params.CN, data)
 				}
 
 				secret, err := v.Read(path)
@@ -646,13 +642,13 @@ func (v *Vault) CreateSignedCertificate(role, path string, params CertOptions) e
 				secret.Set("serial", serial)
 				return v.Write(path, secret)
 			} else {
-				fmt.Errorf("Invalid response datatype requesting certificate %s:\n%v\n", cn, d)
+				fmt.Errorf("Invalid response datatype requesting certificate %s:\n%v\n", params.CN, d)
 			}
 		} else {
-			fmt.Errorf("No data found when requesting certificate %s:\n%v\n", cn, d)
+			fmt.Errorf("No data found when requesting certificate %s:\n%v\n", params.CN, d)
 		}
 	} else {
-		return fmt.Errorf("Unparseable json creating certificate %s:\n%s\n", cn, body)
+		return fmt.Errorf("Unparseable json creating certificate %s:\n%s\n", params.CN, body)
 	}
 	return nil
 }
