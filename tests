@@ -112,10 +112,12 @@ for version in ${versions[@]}; do
 
 	testing $version basic set/get operation
 	./safe set secret/handshake knock=knock >/dev/null
+	./safe ask secret/handshake whos=there >/dev/null
 	./safe get secret/handshake >t/home/got 2>t/home/errors
 	cat >t/home/want <<EOF
 --- # secret/handshake
 knock: knock
+whos: there
 EOF
 	yamlok
 

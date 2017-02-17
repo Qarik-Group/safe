@@ -1,3 +1,7 @@
+# New Features
+
+- Added support for `safe ask`. Similar to `safe set`, but with no confirmation,
+  and user input is not obscured.
 # Improvements
 
 - Updated `safe cert` to default to the `default` role created by `safe pki init`
