@@ -1007,7 +1007,7 @@ Supported formats:
 
 	r.Dispatch("pki", &Help{
 		Summary: "Configure the PKI backend on the target Vault",
-		Usage:   "safe pki init",
+		Usage:   "safe pki init [OPTIONS]",
 		Type:    DestructiveCommand,
 		Description: `
 Configure your Vault to do PKI via the other safe PKI commands.
@@ -1015,92 +1015,108 @@ Configure your Vault to do PKI via the other safe PKI commands.
 You have to run this command first, before you can use the 'cert',
 'revoke', 'ca-pem' and 'crl-pem' commands (unless you've already set
 up the pki backend on your Vault, in which case, cheers!)
+
+The following options are recognized:
+
+  --ttl          How long the cert should be valid for  (e.g '90d', '10h', etc.)
 `,
 	}, func(command string, args ...string) error {
-		if len(args) != 1 || args[0] != "init" {
+		switch args[0] {
+		case "init":
+			rc.Apply()
+			ttlOpt := getopt.StringLong("ttl", 0, "10y", "Specify the default cert time to live, as well as CA cert time to live")
+
+			var opts = getopt.CommandLine
+			var parsed []string
+			for {
+				opts.Parse(args)
+				if opts.NArgs() == 0 {
+					break
+				}
+				parsed = append(parsed, opts.Arg(0))
+				args = opts.Args()
+			}
+
+			args = parsed
+			ttl := *ttlOpt
+
+			v := connect()
+			params := make(map[string]interface{})
+
+			inAltUnits := regexp.MustCompile(`^(\d+)([dDyY])$`)
+			if match := inAltUnits.FindStringSubmatch(ttl); len(match) == 3 {
+				u, err := strconv.ParseUint(match[1], 10, 16)
+				if err != nil {
+					return err
+				}
+
+				switch match[2] {
+				case "d":
+					fallthrough
+				case "D":
+					ttl = fmt.Sprintf("%dh", u*24)
+
+				case "y":
+					fallthrough
+				case "Y":
+					ttl = fmt.Sprintf("%dh", u*365*24)
+
+				default:
+					return fmt.Errorf("Unrecognized time unit '%s'\n", match[2])
+				}
+			}
+			params["max_lease_ttl"] = ttl
+
+			mounted, err := v.IsMounted("pki", "pki")
+			if err != nil {
+				return err
+			}
+
+			/* Mount the PKI backend to `pki/` */
+			err = v.Mount("pki", "pki", params)
+			if err != nil {
+				return err
+			}
+
+			if !mounted {
+				/* First Time! */
+				common_name := prompt.Normal("@C{Common Name (FQDN)}: ")
+
+				/* Generate the CA certificate */
+				m := make(map[string]string)
+				m["common_name"] = common_name
+				m["ttl"] = ttl
+
+				err := v.Configure("pki/root/generate/internal", m)
+				if err != nil {
+					return err
+				}
+
+				/* Advertise the CRL / Issuer URLs */
+				m = make(map[string]string)
+				m["issuing_certificates"] = fmt.Sprintf("%s/v1/pki/ca", v.URL)
+				m["crl_distribution_points"] = fmt.Sprintf("%s/v1/pki/crl", v.URL)
+
+				err = v.Configure("pki/config/urls", m)
+				if err != nil {
+					return err
+				}
+
+				/* Set up a default role, with the same domain as the CA */
+				m = make(map[string]string)
+				m["allow_any_name"] = "true"
+				m["max_ttl"] = ttl
+
+				err = v.Configure("pki/roles/default", m)
+				if err != nil {
+					return err
+				}
+			} else {
+				fmt.Printf("The PKI backend is already initialized\n")
+			}
+		default:
 			r.ExitWithUsage("pki")
 		}
-
-		rc.Apply()
-		inAltUnits := regexp.MustCompile(`^(\d+)([dDyY])$`)
-
-		v := connect()
-		params := make(map[string]interface{})
-
-		ttl := prompt.Normal("@C{Certificate Lifetime}: ")
-		if ttl == "" {
-			ttl = "10y"
-		}
-		if match := inAltUnits.FindStringSubmatch(ttl); len(match) == 3 {
-			u, err := strconv.ParseUint(match[1], 10, 16)
-			if err != nil {
-				return err
-			}
-
-			switch match[2] {
-			case "d":
-				fallthrough
-			case "D":
-				ttl = fmt.Sprintf("%dh", u*24)
-
-			case "y":
-				fallthrough
-			case "Y":
-				ttl = fmt.Sprintf("%dh", u*365*24)
-
-			default:
-				return fmt.Errorf("Unrecognized time unit '%s'\n", match[2])
-			}
-		}
-		params["max_lease_ttl"] = ttl
-
-		mounted, err := v.IsMounted("pki", "pki")
-		if err != nil {
-			return err
-		}
-
-		/* Mount the PKI backend to `pki/` */
-		err = v.Mount("pki", "pki", params)
-		if err != nil {
-			return err
-		}
-
-		if !mounted {
-			/* First Time! */
-			common_name := prompt.Normal("@C{Common Name (FQDN)}: ")
-
-			/* Generate the CA certificate */
-			m := make(map[string]string)
-			m["common_name"] = common_name
-			m["ttl"] = ttl
-
-			err := v.Configure("pki/root/generate/internal", m)
-			if err != nil {
-				return err
-			}
-
-			/* Advertise the CRL / Issuer URLs */
-			m = make(map[string]string)
-			m["issuing_certificates"] = fmt.Sprintf("%s/v1/pki/ca", v.URL)
-			m["crl_distribution_points"] = fmt.Sprintf("%s/v1/pki/crl", v.URL)
-
-			err = v.Configure("pki/config/urls", m)
-			if err != nil {
-				return err
-			}
-
-			/* Set up a default role, with the same domain as the CA */
-			m = make(map[string]string)
-			m["allowed_domains"] = common_name
-			m["allow_subdomains"] = "true"
-			m["max_ttl"] = ttl
-
-			err = v.Configure("pki/roles/default", m)
-			if err != nil {
-				return err
-			}
-		}
-
 		return nil
 	})
 
