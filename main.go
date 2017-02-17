@@ -1171,20 +1171,13 @@ saved at that path, under the name 'ca-pem'.
 
 	r.Dispatch("cert", &Help{
 		Summary: "Issue a Certificate using the Vault PKI backend",
-		Usage:   "safe cert [OPTIONS] ROLE PATH",
+		Usage:   "safe cert [OPTIONS] --cn COMMON_NAME PATH",
 		Type:    DestructiveCommand,
 		Description: `
 @M{(You must run 'safe pki init' before you can use this command)}
 
 Generate a new private key, and then issue a certificate, signed by the
-Vault Certificate Authority (CA).  The common name of the new certificate
-will be based on the last part of the provided PATH, so if you want to
-issue a certificate for secure.example.com, you want to use something like
-
-    safe cert example.com secret/certs/secure.example.com
-
-(Assuming you set up 'example.com' as your CA FQDN when you went through
- the 'safe pki init' setup stage.)
+Vault Certificate Authority (CA).
 
 The following options are recognized:
 
@@ -1200,6 +1193,11 @@ The following options are recognized:
   --exclude-cn-from-sans   Exclude the certificate's common name (CN)
                            from the Subject Alternate Name list.
 
+  --role                   Specify the PKI Role that will be used
+                           to generate this cert.
+
+  --cn                     Specify the CN/Common Name for the Cert
+
 Once generated, the new private key will be stored under the name 'key',
 the certificate will be under 'cert', a combined PEM containing both will
 be saved as 'combined', and the certificate serial number under 'serial'.
@@ -1211,6 +1209,8 @@ be saved as 'combined', and the certificate serial number under 'serial'.
 		ip_sans := getopt.StringLong("ip-sans", 0, "", "Comma-separated list of IP SANs")
 		alt_names := getopt.StringLong("alt-names", 0, "", "Comma-separated list of SANs")
 		exclude_cn_from_sans := getopt.BoolLong("exclude-cn-from-sans", 0, "", "Exclude the common_name from DNS or Email SANs")
+		cn := getopt.StringLong("cn", 0, "", "Common Name for the Cert")
+		role := getopt.StringLong("role", 0, "default", "Role to use when creating the Cert")
 
 		args = append([]string{"safe " + command}, args...)
 
@@ -1228,13 +1228,14 @@ be saved as 'combined', and the certificate serial number under 'serial'.
 		args = parsed
 
 		params := vault.CertOptions{
+			CN:                *cn,
 			TTL:               *ttl,
 			IPSans:            *ip_sans,
 			AltNames:          *alt_names,
 			ExcludeCNFromSans: *exclude_cn_from_sans,
 		}
 
-		if len(args) != 2 {
+		if len(args) != 1 || *cn == "" {
 			r.ExitWithUsage("cert")
 		}
 
@@ -1243,8 +1244,7 @@ be saved as 'combined', and the certificate serial number under 'serial'.
 			return fmt.Errorf("The PKI backend has not been configured.  Try running `safe pki init`\n")
 		}
 
-		role, path := args[0], args[1]
-		return v.CreateSignedCertificate(role, path, params)
+		return v.CreateSignedCertificate(*role, args[0], params)
 	})
 
 	r.Dispatch("revoke", &Help{
