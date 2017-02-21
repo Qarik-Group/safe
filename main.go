@@ -767,15 +767,9 @@ to get your bearings.
 		Type:    DestructiveCommand,
 		Description: `
 LENGTH defaults to 64 characters.
-
-The following options are recognized:
-
-  --policy                 A Reg-exp that defines the characters to be generated
 `,
 	}, func(command string, args ...string) error {
 		rc.Apply()
-
-		policy := getopt.StringLong("policy", 0, "a-zA-Z", "A Reg-exp that defines the characters to be generated")
 
 		args = append([]string{"safe " + command}, args...)
 
@@ -812,7 +806,7 @@ The following options are recognized:
 		if err != nil && !vault.IsNotFound(err) {
 			return err
 		}
-		err = s.Password(key, length, *policy)
+		err = s.Password(key, length, vault.DefaultGenPolicy)
 		if err != nil {
 			return err
 		}

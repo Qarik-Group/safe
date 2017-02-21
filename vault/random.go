@@ -7,7 +7,11 @@ import (
 	"regexp"
 )
 
-var chars = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+var (
+	DefaultGenPolicy = "a-zA-Z0-9"
+
+	chars = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+)
 
 func random(n int, policy string) (string, error) {
 	re := regexp.MustCompile("[^" + policy + "]")
