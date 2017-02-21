@@ -812,7 +812,10 @@ The following options are recognized:
 		if err != nil && !vault.IsNotFound(err) {
 			return err
 		}
-		s.Password(key, length, *policy)
+		err = s.Password(key, length, *policy)
+		if err != nil {
+			return err
+		}
 
 		if err = v.Write(path, s); err != nil {
 			return err
