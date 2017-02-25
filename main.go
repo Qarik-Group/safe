@@ -771,23 +771,7 @@ LENGTH defaults to 64 characters.
 	}, func(command string, args ...string) error {
 		rc.Apply()
 
-		args = append([]string{"safe " + command}, args...)
-
-		var opts = getopt.CommandLine
-		var parsed []string
-		for {
-			opts.Parse(args)
-			if opts.NArgs() == 0 {
-				break
-			}
-			parsed = append(parsed, opts.Arg(0))
-			args = opts.Args()
-		}
-
-		args = parsed
-
 		length := 64
-
 		if len(args) > 0 {
 			if u, err := strconv.ParseUint(args[0], 10, 16); err == nil {
 				length = int(u)
@@ -796,7 +780,6 @@ LENGTH defaults to 64 characters.
 		}
 
 		if len(args) != 2 {
-			fmt.Println("Not 2 options")
 			r.ExitWithUsage("gen")
 		}
 
