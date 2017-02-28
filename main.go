@@ -999,13 +999,16 @@ up the pki backend on your Vault, in which case, cheers!)
 The following options are recognized:
 
   --ttl          How long the cert should be valid for  (e.g '90d', '10h', etc.)
+  --backend      Specify the PKI backend mountpoint to initialize. Defaults to 'pki'.
 `,
 	}, func(command string, args ...string) error {
 		switch args[0] {
 		case "init":
 			rc.Apply()
 			ttlOpt := getopt.StringLong("ttl", 0, "10y", "Specify the default cert time to live, as well as CA cert time to live")
+			backend := getopt.StringLong("backend", 0, "pki", "PKI backend mountpoint to use when generating the Cert")
 
+			args = append([]string{"safe " + command}, args...)
 			var opts = getopt.CommandLine
 			var parsed []string
 			for {
@@ -1047,13 +1050,13 @@ The following options are recognized:
 			}
 			params["max_lease_ttl"] = ttl
 
-			mounted, err := v.IsMounted("pki", "pki")
+			mounted, err := v.IsMounted("pki", *backend)
 			if err != nil {
 				return err
 			}
 
 			/* Mount the PKI backend to `pki/` */
-			err = v.Mount("pki", "pki", params)
+			err = v.Mount("pki", *backend, params)
 			if err != nil {
 				return err
 			}
@@ -1067,17 +1070,17 @@ The following options are recognized:
 				m["common_name"] = common_name
 				m["ttl"] = ttl
 
-				err := v.Configure("pki/root/generate/internal", m)
+				err := v.Configure(fmt.Sprintf("%s/root/generate/internal", *backend), m)
 				if err != nil {
 					return err
 				}
 
 				/* Advertise the CRL / Issuer URLs */
 				m = make(map[string]string)
-				m["issuing_certificates"] = fmt.Sprintf("%s/v1/pki/ca", v.URL)
-				m["crl_distribution_points"] = fmt.Sprintf("%s/v1/pki/crl", v.URL)
+				m["issuing_certificates"] = fmt.Sprintf("%s/v1/%s/ca", v.URL, *backend)
+				m["crl_distribution_points"] = fmt.Sprintf("%s/v1/%s/crl", v.URL, *backend)
 
-				err = v.Configure("pki/config/urls", m)
+				err = v.Configure(fmt.Sprintf("%s/config/urls", *backend), m)
 				if err != nil {
 					return err
 				}
@@ -1087,12 +1090,12 @@ The following options are recognized:
 				m["allow_any_name"] = "true"
 				m["max_ttl"] = ttl
 
-				err = v.Configure("pki/roles/default", m)
+				err = v.Configure(fmt.Sprintf("%s/roles/default", *backend), m)
 				if err != nil {
 					return err
 				}
 			} else {
-				fmt.Printf("The PKI backend is already initialized\n")
+				fmt.Printf("The PKI backend `%s` is already initialized\n", *backend)
 			}
 		default:
 			r.ExitWithUsage("pki")
@@ -1102,7 +1105,7 @@ The following options are recognized:
 
 	r.Dispatch("crl-pem", &Help{
 		Summary: "Retrieve the Vault Certificate Revocation List",
-		Usage:   "safe crl-pem [PATH]",
+		Usage:   "safe crl-pem [OPTIONS] [PATH]",
 		Type:    NonDestructiveCommand,
 		Description: `
 @M{(You must run 'safe pki init' before you can use this command)}
@@ -1115,16 +1118,30 @@ The CRL will be printed to standard output, as a PEM-encoded value.
 
 If you supply a PATH, the CRL will not be printed, but will be saved at that
 path, under the name 'crl-pem'.
+
+The following options are recognized:
+
+  --backend                Specify the PKI backend mountpoint to use. Defaults to 'pki'.
 `,
 	}, func(command string, args ...string) error {
 		rc.Apply()
+		backend := getopt.StringLong("backend", 0, "pki", "PKI backend mountpoint to use when generating the Cert")
+
+		args = append([]string{"safe " + command}, args...)
+		var opts = getopt.CommandLine
+		var parsed []string
+		for {
+			opts.Parse(args)
+			if opts.NArgs() == 0 {
+				break
+			}
+			parsed = append(parsed, opts.Arg(0))
+			args = opts.Args()
+		}
+		args = parsed
 
 		v := connect()
-		if mounted, _ := v.IsMounted("pki", "pki"); !mounted {
-			return fmt.Errorf("The PKI backend has not been configured.  Try running `safe pki init`\n")
-		}
-
-		pem, err := v.RetrievePem("crl")
+		pem, err := v.RetrievePem(*backend, "crl")
 		if err != nil {
 			return err
 		}
@@ -1149,7 +1166,7 @@ path, under the name 'crl-pem'.
 
 	r.Dispatch("ca-pem", &Help{
 		Summary: "Retrieve the Vault Certificate Authority (CA) Certificate",
-		Usage:   "safe ca-pem [PATH]",
+		Usage:   "safe ca-pem [OPTIONS] [PATH]",
 		Type:    NonDestructiveCommand,
 		Description: `
 @M{(You must run 'safe pki init' before you can use this command)}
@@ -1163,16 +1180,30 @@ value.
 
 If you supply a PATH, the CA certificate will not be printed, but will be
 saved at that path, under the name 'ca-pem'.
+
+The following options are recognized:
+
+  --backend                Specify the PKI backend mountpoint to use. Defaults to 'pki'.
 `,
 	}, func(command string, args ...string) error {
 		rc.Apply()
+		backend := getopt.StringLong("backend", 0, "pki", "PKI backend mountpoint to use when generating the Cert")
+
+		args = append([]string{"safe " + command}, args...)
+		var opts = getopt.CommandLine
+		var parsed []string
+		for {
+			opts.Parse(args)
+			if opts.NArgs() == 0 {
+				break
+			}
+			parsed = append(parsed, opts.Arg(0))
+			args = opts.Args()
+		}
+		args = parsed
 
 		v := connect()
-		if mounted, _ := v.IsMounted("pki", "pki"); !mounted {
-			return fmt.Errorf("The PKI backend has not been configured.  Try running `safe pki init`\n")
-		}
-
-		pem, err := v.RetrievePem("ca")
+		pem, err := v.RetrievePem(*backend, "ca")
 		if err != nil {
 			return err
 		}
@@ -1228,6 +1259,8 @@ The following options are recognized:
 
   --cn                     Specify the CN/Common Name for the Cert
 
+  --backend                Specify the PKI backend mountpoint to use. Defaults to 'pki'.
+
 Once generated, the new private key will be stored under the name 'key',
 the certificate will be under 'cert', a combined PEM containing both will
 be saved as 'combined', and the certificate serial number under 'serial'.
@@ -1241,6 +1274,7 @@ be saved as 'combined', and the certificate serial number under 'serial'.
 		exclude_cn_from_sans := getopt.BoolLong("exclude-cn-from-sans", 0, "", "Exclude the common_name from DNS or Email SANs")
 		cn := getopt.StringLong("cn", 0, "", "Common Name for the Cert")
 		role := getopt.StringLong("role", 0, "default", "Role to use when creating the Cert")
+		backend := getopt.StringLong("backend", 0, "pki", "PKI backend mountpoint to use when generating the Cert")
 
 		args = append([]string{"safe " + command}, args...)
 
@@ -1270,16 +1304,12 @@ be saved as 'combined', and the certificate serial number under 'serial'.
 		}
 
 		v := connect()
-		if mounted, _ := v.IsMounted("pki", "pki"); !mounted {
-			return fmt.Errorf("The PKI backend has not been configured.  Try running `safe pki init`\n")
-		}
-
-		return v.CreateSignedCertificate(*role, args[0], params)
+		return v.CreateSignedCertificate(*backend, *role, args[0], params)
 	})
 
 	r.Dispatch("revoke", &Help{
 		Summary: "Revoke a Vault-issued Certificate",
-		Usage:   "safe revoke [PATH | SERIAL]",
+		Usage:   "safe revoke [OPTIONS] [PATH | SERIAL]",
 		Type:    DestructiveCommand,
 		Description: `
 @M{(You must run 'safe pki init' before you can use this command)}
@@ -1292,20 +1322,34 @@ After the certificate is revoked, it will be added to the Certificate
 Revocation List (CRL) automatically.  Note that this will only update the
 Vault's copy of the CRL -- any external copies of the the list will need
 to be refreshed via the 'safe crl-pem' command.
+
+The following options are recognized:
+
+  --backend                Specify the PKI backend mountpoint to use. Defaults to 'pki'.
 `,
 	}, func(command string, args ...string) error {
 		rc.Apply()
+		backend := getopt.StringLong("backend", 0, "pki", "PKI backend mountpoint to use when generating the Cert")
+
+		args = append([]string{"safe " + command}, args...)
+		var opts = getopt.CommandLine
+		var parsed []string
+		for {
+			opts.Parse(args)
+			if opts.NArgs() == 0 {
+				break
+			}
+			parsed = append(parsed, opts.Arg(0))
+			args = opts.Args()
+		}
+		args = parsed
 
 		if len(args) != 1 {
 			r.ExitWithUsage("revoke")
 		}
 
 		v := connect()
-		if mounted, _ := v.IsMounted("pki", "pki"); !mounted {
-			return fmt.Errorf("The PKI backend has not been configured.  Try running `safe pki init`\n")
-		}
-
-		return v.RevokeCertificate(args[0])
+		return v.RevokeCertificate(*backend, args[0])
 	})
 
 	r.Dispatch("curl", &Help{
