@@ -537,8 +537,12 @@ func (v *Vault) Mount(typ, path string, params map[string]interface{}) error {
 	return nil
 }
 
-func (v *Vault) RetrievePem(path string) ([]byte, error) {
-	res, err := v.Curl("GET", "/pki/"+path+"/pem", nil)
+func (v *Vault) RetrievePem(backend, path string) ([]byte, error) {
+	if err := v.CheckPKIBackend(backend); err != nil {
+		return nil, err
+	}
+
+	res, err := v.Curl("GET", fmt.Sprintf("/%s/%s/pem", backend, path), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -587,12 +591,16 @@ type CertOptions struct {
 	ExcludeCNFromSans bool   `json:"exclude_cn_from_sans,omitempty"`
 }
 
-func (v *Vault) CreateSignedCertificate(role, path string, params CertOptions) error {
+func (v *Vault) CreateSignedCertificate(backend, role, path string, params CertOptions) error {
+	if err := v.CheckPKIBackend(backend); err != nil {
+		return err
+	}
+
 	data, err := json.Marshal(params)
 	if err != nil {
 		return err
 	}
-	res, err := v.Curl("POST", fmt.Sprintf("pki/issue/%s", role), data)
+	res, err := v.Curl("POST", fmt.Sprintf("%s/issue/%s", backend, role), data)
 	if err != nil {
 		return err
 	}
@@ -653,7 +661,11 @@ func (v *Vault) CreateSignedCertificate(role, path string, params CertOptions) e
 	return nil
 }
 
-func (v *Vault) RevokeCertificate(serial string) error {
+func (v *Vault) RevokeCertificate(backend, serial string) error {
+	if err := v.CheckPKIBackend(backend); err != nil {
+		return err
+	}
+
 	if strings.ContainsRune(serial, '/') {
 		secret, err := v.Read(serial)
 		if err != nil {
@@ -674,7 +686,7 @@ func (v *Vault) RevokeCertificate(serial string) error {
 		return err
 	}
 
-	res, err := v.Curl("POST", "pki/revoke", data)
+	res, err := v.Curl("POST", fmt.Sprintf("%s/revoke", backend), data)
 	if err != nil {
 		return err
 	}
@@ -685,6 +697,13 @@ func (v *Vault) RevokeCertificate(serial string) error {
 			return err
 		}
 		return fmt.Errorf("Unable to revoke certificate %s: %s\n", serial, DecodeErrorResponse(body))
+	}
+	return nil
+}
+
+func (v *Vault) CheckPKIBackend(backend string) error {
+	if mounted, _ := v.IsMounted("pki", backend); !mounted {
+		return fmt.Errorf("The PKI backend `%s` has not been configured. Try running `safe pki init --backend %s`\n", backend, backend)
 	}
 	return nil
 }
