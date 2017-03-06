@@ -9,6 +9,8 @@ Questions? Pop in our [slack channel](https://cloudfoundry.slack.com/messages/va
 documentation, a rock-solid server component and a flexible and
 capable command-line interface.
 
+![get-set-passwords](docs/safely-generate-passwords.gif)
+
 So, why `safe`?  To solve the following problems:
 
   1. Securely generate new SSH public / private keys
@@ -20,8 +22,8 @@ So, why `safe`?  To solve the following problems:
 Primarily, these are things encountered in trying to build secure
 BOSH deployments using Vault and [Spruce][spruce].
 
-Authenticaion
--------------
+Authentication
+--------------
 
 To make it easier to target multiple Vaults from one client (i.e.
 your work laptop), `safe` lets you track and authenticate against

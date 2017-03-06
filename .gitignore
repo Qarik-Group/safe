@@ -1,4 +1,5 @@
 safe*
+!docs/safe*
 release
 ci/credentials.yml
 /t
