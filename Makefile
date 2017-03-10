@@ -9,7 +9,7 @@ build:
 	./safe -v
 
 test: build
-	./tests
+	./try
 
 release: build
 	mkdir -p $(RELEASE_ROOT)
