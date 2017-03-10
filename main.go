@@ -69,7 +69,7 @@ type Options struct {
 	Ask     struct{} `cli:"ask"`
 	Set     struct{} `cli:"set, write"`
 	Paste   struct{} `cli:"paste"`
-	Exists  struct{} `cli:"exists"`
+	Exists  struct{} `cli:"exists, check"`
 	Get     struct{} `cli:"get, read, cat"`
 	Tree    struct{} `cli:"tree"`
 	Paths   struct{} `cli:"paths"`
