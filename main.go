@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -14,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pborman/getopt"
+	"github.com/jhunt/go-cli"
 	"github.com/starkandwayne/goutils/ansi"
 
 	"github.com/starkandwayne/safe/auth"
@@ -50,7 +49,103 @@ func connect() *vault.Vault {
 	return v
 }
 
+type Options struct {
+	Insecure bool `cli:"-k, --insecure"`
+	Version  bool `cli:"-v, --version"`
+	Help     bool `cli:"-h, --help"`
+
+	HelpCommand    struct{} `cli:"help"`
+	VersionCommand struct{} `cli:"version"`
+
+	/* need option-less commands as well (FIXME) */
+
+	Targets struct{} `cli:"targets"`
+	Target  struct{} `cli:"target"`
+	Status  struct{} `cli:"status"`
+	Unseal  struct{} `cli:"unseal"`
+	Seal    struct{} `cli:"seal"`
+	Env     struct{} `cli:"env"`
+	Auth    struct{} `cli:"auth, login"`
+	Ask     struct{} `cli:"ask"`
+	Set     struct{} `cli:"set, write"`
+	Paste   struct{} `cli:"paste"`
+	Exists  struct{} `cli:"exists, check"`
+	Get     struct{} `cli:"get, read, cat"`
+	Tree    struct{} `cli:"tree"`
+	Paths   struct{} `cli:"paths"`
+
+	Delete struct {
+		Recurse bool `cli:"-R, -r, --recurse"`
+		Force   bool `cli:"-f, --force"`
+	} `cli:"delete, rm"`
+
+	Export struct{} `cli:"export"`
+	Import struct{} `cli:"import"`
+
+	Move struct {
+		Recurse bool `cli:"-R, -r, --recurse"`
+		Force   bool `cli:"-f, --force"`
+	} `cli:"move, rename, mv"`
+
+	Copy struct {
+		Recurse bool `cli:"-R, -r, --recurse"`
+		Force   bool `cli:"-f, --force"`
+	} `cli:"copy, cp"`
+
+	Gen struct {
+		Policy string `cli:"-p, --policy"`
+	} `cli:"gen, auto"`
+
+	SSH     struct{} `cli:"ssh"`
+	RSA     struct{} `cli:"rsa"`
+	DHParam struct{} `cli:"dhparam, dhparams, dh"`
+	Prompt  struct{} `cli:"prompt"`
+	Vault   struct{} `cli:"vault"`
+	Fmt     struct{} `cli:"fmt"`
+
+	PKI struct {
+		Init struct {
+			TTL     string `cli:"--ttl"`
+			Backend string `cli:"--backend"`
+		} `cli:"init"`
+	} `cli:"pki"`
+
+	CRL struct {
+		Backend string `cli:"--backend"`
+	} `cli:"crl-pem"`
+
+	CA struct {
+		Backend string `cli:"--backend"`
+	} `cli:"crl-pem"`
+
+	Cert struct {
+		TTL        string `cli:"--ttle"`
+		IPSans     string `cli:"--ip-sans"`
+		AltNames   string `cli:"--alt-names"`
+		CommonName string `cli:"--cn"`
+		Role       string `cli:"--role"`
+		Backend    string `cli:"--backend"`
+		ExcludeCN  bool   `cli:"--exclude-cn-from-sans"`
+	} `cli:"cert"`
+
+	Revoke struct {
+		Backend string `cli:"--backend"`
+	} `cli:"revoke"`
+
+	Curl struct{} `cli:"curl"`
+}
+
 func main() {
+	var opt Options
+	opt.Gen.Policy = "a-zA-Z0-9"
+	opt.PKI.Init.TTL = "10y"
+	opt.PKI.Init.Backend = "pki"
+	opt.CRL.Backend = "pki"
+	opt.CA.Backend = "pki"
+	opt.Cert.Role = "default"
+	opt.Cert.Backend = "pki"
+	opt.Revoke.Backend = "pki"
+
 	go Signals()
 
 	r := NewRunner()
@@ -160,7 +255,7 @@ func main() {
 						ansi.Fprintf(os.Stderr, "\n")
 						os.Exit(1)
 					}
-					r.Run("targets")
+					r.Execute("targets")
 					ansi.Fprintf(os.Stderr, "\n")
 					if cfg.Current == "" {
 						ansi.Fprintf(os.Stderr, "@R{No Vault currently targeted}\n")
@@ -184,7 +279,7 @@ func main() {
 						return err
 					}
 
-					return r.Run("target")
+					return r.Execute("target")
 				}
 			}
 			err := cfg.SetCurrent(args[0], skipverify)
@@ -396,7 +491,7 @@ func main() {
 		cfg.SetToken(token)
 		return cfg.Write()
 
-	}, "login")
+	})
 
 	r.Dispatch("ask", &Help{
 		Summary: "Create or update an insensitive configuration value",
@@ -465,7 +560,7 @@ process table.
 			s.Set(k, v)
 		}
 		return v.Write(path, s)
-	}, "write")
+	})
 
 	r.Dispatch("paste", &Help{
 		Summary: "Create or update a secret",
@@ -533,7 +628,7 @@ certificate validation failure, etc. occur, they will be printed as well.
 		}
 		os.Exit(0)
 		return nil
-	}, "check")
+	})
 
 	r.Dispatch("get", &Help{
 		Summary: "Retrieve and print the values of one or more paths",
@@ -562,7 +657,7 @@ certificate validation failure, etc. occur, they will be printed as well.
 			}
 		}
 		return nil
-	}, "read", "cat")
+	})
 
 	r.Dispatch("tree", &Help{
 		Summary: "Print a tree listing of one or more paths",
@@ -628,14 +723,15 @@ to get your bearings.
 	}, func(command string, args ...string) error {
 		rc.Apply()
 
-		recurse, args := shouldRecurse(command, args...)
-
 		if len(args) < 1 {
 			r.ExitWithUsage("delete")
 		}
 		v := connect()
 		for _, path := range args {
-			if recurse {
+			if opt.Delete.Recurse {
+				if !opt.Delete.Force && !recursively("delete", args...) {
+					return nil /* skip this command, process the next */
+				}
 				if err := v.DeleteTree(path); err != nil {
 					return err
 				}
@@ -646,7 +742,7 @@ to get your bearings.
 			}
 		}
 		return nil
-	}, "rm")
+	})
 
 	r.Dispatch("export", &Help{
 		Summary: "Export one or more subtrees for migration / backup purposes",
@@ -715,15 +811,15 @@ to get your bearings.
 		Type:    DestructiveCommand,
 	}, func(command string, args ...string) error {
 		rc.Apply()
-
-		recurse, args := shouldRecurse(command, args...)
-
 		if len(args) != 2 {
 			r.ExitWithUsage("move")
 		}
-		v := connect()
 
-		if recurse {
+		v := connect()
+		if opt.Move.Recurse {
+			if !opt.Move.Force && !recursively("move", args...) {
+				return nil /* skip this command, process the next */
+			}
 			if err := v.MoveCopyTree(args[0], args[1], v.Move); err != nil {
 				return err
 			}
@@ -733,7 +829,7 @@ to get your bearings.
 			}
 		}
 		return nil
-	}, "mv", "rename")
+	})
 
 	r.Dispatch("copy", &Help{
 		Summary: "Copy a secret from one path to another",
@@ -742,14 +838,15 @@ to get your bearings.
 	}, func(command string, args ...string) error {
 		rc.Apply()
 
-		recurse, args := shouldRecurse(command, args...)
-
 		if len(args) != 2 {
 			r.ExitWithUsage("copy")
 		}
 		v := connect()
 
-		if recurse {
+		if opt.Copy.Recurse {
+			if !opt.Copy.Force && !recursively("copy", args...) {
+				return nil /* skip this command, process the next */
+			}
 			if err := v.MoveCopyTree(args[0], args[1], v.Copy); err != nil {
 				return err
 			}
@@ -759,7 +856,7 @@ to get your bearings.
 			}
 		}
 		return nil
-	}, "cp")
+	})
 
 	r.Dispatch("gen", &Help{
 		Summary: "Generate a random password",
@@ -789,7 +886,7 @@ LENGTH defaults to 64 characters.
 		if err != nil && !vault.IsNotFound(err) {
 			return err
 		}
-		err = s.Password(key, length, vault.DefaultGenPolicy)
+		err = s.Password(key, length, opt.Gen.Policy)
 		if err != nil {
 			return err
 		}
@@ -798,7 +895,7 @@ LENGTH defaults to 64 characters.
 			return err
 		}
 		return nil
-	}, "auto")
+	})
 
 	r.Dispatch("ssh", &Help{
 		Summary: "Generate one or more new SSH RSA keypair(s)",
@@ -912,7 +1009,7 @@ NBITS defaults to 2048.
 			return err
 		}
 		return v.Write(path, s)
-	}, "dh", "dhparams")
+	})
 
 	r.Dispatch("prompt", &Help{
 		Summary: "Print a prompt (useful for scripting safe command sets)",
@@ -1005,29 +1102,11 @@ The following options are recognized:
 		switch args[0] {
 		case "init":
 			rc.Apply()
-			ttlOpt := getopt.StringLong("ttl", 0, "10y", "Specify the default cert time to live, as well as CA cert time to live")
-			backend := getopt.StringLong("backend", 0, "pki", "PKI backend mountpoint to use when generating the Cert")
-
-			args = append([]string{"safe " + command}, args...)
-			var opts = getopt.CommandLine
-			var parsed []string
-			for {
-				opts.Parse(args)
-				if opts.NArgs() == 0 {
-					break
-				}
-				parsed = append(parsed, opts.Arg(0))
-				args = opts.Args()
-			}
-
-			args = parsed
-			ttl := *ttlOpt
-
 			v := connect()
 			params := make(map[string]interface{})
 
 			inAltUnits := regexp.MustCompile(`^(\d+)([dDyY])$`)
-			if match := inAltUnits.FindStringSubmatch(ttl); len(match) == 3 {
+			if match := inAltUnits.FindStringSubmatch(opt.PKI.Init.TTL); len(match) == 3 {
 				u, err := strconv.ParseUint(match[1], 10, 16)
 				if err != nil {
 					return err
@@ -1037,26 +1116,26 @@ The following options are recognized:
 				case "d":
 					fallthrough
 				case "D":
-					ttl = fmt.Sprintf("%dh", u*24)
+					opt.PKI.Init.TTL = fmt.Sprintf("%dh", u*24)
 
 				case "y":
 					fallthrough
 				case "Y":
-					ttl = fmt.Sprintf("%dh", u*365*24)
+					opt.PKI.Init.TTL = fmt.Sprintf("%dh", u*365*24)
 
 				default:
 					return fmt.Errorf("Unrecognized time unit '%s'\n", match[2])
 				}
 			}
-			params["max_lease_ttl"] = ttl
+			params["max_lease_ttl"] = opt.PKI.Init.TTL
 
-			mounted, err := v.IsMounted("pki", *backend)
+			mounted, err := v.IsMounted("pki", opt.PKI.Init.Backend)
 			if err != nil {
 				return err
 			}
 
 			/* Mount the PKI backend to `pki/` */
-			err = v.Mount("pki", *backend, params)
+			err = v.Mount("pki", opt.PKI.Init.Backend, params)
 			if err != nil {
 				return err
 			}
@@ -1068,19 +1147,19 @@ The following options are recognized:
 				/* Generate the CA certificate */
 				m := make(map[string]string)
 				m["common_name"] = common_name
-				m["ttl"] = ttl
+				m["ttl"] = opt.PKI.Init.TTL
 
-				err := v.Configure(fmt.Sprintf("%s/root/generate/internal", *backend), m)
+				err := v.Configure(fmt.Sprintf("%s/root/generate/internal", opt.PKI.Init.Backend), m)
 				if err != nil {
 					return err
 				}
 
 				/* Advertise the CRL / Issuer URLs */
 				m = make(map[string]string)
-				m["issuing_certificates"] = fmt.Sprintf("%s/v1/%s/ca", v.URL, *backend)
-				m["crl_distribution_points"] = fmt.Sprintf("%s/v1/%s/crl", v.URL, *backend)
+				m["issuing_certificates"] = fmt.Sprintf("%s/v1/%s/ca", v.URL, opt.PKI.Init.Backend)
+				m["crl_distribution_points"] = fmt.Sprintf("%s/v1/%s/crl", v.URL, opt.PKI.Init.Backend)
 
-				err = v.Configure(fmt.Sprintf("%s/config/urls", *backend), m)
+				err = v.Configure(fmt.Sprintf("%s/config/urls", opt.PKI.Init.Backend), m)
 				if err != nil {
 					return err
 				}
@@ -1088,14 +1167,14 @@ The following options are recognized:
 				/* Set up a default role, with the same domain as the CA */
 				m = make(map[string]string)
 				m["allow_any_name"] = "true"
-				m["max_ttl"] = ttl
+				m["max_ttl"] = opt.PKI.Init.TTL
 
-				err = v.Configure(fmt.Sprintf("%s/roles/default", *backend), m)
+				err = v.Configure(fmt.Sprintf("%s/roles/default", opt.PKI.Init.Backend), m)
 				if err != nil {
 					return err
 				}
 			} else {
-				fmt.Printf("The PKI backend `%s` is already initialized\n", *backend)
+				fmt.Printf("The PKI backend `%s` is already initialized\n", opt.PKI.Init.Backend)
 			}
 		default:
 			r.ExitWithUsage("pki")
@@ -1125,23 +1204,8 @@ The following options are recognized:
 `,
 	}, func(command string, args ...string) error {
 		rc.Apply()
-		backend := getopt.StringLong("backend", 0, "pki", "PKI backend mountpoint to use when generating the Cert")
-
-		args = append([]string{"safe " + command}, args...)
-		var opts = getopt.CommandLine
-		var parsed []string
-		for {
-			opts.Parse(args)
-			if opts.NArgs() == 0 {
-				break
-			}
-			parsed = append(parsed, opts.Arg(0))
-			args = opts.Args()
-		}
-		args = parsed
-
 		v := connect()
-		pem, err := v.RetrievePem(*backend, "crl")
+		pem, err := v.RetrievePem(opt.CRL.Backend, "crl")
 		if err != nil {
 			return err
 		}
@@ -1187,23 +1251,8 @@ The following options are recognized:
 `,
 	}, func(command string, args ...string) error {
 		rc.Apply()
-		backend := getopt.StringLong("backend", 0, "pki", "PKI backend mountpoint to use when generating the Cert")
-
-		args = append([]string{"safe " + command}, args...)
-		var opts = getopt.CommandLine
-		var parsed []string
-		for {
-			opts.Parse(args)
-			if opts.NArgs() == 0 {
-				break
-			}
-			parsed = append(parsed, opts.Arg(0))
-			args = opts.Args()
-		}
-		args = parsed
-
 		v := connect()
-		pem, err := v.RetrievePem(*backend, "ca")
+		pem, err := v.RetrievePem(opt.CA.Backend, "ca")
 		if err != nil {
 			return err
 		}
@@ -1268,43 +1317,19 @@ be saved as 'combined', and the certificate serial number under 'serial'.
 	}, func(command string, args ...string) error {
 		rc.Apply()
 
-		ttl := getopt.StringLong("ttl", 0, "", "Vault-compatible time specification for the length the Cert is valid for")
-		ip_sans := getopt.StringLong("ip-sans", 0, "", "Comma-separated list of IP SANs")
-		alt_names := getopt.StringLong("alt-names", 0, "", "Comma-separated list of SANs")
-		exclude_cn_from_sans := getopt.BoolLong("exclude-cn-from-sans", 0, "", "Exclude the common_name from DNS or Email SANs")
-		cn := getopt.StringLong("cn", 0, "", "Common Name for the Cert")
-		role := getopt.StringLong("role", 0, "default", "Role to use when creating the Cert")
-		backend := getopt.StringLong("backend", 0, "pki", "PKI backend mountpoint to use when generating the Cert")
-
-		args = append([]string{"safe " + command}, args...)
-
-		var opts = getopt.CommandLine
-		var parsed []string
-		for {
-			opts.Parse(args)
-			if opts.NArgs() == 0 {
-				break
-			}
-			parsed = append(parsed, opts.Arg(0))
-			args = opts.Args()
-		}
-
-		args = parsed
-
-		params := vault.CertOptions{
-			CN:                *cn,
-			TTL:               *ttl,
-			IPSans:            *ip_sans,
-			AltNames:          *alt_names,
-			ExcludeCNFromSans: *exclude_cn_from_sans,
-		}
-
-		if len(args) != 1 || *cn == "" {
+		if len(args) != 1 || opt.Cert.CommonName == "" {
 			r.ExitWithUsage("cert")
 		}
 
 		v := connect()
-		return v.CreateSignedCertificate(*backend, *role, args[0], params)
+		params := vault.CertOptions{
+			CN:                opt.Cert.CommonName,
+			TTL:               opt.Cert.TTL,
+			IPSans:            opt.Cert.IPSans,
+			AltNames:          opt.Cert.AltNames,
+			ExcludeCNFromSans: opt.Cert.ExcludeCN,
+		}
+		return v.CreateSignedCertificate(opt.Cert.Backend, opt.Cert.Role, args[0], params)
 	})
 
 	r.Dispatch("revoke", &Help{
@@ -1329,27 +1354,12 @@ The following options are recognized:
 `,
 	}, func(command string, args ...string) error {
 		rc.Apply()
-		backend := getopt.StringLong("backend", 0, "pki", "PKI backend mountpoint to use when generating the Cert")
-
-		args = append([]string{"safe " + command}, args...)
-		var opts = getopt.CommandLine
-		var parsed []string
-		for {
-			opts.Parse(args)
-			if opts.NArgs() == 0 {
-				break
-			}
-			parsed = append(parsed, opts.Arg(0))
-			args = opts.Args()
-		}
-		args = parsed
-
 		if len(args) != 1 {
 			r.ExitWithUsage("revoke")
 		}
 
 		v := connect()
-		return v.RevokeCertificate(*backend, args[0])
+		return v.RevokeCertificate(opt.Revoke.Backend, args[0])
 	})
 
 	r.Dispatch("curl", &Help{
@@ -1388,77 +1398,56 @@ sent as DATA.
 		return nil
 	})
 
-	insecure := getopt.BoolLong("insecure", 'k', "Disable SSL/TLS certificate validation")
-	showVersion := getopt.BoolLong("version", 'v', "Print version information and exit")
-	showHelp := getopt.BoolLong("help", 'h', "Get some help")
-	opts := getopt.CommandLine
-	opts.Parse(os.Args)
-
-	var args []string
-	if *showHelp {
-		args = []string{"help"}
-
-	} else if *showVersion {
-		args = []string{"version"}
-
-	} else if opts.NArgs() == 0 {
-		args = []string{"help"}
-
-	} else {
-		args = opts.Args()
+	p, err := cli.NewParser(&opt, os.Args[1:])
+	if err != nil {
+		ansi.Fprintf(os.Stderr, "@R{!! %s}\n", err)
+		os.Exit(1)
 	}
 
-	if len(args) == 1 && (args[0] == "commands" || args[0] == "usage") {
-		args = []string{"help", "commands"}
+	if opt.Version {
+		r.Execute("version")
+		return
+	}
+	if opt.Help {
+		r.Execute("help")
+		return
 	}
 
-	os.Unsetenv("SAFE_SKIP_VERIFY")
-	if *insecure {
-		os.Setenv("VAULT_SKIP_VERIFY", "1")
-		os.Setenv("SAFE_SKIP_VERIFY", "1")
-	}
-
-	if err := r.Run(args...); err != nil {
-		if strings.HasPrefix(err.Error(), "USAGE") {
-			ansi.Fprintf(os.Stderr, "@Y{%s}\n", err)
-		} else {
-			ansi.Fprintf(os.Stderr, "@R{!! %s}\n", err)
+	for p.Next() {
+		if opt.Version {
+			r.Execute("version")
+			return
 		}
+		if p.Command == "" || opt.Help {
+			r.Execute("help")
+			continue
+		}
+
+		os.Unsetenv("SAFE_SKIP_VERIFY")
+		if opt.Insecure {
+			os.Setenv("VAULT_SKIP_VERIFY", "1")
+			os.Setenv("SAFE_SKIP_VERIFY", "1")
+		}
+
+		err = r.Execute(p.Command, p.Args...)
+		if err != nil {
+			if strings.HasPrefix(err.Error(), "USAGE") {
+				ansi.Fprintf(os.Stderr, "@Y{%s}\n", err)
+			} else {
+				ansi.Fprintf(os.Stderr, "@R{!! %s}\n", err)
+			}
+			os.Exit(1)
+		}
+	}
+
+	if err = p.Error(); err != nil {
+		ansi.Fprintf(os.Stderr, "@R{!! %s}\n", err)
 		os.Exit(1)
 	}
 }
 
-func shouldRecurse(cmd string, args ...string) (bool, []string) {
-	var recursiveMode, forceMode *bool
-
-	forceMode = getopt.BoolLong("force", 'f', "Disable confirmation prompting")
-	recursiveMode = getopt.BoolLong("recursive", 'R', "Enable recursion")
-
-	args = append([]string{"safe " + cmd}, args...)
-
-	var opts = getopt.CommandLine
-	var parsed []string
-	for {
-		opts.Parse(args)
-		if opts.NArgs() == 0 {
-			break
-		}
-		parsed = append(parsed, opts.Arg(0))
-		args = opts.Args()
-	}
-
-	args = parsed
-
-	if *recursiveMode && !*forceMode {
-		fmt.Printf("Are you sure you wish to recursively %s %s? (y/n) ", cmd, strings.Join(args, " "))
-		reader := bufio.NewReader(os.Stdin)
-		y, _ := reader.ReadString('\n')
-		y = strings.TrimSpace(y)
-		if y != "y" && y != "yes" {
-			fmt.Printf("Aborting...\n")
-			os.Exit(0)
-		}
-	}
-
-	return *recursiveMode, args
+func recursively(cmd string, args ...string) bool {
+	y := prompt.Normal("Recursively %s %s (y/n) ", cmd, strings.Join(args, " "))
+	y = strings.TrimSpace(y)
+	return y == "y" || y == "yes"
 }

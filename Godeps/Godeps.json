@@ -1,14 +1,31 @@
 {
 	"ImportPath": "github.com/starkandwayne/safe",
 	"GoVersion": "go1.7",
-	"GodepVersion": "v74",
-	"Packages": [
-		"./..."
-	],
+	"GodepVersion": "v79",
 	"Deps": [
 		{
 			"ImportPath": "github.com/ghodss/yaml",
 			"Rev": "73d445a93680fa1a78ae23a5839bad48f32ba1ee"
+		},
+		{
+			"ImportPath": "github.com/jhunt/go-cli",
+			"Rev": "e40836d54b6d04105cae2c0343b5c98b730d5387"
+		},
+		{
+			"ImportPath": "github.com/jhunt/go-snapshot",
+			"Rev": "92984e0ad8d83220d55e97554c5ec8d41d8edc18"
+		},
+		{
+			"ImportPath": "github.com/mattn/go-isatty",
+			"Rev": "56b76bdf51f7708750eac80fa38b952bb9f32639"
+		},
+		{
+			"ImportPath": "github.com/starkandwayne/goutils/ansi",
+			"Rev": "1af0d9806cdff1eaa84c422f7bea313f3c4d073f"
+		},
+		{
+			"ImportPath": "github.com/starkandwayne/goutils/tree",
+			"Rev": "1af0d9806cdff1eaa84c422f7bea313f3c4d073f"
 		},
 		{
 			"ImportPath": "github.com/tredoe/osutil/user/crypt",
@@ -21,22 +38,6 @@
 		{
 			"ImportPath": "github.com/tredoe/osutil/user/crypt/sha512_crypt",
 			"Rev": "7d3ee1afa71c90fd1514c8f557ae6c5f414208eb"
-		},
-		{
-			"ImportPath": "github.com/mattn/go-isatty",
-			"Rev": "56b76bdf51f7708750eac80fa38b952bb9f32639"
-		},
-		{
-			"ImportPath": "github.com/pborman/getopt",
-			"Rev": "ec82d864f599c39673eef89f91b93fa5576567a1"
-		},
-		{
-			"ImportPath": "github.com/starkandwayne/goutils/ansi",
-			"Rev": "1af0d9806cdff1eaa84c422f7bea313f3c4d073f"
-		},
-		{
-			"ImportPath": "github.com/starkandwayne/goutils/tree",
-			"Rev": "1af0d9806cdff1eaa84c422f7bea313f3c4d073f"
 		},
 		{
 			"ImportPath": "golang.org/x/crypto/curve25519",

@@ -28,28 +28,23 @@ type Handler func(command string, args ...string) error
 
 type Runner struct {
 	Handlers map[string]Handler
-	Aliases  map[string]string
 	Topics   map[string]*Help
 }
 
 func NewRunner() *Runner {
 	return &Runner{
 		Handlers: make(map[string]Handler),
-		Aliases:  make(map[string]string),
 		Topics:   make(map[string]*Help),
 	}
 }
 
-func (r *Runner) Dispatch(command string, help *Help, fn Handler, aliases ...string) {
+func (r *Runner) Dispatch(command string, help *Help, fn Handler) {
 	if help != nil {
 		help.Description = strings.Trim(help.Description, "\n")
 	}
 
 	r.Handlers[command] = fn
 	r.Topics[command] = help
-	for _, alias := range aliases {
-		r.Aliases[alias] = command
-	}
 }
 
 func (r *Runner) HelpTopic(topic string, help string) {
@@ -116,35 +111,9 @@ func (r *Runner) ExitWithUsage(topic string) {
 	os.Exit(1)
 }
 
-func (r *Runner) Execute(args ...string) error {
-	if len(args) < 1 {
-		return nil
-	}
-	command, args := args[0], args[1:]
+func (r *Runner) Execute(command string, args ...string) error {
 	if fn, ok := r.Handlers[command]; ok {
 		return fn(command, args...)
 	}
-
-	if alias, ok := r.Aliases[command]; ok {
-		if fn, ok := r.Handlers[alias]; ok {
-			return fn(command, args...)
-		}
-	}
-
 	return fmt.Errorf("unknown command '%s'", command)
-}
-
-func (r *Runner) Run(args ...string) error {
-	l := make([]string, 0)
-	for _, arg := range args {
-		if arg == "--" {
-			if err := r.Execute(l...); err != nil {
-				return err
-			}
-			l = make([]string, 0)
-			continue
-		}
-		l = append(l, arg)
-	}
-	return r.Execute(l...)
 }
