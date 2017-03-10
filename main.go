@@ -119,7 +119,7 @@ type Options struct {
 	} `cli:"crl-pem"`
 
 	Cert struct {
-		TTL        string `cli:"--ttle"`
+		TTL        string `cli:"--ttl"`
 		IPSans     string `cli:"--ip-sans"`
 		AltNames   string `cli:"--alt-names"`
 		CommonName string `cli:"--cn"`
