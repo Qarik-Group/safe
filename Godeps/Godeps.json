@@ -9,7 +9,7 @@
 		},
 		{
 			"ImportPath": "github.com/jhunt/go-cli",
-			"Rev": "e40836d54b6d04105cae2c0343b5c98b730d5387"
+			"Rev": "354aa19c19dbfac1dba24c726d86662b6b0320a0"
 		},
 		{
 			"ImportPath": "github.com/jhunt/go-snapshot",
@@ -58,6 +58,10 @@
 		{
 			"ImportPath": "gopkg.in/yaml.v2",
 			"Rev": "f7716cbe52baa25d2e9b0d0da546fcf909fc16b4"
+		},
+		{
+			"ImportPath": "github.com/jhunt/go-cli/vendor/github.com/jhunt/go-snapshot",
+			"Rev": "354aa19c19dbfac1dba24c726d86662b6b0320a0"
 		}
 	]
 }

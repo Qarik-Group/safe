@@ -16,7 +16,7 @@ func reflectOnIt(thing interface{}) (context, error) {
 	}
 
 	c := context{
-		Options: make([]option, 0),
+		Options: make([]*option, 0),
 		Subs:    make(map[string]context),
 	}
 	return reflectSomeMore(c, t, &v)
@@ -25,10 +25,10 @@ func reflectOnIt(thing interface{}) (context, error) {
 func reflectSomeMore(c context, t reflect.Type, v *reflect.Value) (context, error) {
 
 	if t.Kind() != reflect.Struct {
-		return c, fmt.Errorf("cli.Parse() only operates on structures")
+		return c, fmt.Errorf("go-cli only operates on structures")
 	}
 	if !v.CanSet() {
-		return c, fmt.Errorf("cli.Parse() requires a writable structure")
+		return c, fmt.Errorf("go-cli requires a writable structure")
 	}
 
 	for i := 0; i < t.NumField(); i++ {
@@ -43,6 +43,12 @@ func reflectSomeMore(c context, t reflect.Type, v *reflect.Value) (context, erro
 		tag := field.Tag.Get("cli")
 
 		switch field.Type.Kind() {
+		case reflect.Slice:
+			if !v.Field(i).IsValid() {
+				return c, fmt.Errorf("go-cli requires slice ([]thing) options to be initialized first")
+			}
+			fallthrough
+
 		case reflect.String, reflect.Bool,
 			reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 			reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
@@ -59,7 +65,7 @@ func reflectSomeMore(c context, t reflect.Type, v *reflect.Value) (context, erro
 		case reflect.Struct:
 			vfield := v.Field(i)
 			sub := context{
-				Options: make([]option, 0),
+				Options: make([]*option, 0),
 				Subs:    make(map[string]context),
 			}
 			sub, err := reflectSomeMore(sub, vfield.Type(), &vfield)
@@ -76,19 +82,20 @@ func reflectSomeMore(c context, t reflect.Type, v *reflect.Value) (context, erro
 			break
 
 		default:
-			return c, fmt.Errorf("cli.Parse() cannot operate on this type of thing")
+			return c, fmt.Errorf("go-cli cannot operate on this type of thing")
 		}
 	}
 
 	return c, nil
 }
 
-func newOption(kind reflect.Kind, value *reflect.Value, tag string) (option, error) {
+func newOption(kind reflect.Kind, value *reflect.Value, tag string) (*option, error) {
 	splitter := regexp.MustCompile(" *, *")
 	short := regexp.MustCompile("^-([a-zA-Z0-9?])$")
 	long := regexp.MustCompile("^--([a-zA-Z0-9?][a-zA-Z0-9?-]+)$")
 
-	o := option{
+	o := &option{
+		Init:   false,
 		Kind:   kind,
 		Value:  value,
 		Shorts: "",

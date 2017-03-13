@@ -62,6 +62,33 @@ func main() {
 }
 ```
 
+Repeat Flags
+============
+
+If you assign a `cli:"..."` tag to a slice (`[]thing`) in your
+options structure, `go-cli` allows users to specify that flag
+multiple times, and will combine all of the given values, in
+order, into a list and assign that to the slice.
+
+Here, I have to point out that you _can_ supply a default value
+for a repeat flag by assigning to the slice before telling
+`go-cli` about it, but the semantics of override bear some
+thought.
+
+The easiest case to implement is that command-line flags append to
+the default value.  That works great for the no-defaults case,
+since appending to an empty list just allocates a new list.  But
+that means that users of the program can never escape the
+_default_ choices made by the programmer.
+
+Instead, `go-cli` uses the default as-is, until the first time it
+sees an instance of that flag on the actual command line.  At that
+point, it chucks the default out the window, allocates a fresh
+slice, and begins assembling values.
+
+So, remember: **defaults for repeat flags get thrown out upon
+override**!
+
 Reusing Flags
 =============
 
