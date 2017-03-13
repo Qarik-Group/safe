@@ -7,6 +7,9 @@ meta:
 
   initial_version: 0.0.5
 
+  go:
+    force_static_binary: true
+
   aws:
     access_key: (( vault "secret/aws/cfcommunity:access" ))
     secret_key: (( vault "secret/aws/cfcommunity:secret" ))

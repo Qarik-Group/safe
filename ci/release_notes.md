@@ -11,3 +11,6 @@
   not forced, and the operator says "no" at the confirm prompt.
   Instead, they only terminate the current sub-command,and resume
   execution with the next command in the chain.
+
+- `safe` is now built as a static binary, so it can be used in things
+  like alpine-linux with more success.
