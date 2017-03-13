@@ -116,7 +116,7 @@ type Options struct {
 
 	CA struct {
 		Backend string `cli:"--backend"`
-	} `cli:"crl-pem"`
+	} `cli:"ca-pem"`
 
 	Cert struct {
 		TTL        string `cli:"--ttl"`
