@@ -224,6 +224,18 @@ EOF
 
 EOF
 	diffok
+	./safe tree -d secret/tree >t/home/got 2>t/home/errors
+	cat >t/home/want <<EOF
+.
+└── secret/tree
+    ├── beta/
+    └── g/
+        └── a/
+            └── m/
+                └── m/
+
+EOF
+	diffok
 
 	case ${version} in
 	(0.5.0|0.5.2) ;;
