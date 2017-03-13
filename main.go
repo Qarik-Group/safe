@@ -70,8 +70,11 @@ type Options struct {
 	Paste   struct{} `cli:"paste"`
 	Exists  struct{} `cli:"exists, check"`
 	Get     struct{} `cli:"get, read, cat"`
-	Tree    struct{} `cli:"tree"`
 	Paths   struct{} `cli:"paths"`
+
+	Tree struct {
+		HideLeaves bool `cli:"-d, --hide-leaves"`
+	} `cli:"tree"`
 
 	Target struct {
 		Interactive bool `cli:"-i, --interactive"`
@@ -675,19 +678,16 @@ to get your bearings.
 `,
 	}, func(command string, args ...string) error {
 		rc.Apply()
-		opt := vault.TreeOptions{
-			UseANSI: true,
-		}
-		if len(args) > 0 && args[0] == "-d" {
-			args = args[1:]
-			opt.HideLeaves = true
+		opts := vault.TreeOptions{
+			UseANSI:    true,
+			HideLeaves: opt.Tree.HideLeaves,
 		}
 		if len(args) == 0 {
 			args = append(args, "secret")
 		}
 		v := connect()
 		for _, path := range args {
-			tree, err := v.Tree(path, opt)
+			tree, err := v.Tree(path, opts)
 			if err != nil {
 				return err
 			}
