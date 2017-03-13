@@ -245,6 +245,18 @@ EOF
 
 EOF
 	diffok
+	./safe tree -d secret/tree >t/home/got 2>t/home/errors
+	cat >t/home/want <<EOF
+.
+└── secret/tree
+    ├── beta/
+    └── g/
+        └── a/
+            └── m/
+                └── m/
+
+EOF
+	diffok
 
 	case ${version} in
 	(0.5.0|0.5.2) ;;
@@ -294,6 +306,146 @@ EOF
 	./safe export secret/import >t/home/got 2>t/home/errors
 	yamlok
 
+	testing ${version} x509 commands
+	./safe x509 issue                                                ; exitok $? 1 # need a path
+	./safe x509 issue --signed-by secret/enoent                      ; exitok $? 1 # still need a name...
+	./safe x509 issue --signed-by secret/enoent secret/cert          ; exitok $? 1 # ca must exist
+
+	./safe x509 issue secret/x509/self-signed --name www.example.com ; exitok $? 0
+	./safe x509 validate secret/x509/self-signed                     ; exitok $? 0
+	./safe exists secret/x509/self-signed:certificate                ; exitok $? 0
+	./safe exists secret/x509/self-signed:key                        ; exitok $? 0
+	./safe exists secret/x509/self-signed:combined                   ; exitok $? 0
+	./safe exists secret/x509/self-signed:serial                     ; exitok $? 1  # not a CA
+	./safe exists secret/x509/self-signed:crl                        ; exitok $? 1  # not a CA
+	./safe x509 check secret/x509/self-signed                        ; exitok $? 0
+	./safe x509 check secret/x509/self-signed --for www.example.com  ; exitok $? 0
+	./safe x509 check secret/x509/self-signed --for mail.example.com ; exitok $? 1
+	./safe x509 check secret/x509/self-signed --for test@example.com ; exitok $? 1
+	./safe x509 check secret/x509/self-signed --for 10.40.5.6        ; exitok $? 1
+
+	./safe x509 issue secret/fail-without-name                       ; exitok $? 1
+	./safe exists secret/fail-without-name:certificate               ; exitok $? 1
+	./safe exists secret/fail-without-name:key                       ; exitok $? 1
+	./safe exists secret/fail-without-name:combined                  ; exitok $? 1
+	./safe exists secret/fail-without-name:serial                    ; exitok $? 1
+	./safe exists secret/fail-without-name:crl                       ; exitok $? 1
+
+	./safe x509 issue secret/x509/ca --name ca.example.com --ca      ; exitok $? 0
+	./safe exists secret/x509/ca:certificate                         ; exitok $? 0
+	./safe exists secret/x509/ca:key                                 ; exitok $? 0
+	./safe exists secret/x509/ca:combined                            ; exitok $? 0
+	./safe exists secret/x509/ca:serial                              ; exitok $? 0 # is a CA
+	./safe exists secret/x509/ca:crl                                 ; exitok $? 0 # is a CA
+	./safe x509 validate secret/x509/ca --ca                         ; exitok $? 0
+	./safe x509 validate secret/x509/ca --not-expired                ; exitok $? 0
+	./safe x509 validate secret/x509/ca --for ca.example.com         ; exitok $? 0
+	./safe x509 validate secret/x509/ca --for www.example.com        ; exitok $? 1
+	./safe x509 validate secret/x509/ca --signed-by secret/x509/ca \
+	                                    --not-revoked                ; exitok $? 0
+
+	./safe x509 check                                                ; exitok $? 1 # need a path
+	./safe x509 check --signed-by secret/enoent                      ; exitok $? 1 # still need a name...
+	./safe x509 check --signed-by secret/enoent secret/cert          ; exitok $? 1 # ca must exist
+	./safe x509 check --signed-by secret/x509/ca secret/enoent       ; exitok $? 1 # cert must exist
+
+	./safe x509 issue secret/x509/signed --signed-by secret/x509/ca --name mail.example.com
+	./safe x509 validate secret/x509/signed --signed-by secret/x509/ca \
+	                                        --not-expired \
+	                                        --not-revoked \
+	                                        --for mail.example.com   ; exitok $? 0
+
+	./safe x509 revoke                                               ; exitok $? 1 # need a path
+	./safe x509 revoke --signed-by secret/x509/ca                    ; exitok $? 1 # still need a path...
+	./safe x509 revoke --signed-by secret/x509/ca secret/enoent      ; exitok $? 1 # path must exist
+	./safe x509 revoke --signed-by secret/enoent secret/x509/signed  ; exitok $? 1 # ca must exist
+
+	./safe x509 crl --renew                                          ; exitok $? 1 # need a path
+	./safe x509 crl secret/x509/ca                                   ; exitok $? 1 # need --renew
+	./safe x509 crl --renew secret/enoent                            ; exitok $? 1 # path must exist
+	./safe x509 crl --renew secret/x509/signed                       ; exitok $? 1 # need a ca
+	./safe x509 crl --renew secret/x509/ca                           ; exitok $? 0
+
+	./safe x509 revoke secret/x509/signed --signed-by secret/x509/ca ; exitok $? 0
+	./safe x509 validate secret/x509/signed --signed-by secret/x509/ca \
+	                                        --not-expired \
+	                                        --revoked \
+	                                        --for mail.example.com   ; exitok $? 0
+
+	./safe x509 issue secret/x509/multi --signed-by secret/x509/ca \
+	                                    --name dns.example.com \
+	                                    --name *.dns.example.com \
+	                                    --name 10.255.6.7 \
+	                                    --name 10.255.6.8 \
+	                                    --name admin@example.com \
+	                                    --name safe.vault@example.com ; exitok $? 0
+	./safe x509 check secret/x509/multi --signed-by secret/x509/ca \
+	                                    --not-expired \
+	                                    --not-revoked \
+	                                    --for dns.example.com \
+	                                    --for 10.255.6.7 \
+	                                    --for 10.255.6.8 \
+	                                    --for admin@example.com \
+	                                    --for safe.vault@example.com ; exitok $? 0
+	./safe x509 check secret/x509/multi --for whatever.dns.example.com \
+	                                    --for anything.dns.example.com \
+	                                    --for x.dns.example.com      ; exitok $? 0
+	./safe x509 check secret/x509/multi --for x.y.dns.example.com    ; exitok $? 1
+	./safe x509 check secret/x509/multi --for x.com                  ; exitok $? 1
+
+	./safe x509 issue secret/x509/wild --signed-by secret/x509/ca \
+	                                   --name cn.tld \
+	                                   --name '*.tld' \
+	                                   --name '*.*.tld' \
+	                                   --name '*.*.*.tld'            ; exitok $? 0
+	./safe x509 check secret/x509/wild --signed-by secret/x509/ca \
+	                                   --for cn.tld \
+	                                   --for x.tld \
+	                                   --for x.y.tld \
+	                                   --for x.y.z.tld               ; exitok $? 0
+	./safe x509 check secret/x509/wild --signed-by secret/x509/ca \
+	                                   --for tld                     ; exitok $? 1
+	./safe x509 check secret/x509/wild --signed-by secret/x509/ca \
+	                                   --for w.x.y.z.tld             ; exitok $? 1
+
+	./safe x509 issue secret/x509/weak --bits 1024 -n weak.tld       ; exitok $? 0
+	./safe x509 check secret/x509/weak --bits 1024                   ; exitok $? 0
+	./safe x509 check secret/x509/weak --bits 2048                   ; exitok $? 1
+	./safe x509 check secret/x509/weak --bits 4096                   ; exitok $? 1
+	./safe x509 check secret/x509/weak --bits 1024 \
+	                                   --bits 2048 \
+	                                   --bits 4096                   ; exitok $? 0
+
+	./safe x509 issue secret/x509/meh --bits 2048 -n meh.tld         ; exitok $? 0
+	./safe x509 check secret/x509/meh --bits 1024                    ; exitok $? 1
+	./safe x509 check secret/x509/meh --bits 2048                    ; exitok $? 0
+	./safe x509 check secret/x509/meh --bits 4096                    ; exitok $? 1
+	./safe x509 check secret/x509/meh --bits 1024 \
+	                                  --bits 2048 \
+	                                  --bits 4096                    ; exitok $? 0
+
+	./safe x509 issue secret/x509/strong --bits 4096 -n strong.tld   ; exitok $? 0
+	./safe x509 check secret/x509/strong --bits 1024                 ; exitok $? 1
+	./safe x509 check secret/x509/strong --bits 2048                 ; exitok $? 1
+	./safe x509 check secret/x509/strong --bits 4096                 ; exitok $? 0
+	./safe x509 check secret/x509/strong --bits 1024 \
+	                                     --bits 2048 \
+	                                     --bits 4096                 ; exitok $? 0
+
+	./safe x509 issue secret/x509/bad --bits 1000000000 -n one.mil   ; exitok $? 1
+
+	./safe x509 check secret/x509/weak \
+	                  secret/x509/meh \
+	                  secret/x509/strong                             ; exitok $? 0
+
+	./safe x509 check secret/x509/weak \
+	                  secret/x509/ENOENT \
+	                  secret/x509/strong                             ; exitok $? 1
+
+	./safe x509 issue secret/x509/imposter --name x.y.z --ca         ; exitok $? 0
+	./safe x509 check secret/x509/imposter --ca                      ; exitok $? 0
+	./safe x509 issue secret/x509/imposter --name a.b.c              ; exitok $? 0 # not a CA, now
+	./safe x509 check secret/x509/imposter --ca                      ; exitok $? 1 # not a CA
 
 	export HOME=${old_home}
 	kill $vault_pid

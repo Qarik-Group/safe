@@ -333,6 +333,33 @@ Echo the arguments, space-separated, as a single line to the
 terminal.  This is a convenience helper for long pipelines of
 chained commands.
 
+### x509 issue \[OPTIONS\] --name cn.example.com path
+
+Issues a new X.509 TLS/SSL certificate, and stores the new RSA
+private key and the certificate in the Vault at _path_, in PEM
+format.
+
+### x509 revoke \[OPTIONS\] --signed-by path/to/ca path/to/cert
+
+Revoke a certificate that was signed by a Certificate Authority.
+The private key for the CA must be present in the Vault for this
+to work.  Revoked certificates will be appended to the CA's
+certificate revocation list (CRL), stored at `path/to/ca:crl`
+
+### x509 validate \[OPTIONS\] path
+
+Run a variety of validation checks against a certificate in the
+Vault.  In its simplest form, without arguments, this verifies
+that the private key stored at `path:key` matches the certificate
+stored at `path:certificate`.  Options control more powerful
+validations, like checking for revocation, SAN validity, and
+expiry.
+
+### x509 crl --renew path
+
+Renews (re-signs) the certificate authority at `path`, without
+affecting the list of revoked certificates.
+
 ### export path \[path ...\]
 
 Export the given subtree(s) in a format suitable for migration

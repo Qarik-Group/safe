@@ -8,6 +8,7 @@ import (
 )
 
 type option struct {
+	Init    bool
 	Kind    reflect.Kind
 	Value   *reflect.Value
 	Default *string
@@ -17,11 +18,11 @@ type option struct {
 
 type context struct {
 	Command string /* canonical name */
-	Options []option
+	Options []*option
 	Subs    map[string]context
 }
 
-func (c context) findLong(subs []string, name string) (option, error) {
+func (c context) findLong(subs []string, name string) (*option, error) {
 	/* try the options on this level */
 	for _, o := range c.Options {
 		for _, l := range o.Longs {
@@ -33,7 +34,7 @@ func (c context) findLong(subs []string, name string) (option, error) {
 
 	/* if we have no more sub-commands to descend into, we're hooped */
 	if len(subs) == 0 {
-		return option{}, fmt.Errorf("unrecognized flag `--%s`", name)
+		return nil, fmt.Errorf("unrecognized flag `--%s`", name)
 	}
 
 	if sub, ok := c.Subs[subs[0]]; ok {
@@ -41,10 +42,10 @@ func (c context) findLong(subs []string, name string) (option, error) {
 	}
 
 	/* sub-command must not exist; this is probably a bug in `cli` itself... */
-	return option{}, fmt.Errorf("unrecognized sub-command `%s`", subs[0])
+	return nil, fmt.Errorf("unrecognized sub-command `%s`", subs[0])
 }
 
-func (c context) findShort(subs []string, name string) (option, error) {
+func (c context) findShort(subs []string, name string) (*option, error) {
 	/* try the options on this level */
 	for _, o := range c.Options {
 		if strings.IndexAny(o.Shorts, name) >= 0 {
@@ -54,7 +55,7 @@ func (c context) findShort(subs []string, name string) (option, error) {
 
 	/* if we have no more sub-commands to descend into, we're hooped */
 	if len(subs) == 0 {
-		return option{}, fmt.Errorf("unrecognized flag `-%s`", name)
+		return nil, fmt.Errorf("unrecognized flag `-%s`", name)
 	}
 
 	if sub, ok := c.Subs[subs[0]]; ok {
@@ -62,79 +63,89 @@ func (c context) findShort(subs []string, name string) (option, error) {
 	}
 
 	/* sub-command must not exist; this is probably a bug in `cli` itself... */
-	return option{}, fmt.Errorf("unrecognized sub-command `%s`", subs[0])
+	return nil, fmt.Errorf("unrecognized sub-command `%s`", subs[0])
 }
 
-func (o option) enable(on bool) {
+func (o *option) enable(on bool) {
 	o.Value.Set(reflect.ValueOf(on))
 }
 
-func (o option) set(raw string) error {
+func (o *option) set(raw string) error {
+	var (
+		v   reflect.Value
+		err error
+	)
+
+	if o.Kind == reflect.Slice {
+		v, err = valify(raw, o.Value.Type().Elem().Kind())
+		if !o.Init {
+			o.Init = true
+			v = reflect.Append(reflect.MakeSlice(o.Value.Type(), 0, 0), v)
+		} else {
+			v = reflect.Append(*o.Value, v)
+		}
+	} else {
+		v, err = valify(raw, o.Kind)
+	}
+	if err != nil {
+		return err
+	}
+
+	o.Value.Set(v)
+	return nil
+}
+
+func valify(raw string, t reflect.Kind) (reflect.Value, error) {
 	var (
 		err error
 		v   interface{}
 	)
 
-	switch o.Kind {
+	switch t {
 	case reflect.String:
 		v = raw
-		break
 
 	case reflect.Int:
 		v, err = intify(raw, 0)
-		break
 
 	case reflect.Int8:
 		v, err = intify(raw, 8)
-		break
 
 	case reflect.Int16:
 		v, err = intify(raw, 16)
-		break
 
 	case reflect.Int32:
 		v, err = intify(raw, 32)
-		break
 
 	case reflect.Int64:
 		v, err = intify(raw, 64)
-		break
 
 	case reflect.Uint:
 		v, err = uintify(raw, 0)
-		break
 
 	case reflect.Uint8:
 		v, err = uintify(raw, 8)
-		break
 
 	case reflect.Uint16:
 		v, err = uintify(raw, 16)
-		break
 
 	case reflect.Uint32:
 		v, err = uintify(raw, 32)
-		break
 
 	case reflect.Uint64:
 		v, err = uintify(raw, 64)
-		break
 
 	case reflect.Float32:
 		v, err = floatify(raw, 32)
-		break
 
 	case reflect.Float64:
 		v, err = floatify(raw, 64)
-		break
 	}
 
 	if err != nil {
-		return err
+		return reflect.ValueOf(nil), err
 	}
-
-	o.Value.Set(reflect.ValueOf(v))
-	return nil
+	return reflect.ValueOf(v), nil
 }
 
 func intify(s string, w int) (interface{}, error) {
