@@ -1,24 +1,33 @@
 #!/bin/bash
 set -u
 
-declare -a versions=(
-	0.5.0
-	0.5.2
-	0.6.4
-	0.6.5
-)
 rc=0
 platform=
 arch=amd64
 
 case $OSTYPE in
-(darwin*) platform=darwin ;;
-(linux*)  platform=linux  ;;
+(darwin*)
+	platform=darwin
+	declare -a versions=(
+		0.6.5
+	)
+	;;
+(linux*)
+	platform=linux
+	declare -a versions=(
+		0.5.0
+		0.5.2
+		0.6.4
+		0.6.5
+	)
+	;;
 (*)
 	echo >&2 "UNRECOGNIZED OSTYPE '$OSTYPE'"
 	exit 1
 	;;
 esac
+
+
 
 bail() {
 	echo >&2 $*
