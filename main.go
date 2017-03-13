@@ -60,7 +60,6 @@ type Options struct {
 	/* need option-less commands as well (FIXME) */
 
 	Targets struct{} `cli:"targets"`
-	Target  struct{} `cli:"target"`
 	Status  struct{} `cli:"status"`
 	Unseal  struct{} `cli:"unseal"`
 	Seal    struct{} `cli:"seal"`
@@ -73,6 +72,10 @@ type Options struct {
 	Get     struct{} `cli:"get, read, cat"`
 	Tree    struct{} `cli:"tree"`
 	Paths   struct{} `cli:"paths"`
+
+	Target struct {
+		Interactive bool `cli:"-i, --interactive"`
+	} `cli:"target"`
 
 	Delete struct {
 		Recurse bool `cli:"-R, -r, --recurse"`
@@ -222,7 +225,7 @@ func main() {
 
 	r.Dispatch("target", &Help{
 		Summary: "Target a new Vault, or set your current Vault target",
-		Usage:   "safe [-k] target [URL] [ALIAS]",
+		Usage:   "safe [-k] target [URL] [ALIAS] | safe target -i",
 		Type:    AdministrativeCommand,
 	}, func(command string, args ...string) error {
 		cfg := rc.Apply()
@@ -231,6 +234,45 @@ func main() {
 			skipverify = true
 		}
 
+		if opt.Target.Interactive {
+			for {
+				if len(cfg.Targets) == 0 {
+					ansi.Fprintf(os.Stderr, "@R{No Vaults have been targeted yet.}\n\n")
+					ansi.Fprintf(os.Stderr, "You will need to target a Vault manually first.\n\n")
+					ansi.Fprintf(os.Stderr, "Try something like this:\n")
+					ansi.Fprintf(os.Stderr, "     @C{safe target ops https://address.of.your.vault}\n")
+					ansi.Fprintf(os.Stderr, "     @C{safe auth (github|token|ldap)}\n")
+					ansi.Fprintf(os.Stderr, "\n")
+					os.Exit(1)
+				}
+				r.Execute("targets")
+				ansi.Fprintf(os.Stderr, "\n")
+				if cfg.Current == "" {
+					ansi.Fprintf(os.Stderr, "@R{No Vault currently targeted}\n")
+				} else {
+					skip := ""
+					if !cfg.Verified() {
+						skip = " (skipping TLS certificate verification)"
+					}
+					ansi.Fprintf(os.Stderr, "Currently targeting @C{%s} at @C{%s}@R{%s}\n", cfg.Current, cfg.URL(), skip)
+				}
+
+				ansi.Fprintf(os.Stderr, "\nWhich Vault would you like to target?\n")
+				t := prompt.Normal("@G{%s> }", cfg.Current)
+				err := cfg.SetCurrent(t, skipverify)
+				if err != nil {
+					ansi.Fprintf(os.Stderr, "@R{%s}\n", err)
+					continue
+				}
+				err = cfg.Write()
+				if err != nil {
+					return err
+				}
+
+				opt.Target.Interactive = false
+				return r.Execute("target")
+			}
+		}
 		if len(args) == 0 {
 			if cfg.Current == "" {
 				ansi.Fprintf(os.Stderr, "@R{No Vault currently targeted}\n")
@@ -244,44 +286,6 @@ func main() {
 			return nil
 		}
 		if len(args) == 1 {
-			if args[0] == "-i" || args[0] == "--interactive" {
-				for {
-					if len(cfg.Targets) == 0 {
-						ansi.Fprintf(os.Stderr, "@R{No Vaults have been targeted yet.}\n\n")
-						ansi.Fprintf(os.Stderr, "You will need to target a Vault manually first.\n\n")
-						ansi.Fprintf(os.Stderr, "Try something like this:\n")
-						ansi.Fprintf(os.Stderr, "     @C{safe target ops https://address.of.your.vault}\n")
-						ansi.Fprintf(os.Stderr, "     @C{safe auth (github|token|ldap)}\n")
-						ansi.Fprintf(os.Stderr, "\n")
-						os.Exit(1)
-					}
-					r.Execute("targets")
-					ansi.Fprintf(os.Stderr, "\n")
-					if cfg.Current == "" {
-						ansi.Fprintf(os.Stderr, "@R{No Vault currently targeted}\n")
-					} else {
-						skip := ""
-						if !cfg.Verified() {
-							skip = " (skipping TLS certificate verification)"
-						}
-						ansi.Fprintf(os.Stderr, "Currently targeting @C{%s} at @C{%s}@R{%s}\n", cfg.Current, cfg.URL(), skip)
-					}
-
-					ansi.Fprintf(os.Stderr, "\nWhich Vault would you like to target?\n")
-					t := prompt.Normal("@G{%s> }", cfg.Current)
-					err := cfg.SetCurrent(t, skipverify)
-					if err != nil {
-						ansi.Fprintf(os.Stderr, "@R{%s}\n", err)
-						continue
-					}
-					err = cfg.Write()
-					if err != nil {
-						return err
-					}
-
-					return r.Execute("target")
-				}
-			}
 			err := cfg.SetCurrent(args[0], skipverify)
 			if err != nil {
 				return err
@@ -1082,7 +1086,7 @@ Supported formats:
 		return v.Write(path, s)
 	})
 
-	r.Dispatch("pki", &Help{
+	r.Dispatch("pki init", &Help{
 		Summary: "Configure the PKI backend on the target Vault",
 		Usage:   "safe pki init [OPTIONS]",
 		Type:    DestructiveCommand,
@@ -1099,85 +1103,80 @@ The following options are recognized:
   --backend      Specify the PKI backend mountpoint to initialize. Defaults to 'pki'.
 `,
 	}, func(command string, args ...string) error {
-		switch args[0] {
-		case "init":
-			rc.Apply()
-			v := connect()
-			params := make(map[string]interface{})
+		rc.Apply()
+		v := connect()
+		params := make(map[string]interface{})
 
-			inAltUnits := regexp.MustCompile(`^(\d+)([dDyY])$`)
-			if match := inAltUnits.FindStringSubmatch(opt.PKI.Init.TTL); len(match) == 3 {
-				u, err := strconv.ParseUint(match[1], 10, 16)
-				if err != nil {
-					return err
-				}
-
-				switch match[2] {
-				case "d":
-					fallthrough
-				case "D":
-					opt.PKI.Init.TTL = fmt.Sprintf("%dh", u*24)
-
-				case "y":
-					fallthrough
-				case "Y":
-					opt.PKI.Init.TTL = fmt.Sprintf("%dh", u*365*24)
-
-				default:
-					return fmt.Errorf("Unrecognized time unit '%s'\n", match[2])
-				}
-			}
-			params["max_lease_ttl"] = opt.PKI.Init.TTL
-
-			mounted, err := v.IsMounted("pki", opt.PKI.Init.Backend)
+		inAltUnits := regexp.MustCompile(`^(\d+)([dDyY])$`)
+		if match := inAltUnits.FindStringSubmatch(opt.PKI.Init.TTL); len(match) == 3 {
+			u, err := strconv.ParseUint(match[1], 10, 16)
 			if err != nil {
 				return err
 			}
 
-			/* Mount the PKI backend to `pki/` */
-			err = v.Mount("pki", opt.PKI.Init.Backend, params)
+			switch match[2] {
+			case "d":
+				fallthrough
+			case "D":
+				opt.PKI.Init.TTL = fmt.Sprintf("%dh", u*24)
+
+			case "y":
+				fallthrough
+			case "Y":
+				opt.PKI.Init.TTL = fmt.Sprintf("%dh", u*365*24)
+
+			default:
+				return fmt.Errorf("Unrecognized time unit '%s'\n", match[2])
+			}
+		}
+		params["max_lease_ttl"] = opt.PKI.Init.TTL
+
+		mounted, err := v.IsMounted("pki", opt.PKI.Init.Backend)
+		if err != nil {
+			return err
+		}
+
+		/* Mount the PKI backend to `pki/` */
+		err = v.Mount("pki", opt.PKI.Init.Backend, params)
+		if err != nil {
+			return err
+		}
+
+		if !mounted {
+			/* First Time! */
+			common_name := prompt.Normal("@C{Common Name (FQDN)}: ")
+
+			/* Generate the CA certificate */
+			m := make(map[string]string)
+			m["common_name"] = common_name
+			m["ttl"] = opt.PKI.Init.TTL
+
+			err := v.Configure(fmt.Sprintf("%s/root/generate/internal", opt.PKI.Init.Backend), m)
 			if err != nil {
 				return err
 			}
 
-			if !mounted {
-				/* First Time! */
-				common_name := prompt.Normal("@C{Common Name (FQDN)}: ")
+			/* Advertise the CRL / Issuer URLs */
+			m = make(map[string]string)
+			m["issuing_certificates"] = fmt.Sprintf("%s/v1/%s/ca", v.URL, opt.PKI.Init.Backend)
+			m["crl_distribution_points"] = fmt.Sprintf("%s/v1/%s/crl", v.URL, opt.PKI.Init.Backend)
 
-				/* Generate the CA certificate */
-				m := make(map[string]string)
-				m["common_name"] = common_name
-				m["ttl"] = opt.PKI.Init.TTL
-
-				err := v.Configure(fmt.Sprintf("%s/root/generate/internal", opt.PKI.Init.Backend), m)
-				if err != nil {
-					return err
-				}
-
-				/* Advertise the CRL / Issuer URLs */
-				m = make(map[string]string)
-				m["issuing_certificates"] = fmt.Sprintf("%s/v1/%s/ca", v.URL, opt.PKI.Init.Backend)
-				m["crl_distribution_points"] = fmt.Sprintf("%s/v1/%s/crl", v.URL, opt.PKI.Init.Backend)
-
-				err = v.Configure(fmt.Sprintf("%s/config/urls", opt.PKI.Init.Backend), m)
-				if err != nil {
-					return err
-				}
-
-				/* Set up a default role, with the same domain as the CA */
-				m = make(map[string]string)
-				m["allow_any_name"] = "true"
-				m["max_ttl"] = opt.PKI.Init.TTL
-
-				err = v.Configure(fmt.Sprintf("%s/roles/default", opt.PKI.Init.Backend), m)
-				if err != nil {
-					return err
-				}
-			} else {
-				fmt.Printf("The PKI backend `%s` is already initialized\n", opt.PKI.Init.Backend)
+			err = v.Configure(fmt.Sprintf("%s/config/urls", opt.PKI.Init.Backend), m)
+			if err != nil {
+				return err
 			}
-		default:
-			r.ExitWithUsage("pki")
+
+			/* Set up a default role, with the same domain as the CA */
+			m = make(map[string]string)
+			m["allow_any_name"] = "true"
+			m["max_ttl"] = opt.PKI.Init.TTL
+
+			err = v.Configure(fmt.Sprintf("%s/roles/default", opt.PKI.Init.Backend), m)
+			if err != nil {
+				return err
+			}
+		} else {
+			fmt.Printf("The PKI backend `%s` is already initialized\n", opt.PKI.Init.Backend)
 		}
 		return nil
 	})
