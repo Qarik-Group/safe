@@ -724,7 +724,7 @@ to get your bearings.
 		for _, path := range args {
 			_, key := vault.ParsePath(path)
 			//Ignore -R if path has a key because that makes no sense
-			if opt.Delete.Recurse && key != "" {
+			if opt.Delete.Recurse && key == "" {
 				if !opt.Delete.Force && !recursively("delete", args...) {
 					return nil /* skip this command, process the next */
 				}
@@ -812,6 +812,7 @@ to get your bearings.
 		}
 
 		v := connect()
+
 		if opt.Move.Recurse {
 			if !opt.Move.Force && !recursively("move", args...) {
 				return nil /* skip this command, process the next */

@@ -10,6 +10,10 @@ import (
 	"github.com/starkandwayne/safe/prompt"
 )
 
+func warn(warning string, args ...interface{}) {
+	ansi.Fprintf(os.Stderr, "warning: @Y{%s}\n", fmt.Sprintf(warning, args...))
+}
+
 func fail(err error) {
 	if err != nil {
 		ansi.Fprintf(os.Stderr, "failed: @R{%s}\n", err)
