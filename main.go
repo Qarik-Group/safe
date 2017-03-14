@@ -534,6 +534,27 @@ is NOT obscured.
 		return v.Write(path, s)
 	})
 
+	writeHelper := func(prompt bool, command string, args ...string) error {
+		rc.Apply()
+		if len(args) < 2 {
+			r.ExitWithUsage(command)
+		}
+		v := connect()
+		path, args := args[0], args[1:]
+		s, err := v.Read(path)
+		if err != nil && !vault.IsNotFound(err) {
+			return err
+		}
+		for _, set := range args {
+			k, v, err := keyPrompt(set, prompt, true)
+			if err != nil {
+				return err
+			}
+			s.Set(k, v)
+		}
+		return v.Write(path, s)
+	}
+
 	r.Dispatch("set", &Help{
 		Summary: "Create or update a secret",
 		Usage:   "safe set PATH NAME=[VALUE] [NAME ...]",
@@ -549,24 +570,8 @@ you don't want the value to show up in your ~/.bash_history, or in the
 process table.
 `,
 	}, func(command string, args ...string) error {
-		rc.Apply()
-		if len(args) < 2 {
-			r.ExitWithUsage("set")
-		}
-		v := connect()
-		path, args := args[0], args[1:]
-		s, err := v.Read(path)
-		if err != nil && !vault.IsNotFound(err) {
-			return err
-		}
-		for _, set := range args {
-			k, v, err := keyPrompt(set, true, true)
-			if err != nil {
-				return err
-			}
-			s.Set(k, v)
-		}
-		return v.Write(path, s)
+		//writeHelper is defined right above this Dispatch
+		return writeHelper(true, "set", args...)
 	})
 
 	r.Dispatch("paste", &Help{
@@ -575,7 +580,7 @@ process table.
 		Type:    DestructiveCommand,
 		Description: `
 Works just like 'safe set', updating a single path in the Vault with new or
-updated named attributes.  Any eisting name/value pairs not specified on the
+updated named attributes.  Any existing name/value pairs not specified on the
 command-line will be left alone, with their original values.
 
 You will be prompted to provide any values that are omitted, but unlike the
@@ -584,24 +589,9 @@ sense when you are pasting in credentials from an external password manager
 like 1password or Lastpass.
 `,
 	}, func(command string, args ...string) error {
-		rc.Apply()
-		if len(args) < 2 {
-			r.ExitWithUsage("paste")
-		}
-		v := connect()
-		path, args := args[0], args[1:]
-		s, err := v.Read(path)
-		if err != nil && !vault.IsNotFound(err) {
-			return err
-		}
-		for _, set := range args {
-			k, v, err := keyPrompt(set, false, true)
-			if err != nil {
-				return err
-			}
-			s.Set(k, v)
-		}
-		return v.Write(path, s)
+		//writeHelper is defined right about set, which is defined right about this
+		//Dispatch call.
+		return writeHelper(false, "paste", args...)
 	})
 
 	r.Dispatch("exists", &Help{
@@ -732,7 +722,9 @@ to get your bearings.
 		}
 		v := connect()
 		for _, path := range args {
-			if opt.Delete.Recurse {
+			_, key := vault.ParsePath(path)
+			//Ignore -R if path has a key because that makes no sense
+			if opt.Delete.Recurse && key != "" {
 				if !opt.Delete.Force && !recursively("delete", args...) {
 					return nil /* skip this command, process the next */
 				}

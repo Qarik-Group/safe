@@ -346,22 +346,32 @@ func (v *Vault) Write(path string, s *Secret) error {
 	return nil
 }
 
+//DeleteTree recursively deletes the leaf nodes beneath the given root until
+// the root has no children, and then deletes that.
 func (v *Vault) DeleteTree(root string) error {
 	tree, err := v.Tree(root, TreeOptions{})
 	if err != nil {
 		return err
 	}
 	for _, path := range tree.Paths("/") {
-		err = v.Delete(path)
+		err = v.deleteEntireSecret(path)
 		if err != nil {
 			return err
 		}
 	}
-	return v.Delete(root)
+	return v.deleteEntireSecret(root)
 }
 
 // Delete removes the secret stored at the specified path.
 func (v *Vault) Delete(path string) error {
+	secret, key := ParsePath(path)
+	if key == "" {
+		return v.deleteEntireSecret(path)
+	}
+	return v.deleteSpecificKey(secret, key)
+}
+
+func (v *Vault) deleteEntireSecret(path string) error {
 	req, err := http.NewRequest("DELETE", v.url("/v1/%s", path), nil)
 	if err != nil {
 		return err
@@ -381,6 +391,19 @@ func (v *Vault) Delete(path string) error {
 	}
 
 	return nil
+}
+
+func (v *Vault) deleteSpecificKey(path, key string) error {
+	secret, err := v.Read(path)
+	if err != nil {
+		return err
+	}
+	deleted := secret.Delete(key)
+	if !deleted {
+		return fmt.Errorf("No key `%s` for secret at path `%s`", key, path)
+	}
+	err = v.Write(path, secret)
+	return err
 }
 
 // Copy copies secrets from one path to another.
