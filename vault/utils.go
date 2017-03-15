@@ -12,3 +12,10 @@ func ParsePath(path string) (secret, key string) {
 	}
 	return
 }
+
+// PathHasKey returns true if the given path has a key specified in its syntax.
+// False otherwise.
+func PathHasKey(path string) bool {
+	_, key := ParsePath(path)
+	return key != ""
+}

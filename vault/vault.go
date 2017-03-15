@@ -407,14 +407,59 @@ func (v *Vault) deleteSpecificKey(path, key string) error {
 }
 
 // Copy copies secrets from one path to another.
+// With a secret:key specified: key -> key is good.
+// key -> no-key is okay - we assume to keep old key name
+// no-key -> key is bad. That makes no sense and the user should feel bad.
+// Returns KeyNotFoundError if there is no such specified key in the secret at oldpath
 func (v *Vault) Copy(oldpath, newpath string) error {
-	secret, err := v.Read(oldpath)
+	srcPath, _ := ParsePath(oldpath)
+	srcSecret, err := v.Read(srcPath)
 	if err != nil {
 		return err
 	}
-	return v.Write(newpath, secret)
+
+	var copyFn func(string, string, *Secret) error
+	if PathHasKey(oldpath) {
+		copyFn = v.copyKey
+	} else {
+		copyFn = v.copyEntireSecret
+	}
+
+	return copyFn(oldpath, newpath, srcSecret)
 }
 
+func (v *Vault) copyEntireSecret(oldpath, newpath string, src *Secret) (err error) {
+	if PathHasKey(newpath) {
+		return fmt.Errorf("Cannot move full secret `%s` into specific key `%s`", oldpath, newpath)
+	}
+	return v.Write(newpath, src)
+}
+
+func (v *Vault) copyKey(oldpath, newpath string, src *Secret) (err error) {
+	_, srcKey := ParsePath(oldpath)
+	if !src.Has(srcKey) {
+		return NewKeyNotFoundError(oldpath, srcKey)
+	}
+
+	dstPath, dstKey := ParsePath(newpath)
+	//If destination has no key, then assume to give it the same key as the src
+	if dstKey == "" {
+		dstKey = srcKey
+	}
+	dst, err := v.Read(dstPath)
+	if err != nil {
+		if !IsSecretNotFound(err) {
+			return err
+		}
+		dst = NewSecret() //If no secret is already at the dst, initialize a new one
+	}
+	dst.Set(dstKey, src.Get(srcKey))
+	return v.Write(dstPath, dst)
+}
+
+//MoveCopyTree will recursively copy all nodes from the root to the new location.
+// This function will get confused about 'secret:key' syntax, so don't let those
+// get routed here - they don't make sense for a recursion anyway.
 func (v *Vault) MoveCopyTree(oldRoot, newRoot string, f func(string, string) error) error {
 	tree, err := v.Tree(oldRoot, TreeOptions{})
 	if err != nil {
@@ -435,6 +480,8 @@ func (v *Vault) MoveCopyTree(oldRoot, newRoot string, f func(string, string) err
 }
 
 // Move moves secrets from one path to another.
+// A move is semantically a copy and then a deletion of the original item. For
+// more information on the behavior of Move pertaining to keys, look at Copy.
 func (v *Vault) Move(oldpath, newpath string) error {
 	err := v.Copy(oldpath, newpath)
 	if err != nil {

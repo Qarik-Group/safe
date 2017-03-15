@@ -22,7 +22,7 @@ func (e keyNotFound) Error() string {
 //IsNotFound returns true if the given error is a SecretNotFound error
 // 	or a KeyNotFound error. Returns false otherwise.
 func IsNotFound(err error) bool {
-	return isSecretNotFound(err) || isKeyNotFound(err)
+	return IsSecretNotFound(err) || IsKeyNotFound(err)
 }
 
 //NewSecretNotFoundError returns an error with a message descibing the path
@@ -31,7 +31,9 @@ func NewSecretNotFoundError(path string) error {
 	return secretNotFound{path}
 }
 
-func isSecretNotFound(err error) bool {
+//IsSecretNotFound returns true if the given error was created with
+// NewSecretNotFoundError().  False otherwise.
+func IsSecretNotFound(err error) bool {
 	_, is := err.(secretNotFound)
 	return is
 }
@@ -44,7 +46,9 @@ func NewKeyNotFoundError(path, key string) error {
 	return keyNotFound{secret: path, key: key}
 }
 
-func isKeyNotFound(err error) bool {
+//IsKeyNotFound returns true if the given error was created with
+// NewKeyNotFoundError(). False otherwise.
+func IsKeyNotFound(err error) bool {
 	_, is := err.(keyNotFound)
 	return is
 }

@@ -320,7 +320,7 @@ func main() {
 	})
 
 	r.Dispatch("status", &Help{
-		Summary: "Print the status of the current targets backend nodes",
+		Summary: "Print the status of the current target's backend nodes",
 		Usage:   "safe status",
 		Type:    AdministrativeCommand,
 	}, func(command string, args ...string) error {
@@ -813,7 +813,9 @@ to get your bearings.
 
 		v := connect()
 
-		if opt.Move.Recurse {
+		//Don't try to recurse if operating on a key
+		// args[0] is the source path. args[1] is the destination path.
+		if opt.Move.Recurse && !vault.PathHasKey(args[0]) && !vault.PathHasKey(args[1]) {
 			if !opt.Move.Force && !recursively("move", args...) {
 				return nil /* skip this command, process the next */
 			}
@@ -840,7 +842,9 @@ to get your bearings.
 		}
 		v := connect()
 
-		if opt.Copy.Recurse {
+		//Don't try to recurse if operating on a key
+		// args[0] is the source path. args[1] is the destination path.
+		if opt.Move.Recurse && !vault.PathHasKey(args[0]) && !vault.PathHasKey(args[1]) {
 			if !opt.Copy.Force && !recursively("copy", args...) {
 				return nil /* skip this command, process the next */
 			}
