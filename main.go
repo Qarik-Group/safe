@@ -877,12 +877,16 @@ LENGTH defaults to 64 characters.
 			}
 		}
 
-		if len(args) != 2 {
-			r.ExitWithUsage("gen")
-		}
-
 		v := connect()
-		path, key := args[0], args[1]
+		var path, key string
+		if vault.PathHasKey(args[0]) {
+			path, key = vault.ParsePath(args[0])
+		} else {
+			if len(args) != 2 {
+				r.ExitWithUsage("gen")
+			}
+			path, key = args[0], args[1]
+		}
 		s, err := v.Read(path)
 		if err != nil && !vault.IsNotFound(err) {
 			return err
