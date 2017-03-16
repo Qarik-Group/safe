@@ -100,6 +100,7 @@ type Options struct {
 
 	Gen struct {
 		Policy string `cli:"-p, --policy"`
+		Length int    `cli:"-l, --length"`
 	} `cli:"gen, auto"`
 
 	SSH     struct{} `cli:"ssh"`
@@ -861,7 +862,7 @@ to get your bearings.
 
 	r.Dispatch("gen", &Help{
 		Summary: "Generate a random password",
-		Usage:   "safe gen [LENGTH] PATH KEY",
+		Usage:   "safe gen [-l <length>] PATH:KEY [PATH:KEY ...]",
 		Type:    DestructiveCommand,
 		Description: `
 LENGTH defaults to 64 characters.
@@ -869,35 +870,50 @@ LENGTH defaults to 64 characters.
 	}, func(command string, args ...string) error {
 		rc.Apply()
 
+		if len(args) == 0 {
+			r.ExitWithUsage("gen")
+		}
+
 		length := 64
-		if len(args) > 0 {
-			if u, err := strconv.ParseUint(args[0], 10, 16); err == nil {
-				length = int(u)
-				args = args[1:]
-			}
+
+		if opt.Gen.Length != 0 {
+			length = opt.Gen.Length
+		} else if u, err := strconv.ParseUint(args[0], 10, 16); err == nil {
+			length = int(u)
+			args = args[1:]
 		}
 
 		v := connect()
-		var path, key string
-		if vault.PathHasKey(args[0]) {
-			path, key = vault.ParsePath(args[0])
-		} else {
-			if len(args) != 2 {
-				r.ExitWithUsage("gen")
-			}
-			path, key = args[0], args[1]
-		}
-		s, err := v.Read(path)
-		if err != nil && !vault.IsNotFound(err) {
-			return err
-		}
-		err = s.Password(key, length, opt.Gen.Policy)
-		if err != nil {
-			return err
-		}
 
-		if err = v.Write(path, s); err != nil {
-			return err
+		for len(args) > 0 {
+			var path, key string
+			if vault.PathHasKey(args[0]) {
+				path, key = vault.ParsePath(args[0])
+				args = args[1:]
+			} else {
+				if len(args) < 2 {
+					r.ExitWithUsage("gen")
+				}
+				path, key = args[0], args[1]
+				//If the key looks like a full path with a :key at the end, then the user
+				// probably botched the args
+				if vault.PathHasKey(key) {
+					return fmt.Errorf("For secret `%s` and key `%s`: key cannot contain a key", path, key)
+				}
+				args = args[2:]
+			}
+			s, err := v.Read(path)
+			if err != nil && !vault.IsNotFound(err) {
+				return err
+			}
+			err = s.Password(key, length, opt.Gen.Policy)
+			if err != nil {
+				return err
+			}
+
+			if err = v.Write(path, s); err != nil {
+				return err
+			}
 		}
 		return nil
 	})

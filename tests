@@ -192,6 +192,29 @@ EOF
 		echo "              to only contain: [1-9]"
 	fi
 
+	testing $version password with secret:key syntax
+	./safe gen 64 secret/random:two
+	exitok $? 0
+	./safe get secret/random:two
+	exitok $? 0
+
+	testing $version gen with multiple passwords to make
+	./safe gen 64 secret/random:three secret/random four secret/random:five
+	exitok $? 0
+	./safe get secret/random:three; exitok $? 0
+	./safe get secret/random:four; exitok $? 0
+	./safe get secret/random:five; exitok $? 0
+
+	testing $version gen with length flag
+	./safe gen secret/random:six -l 10 
+	./safe get secret/random:six | tr -d '\n' >t/home/got
+	if [[ $(cat t/home/got | wc -m) -ne 10 ]]; then
+	  echo "FAILED"
+		rc=1
+		echo "Expected generated password to have 10 characters"
+		echo "Got $(cat t/home/got | wc -m) instead"
+  fi
+
 	testing $version single-value retrieval
 	./safe set secret/single/value foo=bar baz=quux >/dev/null
 	foo=$(./safe get secret/single/value:foo)
@@ -208,11 +231,11 @@ EOF
 	./safe gen secret/tree/alpha     x >/dev/null
 	./safe gen secret/tree/g         x >/dev/null
 	./safe gen secret/tree/g/a       x >/dev/null
-	./safe gen secret/tree/beta/name x >/dev/null
+	./safe gen secret/tree/beta/name:x >/dev/null
 	./safe gen secret/tree/beta/env  x >/dev/null
 	./safe gen secret/tree/g/a/m     x >/dev/null
 	./safe gen secret/tree/g/a/m/m   x >/dev/null
-	./safe gen secret/tree/g/a/m/m/a x >/dev/null
+	./safe gen secret/tree/g/a/m/m/a:x >/dev/null
 	./safe tree secret/tree >t/home/got 2>t/home/errors
 	cat >t/home/want <<EOF
 .
