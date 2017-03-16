@@ -896,6 +896,11 @@ to get your bearings.
 		Type:    DestructiveCommand,
 		Description: `
 LENGTH defaults to 64 characters.
+
+The following options are recognized:
+
+  -p, --policy  Specify a regex character grouping for limiting
+                characters used to generate the password (e.g --policy a-z0-9)
 `,
 	}, func(command string, args ...string) error {
 		rc.Apply()
@@ -1793,7 +1798,7 @@ Currently, only the --renew option is supported, and it is required:
 
 		/* simply re-saving the CA X509 object regens the CRL */
 		s, err = ca.Secret()
-		if err !=  nil {
+		if err != nil {
 			return err
 		}
 		err = v.Write(args[0], s)
