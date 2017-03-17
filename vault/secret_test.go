@@ -29,3 +29,26 @@ func TestSingleValue(t *testing.T) {
 		}
 	}
 }
+
+func TestNewSecretIsEmpty(t *testing.T) {
+	if !NewSecret().Empty() {
+		t.Errorf("New secret is not considered empty")
+	}
+}
+
+func TestPopulatedSecretIsNotEmpty(t *testing.T) {
+	s := NewSecret()
+	s.Set("beep", "boop")
+	if s.Empty() {
+		t.Errorf("Secret with contents was considered empty")
+	}
+}
+
+func TestDeletedKeysCanEmptySecret(t *testing.T) {
+	s := NewSecret()
+	s.Set("beep", "boop")
+	s.Delete("beep")
+	if !s.Empty() {
+		t.Errorf("Secret with all keys deleted was not considered to be empty")
+	}
+}

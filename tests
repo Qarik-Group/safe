@@ -227,6 +227,62 @@ EOF
 		echo "ok"
 	fi
 
+	###### DELETION TESTS ######
+
+	testing $version secret deletion
+	./safe set secret/delete/one hello=world
+	./safe delete secret/delete/one
+	exitok $? 0
+	./safe get secret/delete/one
+	exitok $? 1
+
+	testing $version multiple secret deletion
+	./safe set secret/delete/two foo=bar
+	./safe set secret/delete/three wom=bat
+	./safe delete secret/delete/two secret/delete/three
+	exitok $? 0
+	./safe get secret/delete/two
+	exitok $? 1
+	./safe get secret/delete/three
+	exitok $? 1
+
+	testing $version key deletion with key remaining within secret afterwards
+	./safe set secret/delete/four foo=bar wom=bat
+	./safe delete secret/delete/four:wom
+	exitok $? 0
+	./safe get secret/delete/four:wom
+	exitok $? 1
+	./safe get secret/delete/four:foo
+	exitok $? 0
+
+	testing $version key deletion with no keys remaining should delete secret
+	./safe set secret/delete/five foo=bar
+	./safe delete secret/delete/five:foo
+	exitok $? 0
+	./safe get secret/delete/five
+	exitok $? 1
+
+	testing $version multiple key deletion
+	./safe set secret/delete/six foo=bar wom=bat beep=boop
+	./safe delete secret/delete/six:foo secret/delete/six:wom
+	exitok $? 0
+	./safe get secret/delete/six:foo
+	exitok $? 1
+	./safe get secret/delete/six:wom
+	exitok $? 1
+	./safe get secret/delete/six:beep
+	exitok $? 0
+
+	testing $version attempt to delete non-existent key
+	./safe delete secret/delete/gobbledegook; exitok $? 0
+
+	testing $version attempt to delete non-existing key within existing secret should not error
+	./safe set secret/delete/seven foo=bar
+	./safe delete secret/delete/seven:gobbledegook; exitok $? 0
+	./safe get secret/delete/seven:foo; exitok $? 0
+
+  ###### TREE TESTS ######
+
 	testing $version tree display
 	./safe gen secret/tree/alpha     x >/dev/null
 	./safe gen secret/tree/g         x >/dev/null

@@ -320,10 +320,13 @@ func (v *Vault) Tree(path string, options TreeOptions) (tree.Node, error) {
 
 // Write takes a Secret and writes it to the Vault at the specified path.
 func (v *Vault) Write(path string, s *Secret) error {
-	raw := s.JSON()
-	if raw == "" {
-		return fmt.Errorf("nothing to write")
+	//If our secret has become empty (through key deletion, most likely)
+	// make sure to clean up the secret
+	if s.Empty() {
+		return v.deleteIfPresent(path)
 	}
+
+	raw := s.JSON()
 
 	req, err := http.NewRequest("POST", v.url("/v1/%s", path), strings.NewReader(raw))
 	if err != nil {
@@ -362,7 +365,7 @@ func (v *Vault) DeleteTree(root string) error {
 	return v.deleteEntireSecret(root)
 }
 
-// Delete removes the secret stored at the specified path.
+// Delete removes the secret or key stored at the specified path.
 func (v *Vault) Delete(path string) error {
 	secret, key := ParsePath(path)
 	if key == "" {
@@ -372,6 +375,11 @@ func (v *Vault) Delete(path string) error {
 }
 
 func (v *Vault) deleteEntireSecret(path string) error {
+	_, err := v.Read(path)
+	if err != nil {
+		return err
+	}
+
 	req, err := http.NewRequest("DELETE", v.url("/v1/%s", path), nil)
 	if err != nil {
 		return err
@@ -400,9 +408,27 @@ func (v *Vault) deleteSpecificKey(path, key string) error {
 	}
 	deleted := secret.Delete(key)
 	if !deleted {
-		return fmt.Errorf("No key `%s` for secret at path `%s`", key, path)
+		return NewKeyNotFoundError(path, key)
 	}
 	err = v.Write(path, secret)
+	return err
+}
+
+//deleteIfPresent first checks to see if there is a Secret at the given path,
+// and if so, it deletes it. Otherwise, no error is thrown
+func (v *Vault) deleteIfPresent(path string) error {
+	secretpath, _ := ParsePath(path)
+	if _, err := v.Read(secretpath); err != nil {
+		if IsSecretNotFound(err) {
+			return nil
+		}
+		return err
+	}
+
+	err := v.Delete(path)
+	if IsKeyNotFound(err) {
+		return nil
+	}
 	return err
 }
 

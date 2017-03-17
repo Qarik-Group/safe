@@ -733,7 +733,7 @@ to get your bearings.
 					return err
 				}
 			} else {
-				if err := v.Delete(path); err != nil {
+				if err := v.Delete(path); err != nil && !vault.IsNotFound(err) {
 					return err
 				}
 			}

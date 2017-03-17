@@ -54,6 +54,12 @@ func (s *Secret) Delete(key string) bool {
 	return true
 }
 
+// Empty returns true if there are no key-value pairs in this Secret object.
+// False otherwise.
+func (s *Secret) Empty() bool {
+	return len(s.data) == 0
+}
+
 func (s *Secret) Format(oldKey, newKey, fmtType string) error {
 	if !s.Has(oldKey) {
 		return NewSecretNotFoundError(oldKey)
