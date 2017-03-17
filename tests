@@ -206,7 +206,7 @@ EOF
 	./safe get secret/random:five; exitok $? 0
 
 	testing $version gen with length flag
-	./safe gen secret/random:six -l 10 
+	./safe gen secret/random:six -l 10
 	./safe get secret/random:six | tr -d '\n' >t/home/got
 	if [[ $(cat t/home/got | wc -m) -ne 10 ]]; then
 	  echo "FAILED"
@@ -281,17 +281,115 @@ EOF
 	./safe delete secret/delete/seven:gobbledegook; exitok $? 0
 	./safe get secret/delete/seven:foo; exitok $? 0
 
+	###### COPY TESTS ######
+
+	testing $version copy a secret to another location
+	./safe set secret/copy/from1 beep=boop
+	./safe copy secret/copy/from1 secret/copy/to1; exitok $? 0
+	cat >t/home/want <<EOF
+boop
+EOF
+	./safe get secret/copy/from1:beep >t/home/got 2>t/home/errors
+	diffok
+	./safe get secret/copy/to1:beep >t/home/got 2>t/home/errors
+	diffok
+
+
+	testing $version copy a key to another secret without a key specified
+	./safe set secret/copy/from2 beep=boop foo=bar
+	./safe copy secret/copy/from2:beep secret/copy/to2; exitok $? 0
+	cat >t/home/want <<EOF
+boop
+EOF
+	./safe get secret/copy/from2:beep >t/home/got 2>t/home/errors
+	diffok
+	./safe get secret/copy/to2:beep >t/home/got 2>t/home/errors
+	diffok
+	cat >t/home/want <<EOF
+bar
+EOF
+  ./safe get secret/copy/from2:foo >t/home/got 2>t/home/errors
+	diffok
+	./safe get secret/copy/to2:foo; exitok $? 1
+
+
+	testing $version copy a key to another specified key where the dest secret exists
+	./safe set secret/copy/from3 beep=boop foo=bar
+	./safe set secret/copy/to3 wom=bat
+	./safe copy secret/copy/from3:beep secret/copy/to3:another; exitok $? 0
+	cat >t/home/want <<EOF
+boop
+EOF
+	./safe get secret/copy/from3:beep >t/home/got 2>t/home/errors
+	diffok
+	./safe get secret/copy/to3:another >t/home/got 2>t/home/errors
+	diffok
+	cat >t/home/want <<EOF
+bar
+EOF
+  ./safe get secret/copy/from3:foo >t/home/got 2>t/home/errors
+	diffok
+	./safe get secret/copy/to3:foo; exitok $? 1
+cat >t/home/want <<EOF
+bat
+EOF
+  ./safe get secret/copy/to3:wom >t/home/got 2>t/home/errors
+	diffok
+
+
+	testing $version copy a key to another specified key where the dest secret does not exist
+	./safe set secret/copy/from4 beep=boop foo=bar
+	./safe copy secret/copy/from4:beep secret/copy/to4:another; exitok $? 0
+	cat >t/home/want <<EOF
+boop
+EOF
+	./safe get secret/copy/from3:beep >t/home/got 2>t/home/errors
+	diffok
+	./safe get secret/copy/to3:another >t/home/got 2>t/home/errors
+	diffok
+	cat >t/home/want <<EOF
+bar
+EOF
+  ./safe get secret/copy/from3:foo >t/home/got 2>t/home/errors
+	diffok
+	./safe get secret/copy/to3:foo; exitok $? 1
+
+
+	testing $version copying a full secret to a specified key should fail
+	./safe set secret/copy/from5 beep=boop
+	./safe copy secret/copy/from5 secret/copy/to5; exitok $? 0
+	cat >t/home/want <<EOF
+boop
+EOF
+	./safe get secret/copy/from5:beep >t/home/got 2>t/home/errors
+	diffok
+
+
+	testing $version copying from a secret that does not exist should fail
+	./safe copy secret/copy/from6 secret/copy/to6; exitok $? 1
+
+	echo "beep"
+
+	testing $version copying from a key where the underlying secret does not exist should fail
+	./safe copy secret/copy/from7:beep secret/copy/to7; exitok $? 1
+
+	echo "boop"
+
+	testing $version copying from a missing key where the underlying secret exists should fail
+	./safe set secret/copy/from8 foo=bar
+	./safe copy secret/copy/from8:beep secret/copy/to8; exitok $? 1
+
   ###### TREE TESTS ######
 
 	testing $version tree display
 	./safe gen secret/tree/alpha     x >/dev/null
 	./safe gen secret/tree/g         x >/dev/null
 	./safe gen secret/tree/g/a       x >/dev/null
-	./safe gen secret/tree/beta/name:x >/dev/null
+	./safe gen secret/tree/beta/name x >/dev/null
 	./safe gen secret/tree/beta/env  x >/dev/null
 	./safe gen secret/tree/g/a/m     x >/dev/null
 	./safe gen secret/tree/g/a/m/m   x >/dev/null
-	./safe gen secret/tree/g/a/m/m/a:x >/dev/null
+	./safe gen secret/tree/g/a/m/m/a x >/dev/null
 	./safe tree secret/tree >t/home/got 2>t/home/errors
 	cat >t/home/want <<EOF
 .
