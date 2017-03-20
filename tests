@@ -215,6 +215,12 @@ EOF
 		echo "Got $(cat t/home/got | wc -m) instead"
   fi
 
+	testing $version gen with incorrectly mixed path:key should fail
+	./safe gen secret/random secret/random:seven; exitok $? 1
+
+	testing $version gen with missing key should fail
+	./safe gen secret/random; exitok $?
+
 	testing $version single-value retrieval
 	./safe set secret/single/value foo=bar baz=quux >/dev/null
 	foo=$(./safe get secret/single/value:foo)
