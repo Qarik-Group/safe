@@ -216,10 +216,10 @@ EOF
   fi
 
 	testing $version gen with incorrectly mixed path:key should fail
-	./safe gen secret/random secret/random:seven; exitok $? 1
+	./safe gen secret/random secret/random:seven 2>/dev/null; exitok $? 1
 
 	testing $version gen with missing key should fail
-	./safe gen secret/random; exitok $?
+	./safe gen secret/random 2>/dev/null; exitok $? 1
 
 	testing $version single-value retrieval
 	./safe set secret/single/value foo=bar baz=quux >/dev/null
@@ -233,7 +233,7 @@ EOF
 		echo "ok"
 	fi
 
-	###### DELETION TESTS ######
+	###### DELETE TESTS ######
 
 	testing $version secret deletion
 	./safe set secret/delete/one hello=world
@@ -265,12 +265,20 @@ EOF
 	./safe get secret/delete/six:wom; exitok $? 1
 	./safe get secret/delete/six:beep; exitok $? 0
 
-	testing $version attempt to delete non-existent key
-	./safe delete secret/delete/gobbledegook; exitok $? 0
+	testing $version attempt to delete non-existent key should fail
+	./safe delete secret/delete/gobbledegook; exitok $? 1
 
-	testing $version attempt to delete non-existing key within existing secret should not error
+	testing $version attempt to delete non-existing key within existing secret should error
 	./safe set secret/delete/seven foo=bar
-	./safe delete secret/delete/seven:gobbledegook; exitok $? 0
+	./safe delete secret/delete/seven:gobbledegook; exitok $? 1
+	./safe get secret/delete/seven:foo; exitok $? 0
+
+	testing $version delete non-existent key should not fail if -f is given
+	./safe delete secret/delete/gobbledegook -f; exitok $? 0
+
+	testing $version attempt to delete non-existing key within existing secret should error
+	./safe set secret/delete/eight foo=bar
+	./safe delete secret/delete/eight:gobbledegook -f; exitok $? 0
 	./safe get secret/delete/seven:foo; exitok $? 0
 
 	###### COPY TESTS ######

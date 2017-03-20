@@ -729,11 +729,11 @@ to get your bearings.
 				if !opt.Delete.Force && !recursively("delete", args...) {
 					return nil /* skip this command, process the next */
 				}
-				if err := v.DeleteTree(path); err != nil {
+				if err := v.DeleteTree(path); err != nil && !(vault.IsNotFound(err) && opt.Delete.Force) {
 					return err
 				}
 			} else {
-				if err := v.Delete(path); err != nil && !vault.IsNotFound(err) {
+				if err := v.Delete(path); err != nil && !(vault.IsNotFound(err) && opt.Delete.Force) {
 					return err
 				}
 			}
