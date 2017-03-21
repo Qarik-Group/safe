@@ -406,6 +406,38 @@ EOF
 	./safe set secret/copy/from8 foo=bar
 	./safe copy secret/copy/from8:beep secret/copy/to8; exitok $? 1
 
+	testing $version copying recursively from a leaf node secret
+	./safe set secret/copy/from9 foo=bar
+	./safe copy -Rf secret/copy/from9 secret/copy/to9; exitok $? 0
+	cat >t/home/want <<EOF
+bar
+EOF
+	./safe get secret/copy/from9:foo >t/home/got 2>t/home/errors; diffok
+	./safe get secret/copy/to9:foo >t/home/got 2>t/home/errors; diffok
+
+	testing $version copying recursively from a key
+	./safe set secret/copy/from10 foo=bar
+	./safe copy -Rf secret/copy/from10:foo secret/copy/to10; exitok $? 0
+	cat >t/home/want <<EOF
+bar
+EOF
+	./safe get secret/copy/from9:foo >t/home/got 2>t/home/errors; diffok
+	./safe get secret/copy/to9:foo >t/home/got 2>t/home/errors; diffok
+
+	testing $version copying recursively from a subtree
+	./safe set secret/copy/fromtree1/one foo=bar
+	./safe copy -Rf secret/copy/fromtree1 secret/copy/totree1; exitok $? 0
+	cat >t/home/want <<EOF
+bar
+EOF
+	./safe get secret/copy/fromtree1/one:foo >t/home/got 2>t/home/errors; diffok
+	./safe get secret/copy/totree1/one:foo >t/home/got 2>t/home/errors; diffok
+
+	testing $version attempting to copy a subtree without -R should fail
+	./safe set secret/copy/fromtree2/one foo=bar
+	./safe copy -f secret/copy/fromtree2 secret/copy/totree2; exitok $? 1
+	./safe get secret/copy/totree2/one; exitok $? 1
+
 	###### MOVE TESTS ######
 
 	testing $version move a secret to another location
@@ -488,6 +520,41 @@ EOF
 	testing $version moving from a missing key where the underlying secret exists should fail
 	./safe set secret/move/from8 foo=bar
 	./safe move secret/move/from8:beep secret/move/to8; exitok $? 1
+
+
+	testing $version moving recursively from a leaf node secret
+	./safe set secret/move/from9 foo=bar
+	./safe move -Rf secret/move/from9 secret/move/to9; exitok $? 0
+	cat >t/home/want <<EOF
+bar
+EOF
+	./safe get secret/move/from9; exitok $? 1
+	./safe get secret/move/to9:foo >t/home/got 2>t/home/errors; diffok
+
+
+	testing $version moving recursively from a key
+	./safe set secret/move/from10 foo=bar
+	./safe move -Rf secret/move/from10:foo secret/move/to10; exitok $? 0
+	cat >t/home/want <<EOF
+bar
+EOF
+	./safe get secret/move/from9; exitok $? 1
+	./safe get secret/copy/to9:foo >t/home/got 2>t/home/errors; diffok
+
+
+	testing $version moving recursively from a subtree
+	./safe set secret/move/fromtree1/one foo=bar
+	./safe move -Rf secret/move/fromtree1 secret/move/totree1; exitok $? 0
+	cat >t/home/want <<EOF
+bar
+EOF
+	./safe get secret/move/fromtree1/one; exitok $? 1
+	./safe get secret/move/totree1/one:foo >t/home/got 2>t/home/errors; diffok
+
+	testing $version attempting to copy a subtree without -R should fail
+	./safe set secret/move/fromtree2/one foo=bar
+	./safe move -f secret/move/fromtree2 secret/move/totree2; exitok $? 1
+	./safe get secret/move/totree2/one; exitok $? 1
 
   ###### TREE TESTS ######
 

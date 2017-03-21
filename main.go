@@ -845,7 +845,7 @@ to get your bearings.
 
 		//Don't try to recurse if operating on a key
 		// args[0] is the source path. args[1] is the destination path.
-		if opt.Move.Recurse && !vault.PathHasKey(args[0]) && !vault.PathHasKey(args[1]) {
+		if opt.Copy.Recurse && !vault.PathHasKey(args[0]) && !vault.PathHasKey(args[1]) {
 			if !opt.Copy.Force && !recursively("copy", args...) {
 				return nil /* skip this command, process the next */
 			}
