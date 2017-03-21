@@ -281,6 +281,48 @@ EOF
 	./safe delete secret/delete/eight:gobbledegook -f; exitok $? 0
 	./safe get secret/delete/seven:foo; exitok $? 0
 
+	testing $version recursively delete a subtree
+	./safe set secret/delete/subtree1/one foo=bar
+	./safe set secret/delete/subtree1/two beep=boop
+	./safe delete -Rf secret/delete/subtree1; exitok $? 0
+	./safe get secret/delete/subtree1/one; exitok $? 1
+	./safe get secret/delete/subtree1/two; exitok $? 1
+
+	testing $version attempting to delete a subtree without -R should fail
+	./safe set secret/delete/subtree2/one foo=bar
+	./safe set secret/delete/subtree2/two foo=bar
+	./safe delete -f secret/delete/subtree2; exitok $? 1
+	cat >t/home/want <<EOF
+bar
+EOF
+	./safe get secret/delete/subtree2/one:foo >t/home/got 2>t/home/errors; diffok
+	./safe get secret/delete/subtree2/two:foo >t/home/got 2>t/home/errors; diffok
+
+	testing $version recursively delete a leaf node secret
+	./safe set secret/delete/nine foo=bar
+	./safe delete -Rf secret/delete/nine; exitok $? 0
+	./safe get secret/delete/nine; exitok $? 1
+
+	testing $version recursively delete a key
+	./safe set secret/delete/ten foo=bar beep=boop
+	./safe delete -Rf secret/delete/ten:foo
+	./safe get secret/delete/ten:foo; exitok $? 1
+	cat >t/home/want <<EOF
+boop
+EOF
+	./safe get secret/delete/ten:beep >t/home/got t/home/errors; diffok
+
+	testing $version recursively delete a secret that does not exist with -f should not fail
+	./safe delete -Rf secret/delete/gobbledegook; exitok $? 0
+
+	testing $version recursively delete a key that does not exist with -f should not fail
+	./safe set secret/delete/eleven beep=boop
+	./safe delete -Rf secret/delete/eleven:foo; exitok $? 0
+	cat >t/home/want <<EOF
+boop
+EOF
+	./safe get secret/delete/eleven:beep >t/home/got 2>t/home/errors; diffok
+
 	###### COPY TESTS ######
 
 	testing $version copy a secret to another location

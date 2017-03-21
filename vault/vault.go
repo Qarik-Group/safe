@@ -349,6 +349,23 @@ func (v *Vault) Write(path string, s *Secret) error {
 	return nil
 }
 
+//errIfFolder returns an error with your provided message if the given path exists,
+// either as a secret or a folder.
+// Can also throw an error if contacting the backend failed, in which case that error
+// is returned.
+func (v *Vault) errIfExists(path, message string, args ...interface{}) error {
+	if _, err := v.List(path); err == nil { //...see if it is a subtree "folder"
+		// the "== nil" is not a typo. if there is an error, NotFound or otherwise,
+		// simply fall through to the error return below
+		// Otherwise, give a different error signifying that the problem is that
+		// the target is a directory when we expected a secret.
+		return fmt.Errorf(message, args...)
+	} else if err != nil && !IsNotFound(err) {
+		return err
+	}
+	return nil
+}
+
 //DeleteTree recursively deletes the leaf nodes beneath the given root until
 // the root has no children, and then deletes that.
 func (v *Vault) DeleteTree(root string) error {
@@ -377,6 +394,11 @@ func (v *Vault) Delete(path string) error {
 func (v *Vault) deleteEntireSecret(path string) error {
 	_, err := v.Read(path)
 	if err != nil {
+		if IsNotFound(err) { //if this was not a leaf node (secret)...
+			if folderErr := v.errIfExists(path, "`%s` points to a folder, not a secret", path); folderErr != nil {
+				return folderErr
+			}
+		}
 		return err
 	}
 
