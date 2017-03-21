@@ -366,6 +366,16 @@ func (v *Vault) errIfExists(path, message string, args ...interface{}) error {
 	return nil
 }
 
+func (v *Vault) verifySecretExists(path string) error {
+	_, err := v.Read(path)
+	if err != nil && IsNotFound(err) { //if this was not a leaf node (secret)...
+		if folderErr := v.errIfExists(path, "`%s` points to a folder, not a secret", path); folderErr != nil {
+			return folderErr
+		}
+	}
+	return err
+}
+
 //DeleteTree recursively deletes the leaf nodes beneath the given root until
 // the root has no children, and then deletes that.
 func (v *Vault) DeleteTree(root string) error {
@@ -384,6 +394,10 @@ func (v *Vault) DeleteTree(root string) error {
 
 // Delete removes the secret or key stored at the specified path.
 func (v *Vault) Delete(path string) error {
+	if err := v.verifySecretExists(path); err != nil {
+		return err
+	}
+
 	secret, key := ParsePath(path)
 	if key == "" {
 		return v.deleteEntireSecret(path)
@@ -392,15 +406,6 @@ func (v *Vault) Delete(path string) error {
 }
 
 func (v *Vault) deleteEntireSecret(path string) error {
-	_, err := v.Read(path)
-	if err != nil {
-		if IsNotFound(err) { //if this was not a leaf node (secret)...
-			if folderErr := v.errIfExists(path, "`%s` points to a folder, not a secret", path); folderErr != nil {
-				return folderErr
-			}
-		}
-		return err
-	}
 
 	req, err := http.NewRequest("DELETE", v.url("/v1/%s", path), nil)
 	if err != nil {
@@ -460,6 +465,10 @@ func (v *Vault) deleteIfPresent(path string) error {
 // no-key -> key is bad. That makes no sense and the user should feel bad.
 // Returns KeyNotFoundError if there is no such specified key in the secret at oldpath
 func (v *Vault) Copy(oldpath, newpath string) error {
+	if err := v.verifySecretExists(oldpath); err != nil {
+		return err
+	}
+
 	srcPath, _ := ParsePath(oldpath)
 	srcSecret, err := v.Read(srcPath)
 	if err != nil {
@@ -531,6 +540,10 @@ func (v *Vault) MoveCopyTree(oldRoot, newRoot string, f func(string, string) err
 // A move is semantically a copy and then a deletion of the original item. For
 // more information on the behavior of Move pertaining to keys, look at Copy.
 func (v *Vault) Move(oldpath, newpath string) error {
+	if err := v.verifySecretExists(oldpath); err != nil {
+		return err
+	}
+
 	err := v.Copy(oldpath, newpath)
 	if err != nil {
 		return err

@@ -820,11 +820,11 @@ to get your bearings.
 			if !opt.Move.Force && !recursively("move", args...) {
 				return nil /* skip this command, process the next */
 			}
-			if err := v.MoveCopyTree(args[0], args[1], v.Move); err != nil {
+			if err := v.MoveCopyTree(args[0], args[1], v.Move); err != nil && !(vault.IsNotFound(err) && opt.Move.Force) {
 				return err
 			}
 		} else {
-			if err := v.Move(args[0], args[1]); err != nil {
+			if err := v.Move(args[0], args[1]); err != nil && !(vault.IsNotFound(err) && opt.Move.Force) {
 				return err
 			}
 		}
@@ -849,11 +849,11 @@ to get your bearings.
 			if !opt.Copy.Force && !recursively("copy", args...) {
 				return nil /* skip this command, process the next */
 			}
-			if err := v.MoveCopyTree(args[0], args[1], v.Copy); err != nil {
+			if err := v.MoveCopyTree(args[0], args[1], v.Copy); err != nil && !(vault.IsNotFound(err) && opt.Copy.Force) {
 				return err
 			}
 		} else {
-			if err := v.Copy(args[0], args[1]); err != nil {
+			if err := v.Copy(args[0], args[1]); err != nil && !(vault.IsNotFound(err) && opt.Copy.Force) {
 				return err
 			}
 		}

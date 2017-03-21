@@ -421,8 +421,8 @@ EOF
 	cat >t/home/want <<EOF
 bar
 EOF
-	./safe get secret/copy/from9:foo >t/home/got 2>t/home/errors; diffok
-	./safe get secret/copy/to9:foo >t/home/got 2>t/home/errors; diffok
+	./safe get secret/copy/from10:foo >t/home/got 2>t/home/errors; diffok
+	./safe get secret/copy/to10:foo >t/home/got 2>t/home/errors; diffok
 
 	testing $version copying recursively from a subtree
 	./safe set secret/copy/fromtree1/one foo=bar
@@ -437,6 +437,15 @@ EOF
 	./safe set secret/copy/fromtree2/one foo=bar
 	./safe copy -f secret/copy/fromtree2 secret/copy/totree2; exitok $? 1
 	./safe get secret/copy/totree2/one; exitok $? 1
+
+	testing $version copying a non-existent secret with -f should fail silently
+	./safe copy -f secret/copy/gobbledegook secret/copy/fakedest; exitok $? 0
+	./safe get secret/copy/fakedest; exitok $? 1
+
+	testing $version copying a non-existent key with -f should fail silently
+	./safe set secret/copy/from11 foo=bar
+	./safe copy -f secret/copy/from11:beep secret/copy/to11; exitok $? 0
+	./safe get secret/copy/to11; exitok $? 1
 
 	###### MOVE TESTS ######
 
@@ -555,6 +564,20 @@ EOF
 	./safe set secret/move/fromtree2/one foo=bar
 	./safe move -f secret/move/fromtree2 secret/move/totree2; exitok $? 1
 	./safe get secret/move/totree2/one; exitok $? 1
+
+	testing $version moving a non-existent secret with -f should fail silently
+	./safe move -f secret/move/gobbledegook secret/move/fakedest; exitok $? 0
+	./safe get secret/move/fakedest; exitok $? 1
+
+	testing $version moving a non-existent key with -f should fail silently
+	./safe set secret/move/from11 foo=bar
+	./safe copy -f secret/move/from11:beep secret/move/to11; exitok $? 0
+	./safe get secret/move/to11; exitok $? 1
+	cat >t/home/want <<EOF
+bar
+EOF
+	./safe get secret/move/from11:foo >t/home/got 2>t/home/errors; diffok
+
 
   ###### TREE TESTS ######
 
