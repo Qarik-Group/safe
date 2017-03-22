@@ -1836,7 +1836,7 @@ Currently, only the --renew option is supported, and it is required:
 		r.Execute("version")
 		return
 	}
-	if opt.Help {
+	if opt.Help { //-h was given as a global arg
 		r.Execute("help")
 		return
 	}
@@ -1846,8 +1846,14 @@ Currently, only the --renew option is supported, and it is required:
 			r.Execute("version")
 			return
 		}
-		if p.Command == "" || opt.Help {
+
+		if p.Command == "" { //No recognized command was found
 			r.Execute("help")
+			return
+		}
+
+		if opt.Help { // -h or --help was given after a command
+			r.Execute("help", p.Command)
 			continue
 		}
 
@@ -1866,6 +1872,12 @@ Currently, only the --renew option is supported, and it is required:
 			}
 			os.Exit(1)
 		}
+	}
+
+	//If there were no args given, the above loop that would try to give help
+	// doesn't execute at all, so we catch it here.
+	if p.Command == "" {
+		r.Execute("help")
 	}
 
 	if err = p.Error(); err != nil {
