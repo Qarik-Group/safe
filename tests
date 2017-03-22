@@ -276,10 +276,10 @@ EOF
 	testing $version delete non-existent key should not fail if -f is given
 	./safe delete secret/delete/gobbledegook -f; exitok $? 0
 
-	testing $version attempt to delete non-existing key within existing secret should error
+	testing $version deleting non-existent key with -f specified should fail silently
 	./safe set secret/delete/eight foo=bar
 	./safe delete secret/delete/eight:gobbledegook -f; exitok $? 0
-	./safe get secret/delete/seven:foo; exitok $? 0
+	./safe get secret/delete/eight:foo; exitok $? 0
 
 	testing $version recursively delete a subtree
 	./safe set secret/delete/subtree1/one foo=bar
