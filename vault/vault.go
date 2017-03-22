@@ -354,7 +354,10 @@ func (v *Vault) Write(path string, s *Secret) error {
 // Can also throw an error if contacting the backend failed, in which case that error
 // is returned.
 func (v *Vault) errIfExists(path, message string, args ...interface{}) error {
-	if _, err := v.List(path); err == nil { //...see if it is a subtree "folder"
+	//need to check if length of list is 0 because prior to vault 0.6.0, no 404 is
+	//given for attempting to list a path which does not exist.
+	if paths, err := v.List(path); err == nil && len(paths) != 0 { //...see if it is a subtree "folder"
+		fmt.Println(paths)
 		// the "== nil" is not a typo. if there is an error, NotFound or otherwise,
 		// simply fall through to the error return below
 		// Otherwise, give a different error signifying that the problem is that
