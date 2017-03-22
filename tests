@@ -192,6 +192,35 @@ EOF
 		echo "              to only contain: [1-9]"
 	fi
 
+	testing $version password with secret:key syntax
+	./safe gen 64 secret/random:two
+	exitok $? 0
+	./safe get secret/random:two
+	exitok $? 0
+
+	testing $version gen with multiple passwords to make
+	./safe gen 64 secret/random:three secret/random four secret/random:five
+	exitok $? 0
+	./safe get secret/random:three; exitok $? 0
+	./safe get secret/random:four; exitok $? 0
+	./safe get secret/random:five; exitok $? 0
+
+	testing $version gen with length flag
+	./safe gen secret/random:six -l 10
+	./safe get secret/random:six | tr -d '\n' >t/home/got
+	if [[ $(cat t/home/got | wc -m) -ne 10 ]]; then
+	  echo "FAILED"
+		rc=1
+		echo "Expected generated password to have 10 characters"
+		echo "Got $(cat t/home/got | wc -m) instead"
+  fi
+
+	testing $version gen with incorrectly mixed path:key should fail
+	./safe gen secret/random secret/random:seven 2>/dev/null; exitok $? 1
+
+	testing $version gen with missing key should fail
+	./safe gen secret/random 2>/dev/null; exitok $? 1
+
 	testing $version single-value retrieval
 	./safe set secret/single/value foo=bar baz=quux >/dev/null
 	foo=$(./safe get secret/single/value:foo)
@@ -203,6 +232,354 @@ EOF
 	else
 		echo "ok"
 	fi
+
+	###### DELETE TESTS ######
+
+	testing $version secret deletion
+	./safe set secret/delete/one hello=world
+	./safe delete secret/delete/one; exitok $? 0
+	./safe get secret/delete/one; exitok $? 1
+
+	testing $version multiple secret deletion
+	./safe set secret/delete/two foo=bar
+	./safe set secret/delete/three wom=bat
+	./safe delete secret/delete/two secret/delete/three; exitok $? 0
+	./safe get secret/delete/two; exitok $? 1
+	./safe get secret/delete/three; exitok $? 1
+
+	testing $version key deletion with key remaining within secret afterwards
+	./safe set secret/delete/four foo=bar wom=bat
+	./safe delete secret/delete/four:wom; exitok $? 0
+	./safe get secret/delete/four:wom; exitok $? 1
+	./safe get secret/delete/four:foo; exitok $? 0
+
+	testing $version key deletion with no keys remaining should delete secret
+	./safe set secret/delete/five foo=bar
+	./safe delete secret/delete/five:foo; exitok $? 0
+	./safe get secret/delete/five; exitok $? 1
+
+	testing $version multiple key deletion
+	./safe set secret/delete/six foo=bar wom=bat beep=boop
+	./safe delete secret/delete/six:foo secret/delete/six:wom; exitok $? 0
+	./safe get secret/delete/six:foo; exitok $? 1
+	./safe get secret/delete/six:wom; exitok $? 1
+	./safe get secret/delete/six:beep; exitok $? 0
+
+	testing $version attempt to delete non-existent key should fail
+	./safe delete secret/delete/gobbledegook; exitok $? 1
+
+	testing $version attempt to delete non-existing key within existing secret should error
+	./safe set secret/delete/seven foo=bar
+	./safe delete secret/delete/seven:gobbledegook; exitok $? 1
+	./safe get secret/delete/seven:foo; exitok $? 0
+
+	testing $version delete non-existent key should not fail if -f is given
+	./safe delete secret/delete/gobbledegook -f; exitok $? 0
+
+	testing $version deleting non-existent key with -f specified should fail silently
+	./safe set secret/delete/eight foo=bar
+	./safe delete secret/delete/eight:gobbledegook -f; exitok $? 0
+	./safe get secret/delete/eight:foo; exitok $? 0
+
+	testing $version recursively delete a subtree
+	./safe set secret/delete/subtree1/one foo=bar
+	./safe set secret/delete/subtree1/two beep=boop
+	./safe delete -Rf secret/delete/subtree1; exitok $? 0
+	./safe get secret/delete/subtree1/one; exitok $? 1
+	./safe get secret/delete/subtree1/two; exitok $? 1
+
+	testing $version attempting to delete a subtree without -R should fail
+	./safe set secret/delete/subtree2/one foo=bar
+	./safe set secret/delete/subtree2/two foo=bar
+	./safe delete -f secret/delete/subtree2; exitok $? 1
+	cat >t/home/want <<EOF
+bar
+EOF
+	./safe get secret/delete/subtree2/one:foo >t/home/got 2>t/home/errors; diffok
+	./safe get secret/delete/subtree2/two:foo >t/home/got 2>t/home/errors; diffok
+
+	testing $version recursively delete a leaf node secret
+	./safe set secret/delete/nine foo=bar
+	./safe delete -Rf secret/delete/nine; exitok $? 0
+	./safe get secret/delete/nine; exitok $? 1
+
+	testing $version recursively delete a key
+	./safe set secret/delete/ten foo=bar beep=boop
+	./safe delete -Rf secret/delete/ten:foo
+	./safe get secret/delete/ten:foo; exitok $? 1
+	cat >t/home/want <<EOF
+boop
+EOF
+	./safe get secret/delete/ten:beep >t/home/got t/home/errors; diffok
+
+	testing $version recursively delete a secret that does not exist with -f should not fail
+	./safe delete -Rf secret/delete/gobbledegook; exitok $? 0
+
+	testing $version recursively delete a key that does not exist with -f should not fail
+	./safe set secret/delete/eleven beep=boop
+	./safe delete -Rf secret/delete/eleven:foo; exitok $? 0
+	cat >t/home/want <<EOF
+boop
+EOF
+	./safe get secret/delete/eleven:beep >t/home/got 2>t/home/errors; diffok
+
+	###### COPY TESTS ######
+
+	testing $version copy a secret to another location
+	./safe set secret/copy/from1 beep=boop
+	./safe copy secret/copy/from1 secret/copy/to1; exitok $? 0
+	cat >t/home/want <<EOF
+boop
+EOF
+	./safe get secret/copy/from1:beep >t/home/got 2>t/home/errors; diffok
+	./safe get secret/copy/to1:beep >t/home/got 2>t/home/errors; diffok
+
+
+	testing $version copy a key to another secret without a key specified
+	./safe set secret/copy/from2 beep=boop foo=bar
+	./safe copy secret/copy/from2:beep secret/copy/to2; exitok $? 0
+	cat >t/home/want <<EOF
+boop
+EOF
+	./safe get secret/copy/from2:beep >t/home/got 2>t/home/errors; diffok
+	./safe get secret/copy/to2:beep >t/home/got 2>t/home/errors; diffok
+	cat >t/home/want <<EOF
+bar
+EOF
+  ./safe get secret/copy/from2:foo >t/home/got 2>t/home/errors; diffok
+	./safe get secret/copy/to2:foo; exitok $? 1
+
+
+	testing $version copy a key to another specified key where the dest secret exists
+	./safe set secret/copy/from3 beep=boop foo=bar
+	./safe set secret/copy/to3 wom=bat
+	./safe copy secret/copy/from3:beep secret/copy/to3:another; exitok $? 0
+	cat >t/home/want <<EOF
+boop
+EOF
+	./safe get secret/copy/from3:beep >t/home/got 2>t/home/errors; diffok
+	./safe get secret/copy/to3:another >t/home/got 2>t/home/errors; diffok
+	cat >t/home/want <<EOF
+bar
+EOF
+  ./safe get secret/copy/from3:foo >t/home/got 2>t/home/errors; diffok
+	./safe get secret/copy/to3:foo; exitok $? 1
+cat >t/home/want <<EOF
+bat
+EOF
+  ./safe get secret/copy/to3:wom >t/home/got 2>t/home/errors; diffok
+
+
+	testing $version copy a key to another specified key where the dest secret does not exist
+	./safe set secret/copy/from4 beep=boop foo=bar
+	./safe copy secret/copy/from4:beep secret/copy/to4:another; exitok $? 0
+	cat >t/home/want <<EOF
+boop
+EOF
+	./safe get secret/copy/from3:beep >t/home/got 2>t/home/errors; diffok
+	./safe get secret/copy/to3:another >t/home/got 2>t/home/errors; diffok
+	cat >t/home/want <<EOF
+bar
+EOF
+  ./safe get secret/copy/from3:foo >t/home/got 2>t/home/errors; diffok
+	./safe get secret/copy/to3:foo; exitok $? 1
+
+
+	testing $version copying a full secret to a specified key should fail
+	./safe set secret/copy/from5 beep=boop
+	./safe copy secret/copy/from5 secret/copy/to5:hello; exitok $? 1
+	cat >t/home/want <<EOF
+boop
+EOF
+	./safe get secret/copy/from5:beep >t/home/got 2>t/home/errors; diffok
+
+
+	testing $version copying from a secret that does not exist should fail
+	./safe copy secret/copy/from6 secret/copy/to6; exitok $? 1
+
+
+	testing $version copying from a key where the underlying secret does not exist should fail
+	./safe copy secret/copy/from7:beep secret/copy/to7; exitok $? 1
+
+
+	testing $version copying from a missing key where the underlying secret exists should fail
+	./safe set secret/copy/from8 foo=bar
+	./safe copy secret/copy/from8:beep secret/copy/to8; exitok $? 1
+
+	testing $version copying recursively from a leaf node secret
+	./safe set secret/copy/from9 foo=bar
+	./safe copy -Rf secret/copy/from9 secret/copy/to9; exitok $? 0
+	cat >t/home/want <<EOF
+bar
+EOF
+	./safe get secret/copy/from9:foo >t/home/got 2>t/home/errors; diffok
+	./safe get secret/copy/to9:foo >t/home/got 2>t/home/errors; diffok
+
+	testing $version copying recursively from a key
+	./safe set secret/copy/from10 foo=bar
+	./safe copy -Rf secret/copy/from10:foo secret/copy/to10; exitok $? 0
+	cat >t/home/want <<EOF
+bar
+EOF
+	./safe get secret/copy/from10:foo >t/home/got 2>t/home/errors; diffok
+	./safe get secret/copy/to10:foo >t/home/got 2>t/home/errors; diffok
+
+	testing $version copying recursively from a subtree
+	./safe set secret/copy/fromtree1/one foo=bar
+	./safe copy -Rf secret/copy/fromtree1 secret/copy/totree1; exitok $? 0
+	cat >t/home/want <<EOF
+bar
+EOF
+	./safe get secret/copy/fromtree1/one:foo >t/home/got 2>t/home/errors; diffok
+	./safe get secret/copy/totree1/one:foo >t/home/got 2>t/home/errors; diffok
+
+	testing $version attempting to copy a subtree without -R should fail
+	./safe set secret/copy/fromtree2/one foo=bar
+	./safe copy -f secret/copy/fromtree2 secret/copy/totree2; exitok $? 1
+	./safe get secret/copy/totree2/one; exitok $? 1
+
+	testing $version copying a non-existent secret with -f should fail silently
+	./safe copy -f secret/copy/gobbledegook secret/copy/fakedest; exitok $? 0
+	./safe get secret/copy/fakedest; exitok $? 1
+
+	testing $version copying a non-existent key with -f should fail silently
+	./safe set secret/copy/from11 foo=bar
+	./safe copy -f secret/copy/from11:beep secret/copy/to11; exitok $? 0
+	./safe get secret/copy/to11; exitok $? 1
+
+	###### MOVE TESTS ######
+
+	testing $version move a secret to another location
+	./safe set secret/move/from1 beep=boop
+	./safe move secret/move/from1 secret/move/to1; exitok $? 0
+	cat >t/home/want <<EOF
+boop
+EOF
+	./safe get secret/move/from1:beep; exitok $? 1
+	./safe get secret/move/to1:beep >t/home/got 2>t/home/errors; diffok
+
+
+	testing $version move a key to another secret without a key specified
+	./safe set secret/move/from2 beep=boop foo=bar
+	./safe move secret/move/from2:beep secret/move/to2; exitok $? 0
+	cat >t/home/want <<EOF
+boop
+EOF
+	./safe get secret/move/from2:beep; exitok $? 1
+	./safe get secret/move/to2:beep >t/home/got 2>t/home/errors; diffok
+	cat >t/home/want <<EOF
+bar
+EOF
+  ./safe get secret/move/from2:foo >t/home/got 2>t/home/errors; diffok
+	./safe get secret/move/to2:foo; exitok $? 1
+
+
+	testing $version move a key to another specified key where the dest secret exists
+	./safe set secret/move/from3 beep=boop foo=bar
+	./safe set secret/move/to3 wom=bat
+	./safe move secret/move/from3:beep secret/move/to3:another; exitok $? 0
+	cat >t/home/want <<EOF
+boop
+EOF
+	./safe get secret/move/from3:beep; exitok $? 1
+	./safe get secret/move/to3:another >t/home/got 2>t/home/errors; diffok
+	cat >t/home/want <<EOF
+bar
+EOF
+  ./safe get secret/move/from3:foo >t/home/got 2>t/home/errors; diffok
+	./safe get secret/move/to3:foo; exitok $? 1
+cat >t/home/want <<EOF
+bat
+EOF
+  ./safe get secret/move/to3:wom >t/home/got 2>t/home/errors; diffok
+
+
+	testing $version move a key to another specified key where the dest secret does not exist
+	./safe set secret/move/from4 beep=boop foo=bar
+	./safe move secret/move/from4:beep secret/move/to4:another; exitok $? 0
+	cat >t/home/want <<EOF
+boop
+EOF
+	./safe get secret/move/from3:beep; exitok $? 1
+	./safe get secret/move/to3:another >t/home/got 2>t/home/errors; diffok
+	cat >t/home/want <<EOF
+bar
+EOF
+  ./safe get secret/move/from3:foo >t/home/got 2>t/home/errors; diffok
+	./safe get secret/move/to3:foo; exitok $? 1
+
+
+	testing $version moving a full secret to a specified key should fail
+	./safe set secret/move/from5 beep=boop
+	./safe move secret/move/from5 secret/move/to5:beep; exitok $? 1
+	cat >t/home/want <<EOF
+boop
+EOF
+	./safe get secret/move/from5:beep >t/home/got 2>t/home/errors; diffok
+
+
+	testing $version moving from a secret that does not exist should fail
+	./safe move secret/copy/from6 secret/move/to6; exitok $? 1
+
+
+	testing $version moving from a key where the underlying secret does not exist should fail
+	./safe move secret/move/from7:beep secret/move/to7; exitok $? 1
+
+
+	testing $version moving from a missing key where the underlying secret exists should fail
+	./safe set secret/move/from8 foo=bar
+	./safe move secret/move/from8:beep secret/move/to8; exitok $? 1
+
+
+	testing $version moving recursively from a leaf node secret
+	./safe set secret/move/from9 foo=bar
+	./safe move -Rf secret/move/from9 secret/move/to9; exitok $? 0
+	cat >t/home/want <<EOF
+bar
+EOF
+	./safe get secret/move/from9; exitok $? 1
+	./safe get secret/move/to9:foo >t/home/got 2>t/home/errors; diffok
+
+
+	testing $version moving recursively from a key
+	./safe set secret/move/from10 foo=bar
+	./safe move -Rf secret/move/from10:foo secret/move/to10; exitok $? 0
+	cat >t/home/want <<EOF
+bar
+EOF
+	./safe get secret/move/from9; exitok $? 1
+	./safe get secret/copy/to9:foo >t/home/got 2>t/home/errors; diffok
+
+
+	testing $version moving recursively from a subtree
+	./safe set secret/move/fromtree1/one foo=bar
+	./safe move -Rf secret/move/fromtree1 secret/move/totree1; exitok $? 0
+	cat >t/home/want <<EOF
+bar
+EOF
+	./safe get secret/move/fromtree1/one; exitok $? 1
+	./safe get secret/move/totree1/one:foo >t/home/got 2>t/home/errors; diffok
+
+	testing $version attempting to copy a subtree without -R should fail
+	./safe set secret/move/fromtree2/one foo=bar
+	./safe move -f secret/move/fromtree2 secret/move/totree2; exitok $? 1
+	./safe get secret/move/totree2/one; exitok $? 1
+
+	testing $version moving a non-existent secret with -f should fail silently
+	./safe move -f secret/move/gobbledegook secret/move/fakedest; exitok $? 0
+	./safe get secret/move/fakedest; exitok $? 1
+
+	testing $version moving a non-existent key with -f should fail silently
+	./safe set secret/move/from11 foo=bar
+	./safe copy -f secret/move/from11:beep secret/move/to11; exitok $? 0
+	./safe get secret/move/to11; exitok $? 1
+	cat >t/home/want <<EOF
+bar
+EOF
+	./safe get secret/move/from11:foo >t/home/got 2>t/home/errors; diffok
+
+
+  ###### TREE TESTS ######
 
 	testing $version tree display
 	./safe gen secret/tree/alpha     x >/dev/null

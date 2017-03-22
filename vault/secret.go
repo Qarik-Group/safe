@@ -44,6 +44,22 @@ func (s *Secret) Set(key, value string) {
 	s.data[key] = value
 }
 
+// Delete removes the entry with the given key from the Secret.
+// Returns true if there was a matching object to delete. False otherwise.
+func (s *Secret) Delete(key string) bool {
+	if !s.Has(key) {
+		return false
+	}
+	delete(s.data, key)
+	return true
+}
+
+// Empty returns true if there are no key-value pairs in this Secret object.
+// False otherwise.
+func (s *Secret) Empty() bool {
+	return len(s.data) == 0
+}
+
 func (s *Secret) Format(oldKey, newKey, fmtType string) error {
 	if !s.Has(oldKey) {
 		return NewSecretNotFoundError(oldKey)

@@ -320,10 +320,13 @@ func (v *Vault) Tree(path string, options TreeOptions) (tree.Node, error) {
 
 // Write takes a Secret and writes it to the Vault at the specified path.
 func (v *Vault) Write(path string, s *Secret) error {
-	raw := s.JSON()
-	if raw == "" {
-		return fmt.Errorf("nothing to write")
+	//If our secret has become empty (through key deletion, most likely)
+	// make sure to clean up the secret
+	if s.Empty() {
+		return v.deleteIfPresent(path)
 	}
+
+	raw := s.JSON()
 
 	req, err := http.NewRequest("POST", v.url("/v1/%s", path), strings.NewReader(raw))
 	if err != nil {
@@ -346,22 +349,64 @@ func (v *Vault) Write(path string, s *Secret) error {
 	return nil
 }
 
+//errIfFolder returns an error with your provided message if the given path exists,
+// either as a secret or a folder.
+// Can also throw an error if contacting the backend failed, in which case that error
+// is returned.
+func (v *Vault) errIfExists(path, message string, args ...interface{}) error {
+	if _, err := v.List(path); err == nil { //...see if it is a subtree "folder"
+		// the "== nil" is not a typo. if there is an error, NotFound or otherwise,
+		// simply fall through to the error return below
+		// Otherwise, give a different error signifying that the problem is that
+		// the target is a directory when we expected a secret.
+		return fmt.Errorf(message, args...)
+	} else if err != nil && !IsNotFound(err) {
+		return err
+	}
+	return nil
+}
+
+func (v *Vault) verifySecretExists(path string) error {
+	_, err := v.Read(path)
+	if err != nil && IsNotFound(err) { //if this was not a leaf node (secret)...
+		if folderErr := v.errIfExists(path, "`%s` points to a folder, not a secret", path); folderErr != nil {
+			return folderErr
+		}
+	}
+	return err
+}
+
+//DeleteTree recursively deletes the leaf nodes beneath the given root until
+// the root has no children, and then deletes that.
 func (v *Vault) DeleteTree(root string) error {
 	tree, err := v.Tree(root, TreeOptions{})
 	if err != nil {
 		return err
 	}
 	for _, path := range tree.Paths("/") {
-		err = v.Delete(path)
+		err = v.deleteEntireSecret(path)
 		if err != nil {
 			return err
 		}
 	}
-	return v.Delete(root)
+	return v.deleteEntireSecret(root)
 }
 
-// Delete removes the secret stored at the specified path.
+// Delete removes the secret or key stored at the specified path.
 func (v *Vault) Delete(path string) error {
+	if err := v.verifySecretExists(path); err != nil {
+		return err
+	}
+
+	secret, key := ParsePath(path)
+	if key == "" {
+		return v.deleteEntireSecret(path)
+	}
+	return v.deleteSpecificKey(secret, key)
+}
+
+func (v *Vault) deleteEntireSecret(path string) error {
+
 	req, err := http.NewRequest("DELETE", v.url("/v1/%s", path), nil)
 	if err != nil {
 		return err
@@ -383,15 +428,95 @@ func (v *Vault) Delete(path string) error {
 	return nil
 }
 
-// Copy copies secrets from one path to another.
-func (v *Vault) Copy(oldpath, newpath string) error {
-	secret, err := v.Read(oldpath)
+func (v *Vault) deleteSpecificKey(path, key string) error {
+	secret, err := v.Read(path)
 	if err != nil {
 		return err
 	}
-	return v.Write(newpath, secret)
+	deleted := secret.Delete(key)
+	if !deleted {
+		return NewKeyNotFoundError(path, key)
+	}
+	err = v.Write(path, secret)
+	return err
 }
 
+//deleteIfPresent first checks to see if there is a Secret at the given path,
+// and if so, it deletes it. Otherwise, no error is thrown
+func (v *Vault) deleteIfPresent(path string) error {
+	secretpath, _ := ParsePath(path)
+	if _, err := v.Read(secretpath); err != nil {
+		if IsSecretNotFound(err) {
+			return nil
+		}
+		return err
+	}
+
+	err := v.Delete(path)
+	if IsKeyNotFound(err) {
+		return nil
+	}
+	return err
+}
+
+// Copy copies secrets from one path to another.
+// With a secret:key specified: key -> key is good.
+// key -> no-key is okay - we assume to keep old key name
+// no-key -> key is bad. That makes no sense and the user should feel bad.
+// Returns KeyNotFoundError if there is no such specified key in the secret at oldpath
+func (v *Vault) Copy(oldpath, newpath string) error {
+	if err := v.verifySecretExists(oldpath); err != nil {
+		return err
+	}
+
+	srcPath, _ := ParsePath(oldpath)
+	srcSecret, err := v.Read(srcPath)
+	if err != nil {
+		return err
+	}
+
+	var copyFn func(string, string, *Secret) error
+	if PathHasKey(oldpath) {
+		copyFn = v.copyKey
+	} else {
+		copyFn = v.copyEntireSecret
+	}
+
+	return copyFn(oldpath, newpath, srcSecret)
+}
+
+func (v *Vault) copyEntireSecret(oldpath, newpath string, src *Secret) (err error) {
+	if PathHasKey(newpath) {
+		return fmt.Errorf("Cannot move full secret `%s` into specific key `%s`", oldpath, newpath)
+	}
+	return v.Write(newpath, src)
+}
+
+func (v *Vault) copyKey(oldpath, newpath string, src *Secret) (err error) {
+	_, srcKey := ParsePath(oldpath)
+	if !src.Has(srcKey) {
+		return NewKeyNotFoundError(oldpath, srcKey)
+	}
+
+	dstPath, dstKey := ParsePath(newpath)
+	//If destination has no key, then assume to give it the same key as the src
+	if dstKey == "" {
+		dstKey = srcKey
+	}
+	dst, err := v.Read(dstPath)
+	if err != nil {
+		if !IsSecretNotFound(err) {
+			return err
+		}
+		dst = NewSecret() //If no secret is already at the dst, initialize a new one
+	}
+	dst.Set(dstKey, src.Get(srcKey))
+	return v.Write(dstPath, dst)
+}
+
+//MoveCopyTree will recursively copy all nodes from the root to the new location.
+// This function will get confused about 'secret:key' syntax, so don't let those
+// get routed here - they don't make sense for a recursion anyway.
 func (v *Vault) MoveCopyTree(oldRoot, newRoot string, f func(string, string) error) error {
 	tree, err := v.Tree(oldRoot, TreeOptions{})
 	if err != nil {
@@ -412,7 +537,13 @@ func (v *Vault) MoveCopyTree(oldRoot, newRoot string, f func(string, string) err
 }
 
 // Move moves secrets from one path to another.
+// A move is semantically a copy and then a deletion of the original item. For
+// more information on the behavior of Move pertaining to keys, look at Copy.
 func (v *Vault) Move(oldpath, newpath string) error {
+	if err := v.verifySecretExists(oldpath); err != nil {
+		return err
+	}
+
 	err := v.Copy(oldpath, newpath)
 	if err != nil {
 		return err

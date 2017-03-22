@@ -100,6 +100,7 @@ type Options struct {
 
 	Gen struct {
 		Policy string `cli:"-p, --policy"`
+		Length int    `cli:"-l, --length"`
 	} `cli:"gen, auto"`
 
 	SSH     struct{} `cli:"ssh"`
@@ -347,7 +348,7 @@ func main() {
 	})
 
 	r.Dispatch("status", &Help{
-		Summary: "Print the status of the current targets backend nodes",
+		Summary: "Print the status of the current target's backend nodes",
 		Usage:   "safe status",
 		Type:    AdministrativeCommand,
 	}, func(command string, args ...string) error {
@@ -562,6 +563,27 @@ is NOT obscured.
 		return v.Write(path, s)
 	})
 
+	writeHelper := func(prompt bool, command string, args ...string) error {
+		rc.Apply()
+		if len(args) < 2 {
+			r.ExitWithUsage(command)
+		}
+		v := connect()
+		path, args := args[0], args[1:]
+		s, err := v.Read(path)
+		if err != nil && !vault.IsNotFound(err) {
+			return err
+		}
+		for _, set := range args {
+			k, v, err := keyPrompt(set, prompt, true)
+			if err != nil {
+				return err
+			}
+			s.Set(k, v)
+		}
+		return v.Write(path, s)
+	}
+
 	r.Dispatch("set", &Help{
 		Summary: "Create or update a secret",
 		Usage:   "safe set PATH NAME=[VALUE] [NAME ...]",
@@ -577,24 +599,8 @@ you don't want the value to show up in your ~/.bash_history, or in the
 process table.
 `,
 	}, func(command string, args ...string) error {
-		rc.Apply()
-		if len(args) < 2 {
-			r.ExitWithUsage("set")
-		}
-		v := connect()
-		path, args := args[0], args[1:]
-		s, err := v.Read(path)
-		if err != nil && !vault.IsNotFound(err) {
-			return err
-		}
-		for _, set := range args {
-			k, v, err := keyPrompt(set, true, true)
-			if err != nil {
-				return err
-			}
-			s.Set(k, v)
-		}
-		return v.Write(path, s)
+		//writeHelper is defined right above this Dispatch
+		return writeHelper(true, "set", args...)
 	})
 
 	r.Dispatch("paste", &Help{
@@ -603,7 +609,7 @@ process table.
 		Type:    DestructiveCommand,
 		Description: `
 Works just like 'safe set', updating a single path in the Vault with new or
-updated named attributes.  Any eisting name/value pairs not specified on the
+updated named attributes.  Any existing name/value pairs not specified on the
 command-line will be left alone, with their original values.
 
 You will be prompted to provide any values that are omitted, but unlike the
@@ -612,24 +618,9 @@ sense when you are pasting in credentials from an external password manager
 like 1password or Lastpass.
 `,
 	}, func(command string, args ...string) error {
-		rc.Apply()
-		if len(args) < 2 {
-			r.ExitWithUsage("paste")
-		}
-		v := connect()
-		path, args := args[0], args[1:]
-		s, err := v.Read(path)
-		if err != nil && !vault.IsNotFound(err) {
-			return err
-		}
-		for _, set := range args {
-			k, v, err := keyPrompt(set, false, true)
-			if err != nil {
-				return err
-			}
-			s.Set(k, v)
-		}
-		return v.Write(path, s)
+		//writeHelper is defined right about set, which is defined right about this
+		//Dispatch call.
+		return writeHelper(false, "paste", args...)
 	})
 
 	r.Dispatch("exists", &Help{
@@ -760,15 +751,17 @@ to get your bearings.
 		}
 		v := connect()
 		for _, path := range args {
-			if opt.Delete.Recurse {
+			_, key := vault.ParsePath(path)
+			//Ignore -R if path has a key because that makes no sense
+			if opt.Delete.Recurse && key == "" {
 				if !opt.Delete.Force && !recursively("delete", args...) {
 					return nil /* skip this command, process the next */
 				}
-				if err := v.DeleteTree(path); err != nil {
+				if err := v.DeleteTree(path); err != nil && !(vault.IsNotFound(err) && opt.Delete.Force) {
 					return err
 				}
 			} else {
-				if err := v.Delete(path); err != nil {
+				if err := v.Delete(path); err != nil && !(vault.IsNotFound(err) && opt.Delete.Force) {
 					return err
 				}
 			}
@@ -848,15 +841,18 @@ to get your bearings.
 		}
 
 		v := connect()
-		if opt.Move.Recurse {
+
+		//Don't try to recurse if operating on a key
+		// args[0] is the source path. args[1] is the destination path.
+		if opt.Move.Recurse && !vault.PathHasKey(args[0]) && !vault.PathHasKey(args[1]) {
 			if !opt.Move.Force && !recursively("move", args...) {
 				return nil /* skip this command, process the next */
 			}
-			if err := v.MoveCopyTree(args[0], args[1], v.Move); err != nil {
+			if err := v.MoveCopyTree(args[0], args[1], v.Move); err != nil && !(vault.IsNotFound(err) && opt.Move.Force) {
 				return err
 			}
 		} else {
-			if err := v.Move(args[0], args[1]); err != nil {
+			if err := v.Move(args[0], args[1]); err != nil && !(vault.IsNotFound(err) && opt.Move.Force) {
 				return err
 			}
 		}
@@ -875,15 +871,17 @@ to get your bearings.
 		}
 		v := connect()
 
-		if opt.Copy.Recurse {
+		//Don't try to recurse if operating on a key
+		// args[0] is the source path. args[1] is the destination path.
+		if opt.Copy.Recurse && !vault.PathHasKey(args[0]) && !vault.PathHasKey(args[1]) {
 			if !opt.Copy.Force && !recursively("copy", args...) {
 				return nil /* skip this command, process the next */
 			}
-			if err := v.MoveCopyTree(args[0], args[1], v.Copy); err != nil {
+			if err := v.MoveCopyTree(args[0], args[1], v.Copy); err != nil && !(vault.IsNotFound(err) && opt.Copy.Force) {
 				return err
 			}
 		} else {
-			if err := v.Copy(args[0], args[1]); err != nil {
+			if err := v.Copy(args[0], args[1]); err != nil && !(vault.IsNotFound(err) && opt.Copy.Force) {
 				return err
 			}
 		}
@@ -892,7 +890,7 @@ to get your bearings.
 
 	r.Dispatch("gen", &Help{
 		Summary: "Generate a random password",
-		Usage:   "safe gen [LENGTH] PATH KEY",
+		Usage:   "safe gen [-l <length>] PATH:KEY [PATH:KEY ...]",
 		Type:    DestructiveCommand,
 		Description: `
 LENGTH defaults to 64 characters.
@@ -905,31 +903,50 @@ The following options are recognized:
 	}, func(command string, args ...string) error {
 		rc.Apply()
 
-		length := 64
-		if len(args) > 0 {
-			if u, err := strconv.ParseUint(args[0], 10, 16); err == nil {
-				length = int(u)
-				args = args[1:]
-			}
-		}
-
-		if len(args) != 2 {
+		if len(args) == 0 {
 			r.ExitWithUsage("gen")
 		}
 
-		v := connect()
-		path, key := args[0], args[1]
-		s, err := v.Read(path)
-		if err != nil && !vault.IsNotFound(err) {
-			return err
-		}
-		err = s.Password(key, length, opt.Gen.Policy)
-		if err != nil {
-			return err
+		length := 64
+
+		if opt.Gen.Length != 0 {
+			length = opt.Gen.Length
+		} else if u, err := strconv.ParseUint(args[0], 10, 16); err == nil {
+			length = int(u)
+			args = args[1:]
 		}
 
-		if err = v.Write(path, s); err != nil {
-			return err
+		v := connect()
+
+		for len(args) > 0 {
+			var path, key string
+			if vault.PathHasKey(args[0]) {
+				path, key = vault.ParsePath(args[0])
+				args = args[1:]
+			} else {
+				if len(args) < 2 {
+					r.ExitWithUsage("gen")
+				}
+				path, key = args[0], args[1]
+				//If the key looks like a full path with a :key at the end, then the user
+				// probably botched the args
+				if vault.PathHasKey(key) {
+					return fmt.Errorf("For secret `%s` and key `%s`: key cannot contain a key", path, key)
+				}
+				args = args[2:]
+			}
+			s, err := v.Read(path)
+			if err != nil && !vault.IsNotFound(err) {
+				return err
+			}
+			err = s.Password(key, length, opt.Gen.Policy)
+			if err != nil {
+				return err
+			}
+
+			if err = v.Write(path, s); err != nil {
+				return err
+			}
 		}
 		return nil
 	})
