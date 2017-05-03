@@ -75,6 +75,12 @@ func (p *Parser) Next() bool {
 	cmd := []string{}  // sub-command stack
 	lvl := p.c         // where we are in the sub-command depth
 	for {
+		if lvl.Stop {
+			args = append(args, rest...)
+			rest = []string{}
+			break
+		}
+
 		if rest, err = parse(&p.c, cmd, rest); err != nil {
 			p.err = err
 			return false

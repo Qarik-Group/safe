@@ -18,6 +18,7 @@ type option struct {
 
 type context struct {
 	Command string /* canonical name */
+	Stop bool
 	Options []*option
 	Subs    map[string]context
 }

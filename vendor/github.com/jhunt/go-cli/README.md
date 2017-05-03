@@ -161,6 +161,39 @@ So, without any ambiguity, `go-cli` is perfectly happy to let you
 overload the meaning of `-a`.  Whether you _should_, is entirely
 up to you.
 
+Halting Argument Processing
+===========================
+
+If you end the command name, or one of its aliases, with an
+exclamation point, `go-cli` will stop parsing all options after
+the command name is seen.  That means that if you have this
+structure:
+
+```
+type Opt struct {
+  Verbose bool `cli:"-v, --verbose"`
+  Debug   bool `cli:"-D, --debug"`
+
+  List struct {
+    All bool `cli:"-a, --all"`
+  } `cli:"list"`
+
+  Exec struct {
+  } `cli:"exec"`
+}
+```
+
+And a command-line like this:
+
+```
+$ ./cli -v exec ls -lah
+```
+
+The argument processing stops as soon as the `exec` token is seen,
+and the arguments will be given back as [`ls`, `-lah`].  This can
+be helpful for cases where you want to examine the flags yourself,
+or pass them to another parser, or echo them as-is.
+
 Chained Commands
 ================
 
@@ -261,3 +294,4 @@ than nothin')
 
 Happy Hacking!
 
+[issues]: https://github.com/jhunt/go-cli/issues

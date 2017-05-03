@@ -107,7 +107,7 @@ type Options struct {
 	RSA     struct{} `cli:"rsa"`
 	DHParam struct{} `cli:"dhparam, dhparams, dh"`
 	Prompt  struct{} `cli:"prompt"`
-	Vault   struct{} `cli:"vault"`
+	Vault   struct{} `cli:"vault!"`
 	Fmt     struct{} `cli:"fmt"`
 
 	PKI struct {

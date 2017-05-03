@@ -1,6 +1,6 @@
 {
 	"ImportPath": "github.com/starkandwayne/safe",
-	"GoVersion": "go1.7",
+	"GoVersion": "go1.8",
 	"GodepVersion": "v79",
 	"Deps": [
 		{
@@ -9,7 +9,7 @@
 		},
 		{
 			"ImportPath": "github.com/jhunt/go-cli",
-			"Rev": "354aa19c19dbfac1dba24c726d86662b6b0320a0"
+			"Rev": "f04a1744b5e341ae543d4ba4f6b2290425627a3a"
 		},
 		{
 			"ImportPath": "github.com/jhunt/go-snapshot",
@@ -61,7 +61,7 @@
 		},
 		{
 			"ImportPath": "github.com/jhunt/go-cli/vendor/github.com/jhunt/go-snapshot",
-			"Rev": "354aa19c19dbfac1dba24c726d86662b6b0320a0"
+			"Rev": "f04a1744b5e341ae543d4ba4f6b2290425627a3a"
 		}
 	]
 }

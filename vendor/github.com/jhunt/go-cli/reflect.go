@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"reflect"
+	"strings"
 	"regexp"
 )
 
@@ -74,6 +75,10 @@ func reflectSomeMore(c context, t reflect.Type, v *reflect.Value) (context, erro
 			}
 
 			for _, cmd := range regexp.MustCompile(" *, *").Split(tag, -1) {
+				if strings.HasSuffix(cmd, "!") {
+					sub.Stop = true
+					cmd = cmd[:len(cmd)-1]
+				}
 				if sub.Command == "" {
 					sub.Command = cmd
 				}
