@@ -33,7 +33,7 @@ fi
 ###############################################################
 
 #?#ORIGIN=$(pwd)
-TARGETS=${TARGETS:-linux/amd64 darwin/amd64 windows/amd64}
+TARGETS=${TARGETS:-linux/amd64 darwin/amd64}
 ROOT=$( cd "$( dirname "${BASH_SOURCE[0]}" )/../.." && pwd )
 
 pushd $REPO_ROOT
@@ -47,18 +47,19 @@ if [[ -d ${newgopath} ]]; then
 	PATH="${PATH}:${newgopath}/bin"
 fi
 echo ">> Using GOPATH ${GOPATH}"
-godep restore
 go get github.com/mitchellh/gox
 popd
 
+if [[ -n ${STATIC_BINARY} && ${STATIC_BINARY} != "false" ]]; then
+	export CGO_ENABLED=0
+fi
 
 pushd $REPO_ROOT
 mkdir artifacts
-gox -osarch="${TARGETS}" --output="artifacts/${BINARY}-{{.OS}}-{{.Arch}}" -ldflags="-X main.Version=${VERSION}" .
-go build -ldflags="-X main.Version=${VERSION}" .
+gox -osarch="${TARGETS}" --output="artifacts/${BINARY}-{{.OS}}-{{.Arch}}" -ldflags="-X main.Version=${VERSION}" ./...
+go build -o "${BINARY}" -ldflags="-X main.Version=${VERSION}" ${CMD_PKG:-.}
 ./${BINARY} -v
 popd
-
 
 echo "v${VERSION}"                         > ${RELEASE_ROOT}/tag
 echo "${RELEASE_NAME} v${VERSION}"         > ${RELEASE_ROOT}/name
