@@ -4,3 +4,4 @@ release
 ci/credentials.yml
 /t
 /vaults
+*.swp

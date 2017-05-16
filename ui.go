@@ -21,19 +21,18 @@ func fail(err error) {
 	}
 }
 
-func keyPrompt(key string, confirm bool, secure bool) (string, string, error) {
+func parseKeyVal(key string) (string, string, error) {
 	if strings.Index(key, "=") >= 0 {
 		l := strings.SplitN(key, "=", 2)
 		if l[1] == "" {
-			l[1] = pr(l[0], confirm, secure)
+			return l[0], "", nil
 		}
 		ansi.Fprintf(os.Stderr, "%s: @G{%s}\n", l[0], l[1])
 		return l[0], l[1], nil
-
 	} else if strings.Index(key, "@") >= 0 {
 		l := strings.SplitN(key, "@", 2)
 		if l[1] == "" {
-			return l[0], pr(l[0], confirm, secure), nil
+			return l[0], "", nil
 		}
 		b, err := ioutil.ReadFile(l[1])
 		if err != nil {
@@ -42,7 +41,7 @@ func keyPrompt(key string, confirm bool, secure bool) (string, string, error) {
 		ansi.Fprintf(os.Stderr, "%s: <@C{%s}\n", l[0], l[1])
 		return l[0], string(b), nil
 	}
-	return key, pr(key, confirm, secure), nil
+	return key, "", nil
 }
 
 func pr(label string, confirm bool, secure bool) string {

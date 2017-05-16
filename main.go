@@ -50,9 +50,10 @@ func connect() *vault.Vault {
 }
 
 type Options struct {
-	Insecure bool `cli:"-k, --insecure"`
-	Version  bool `cli:"-v, --version"`
-	Help     bool `cli:"-h, --help"`
+	Insecure     bool `cli:"-k, --insecure"`
+	Version      bool `cli:"-v, --version"`
+	Help         bool `cli:"-h, --help"`
+	SkipIfExists bool `cli:"--noclobber"`
 
 	HelpCommand    struct{} `cli:"help"`
 	VersionCommand struct{} `cli:"version"`
@@ -402,11 +403,7 @@ func main() {
 			keys := make([]string, nkeys)
 
 			for i := 0; i < nkeys; i++ {
-				_, key, err := keyPrompt(fmt.Sprintf("Key #%d", i+1), false, true)
-				if err != nil {
-					return err
-				}
-				keys[i] = key
+				keys[i] = pr(fmt.Sprintf("Key #%d", i+1), false, true)
 			}
 
 			for addr, state := range st {
@@ -529,6 +526,51 @@ func main() {
 
 	})
 
+	writeHelper := func(prompt bool, insecure bool, command string, args ...string) error {
+		rc.Apply()
+		if len(args) < 2 {
+			r.ExitWithUsage(command)
+		}
+		v := connect()
+		path, args := args[0], args[1:]
+		s, err := v.Read(path)
+		if err != nil && !vault.IsNotFound(err) {
+			return err
+		}
+		exists := (err == nil)
+		clobberKeys := []string{}
+		for _, arg := range args {
+			k, v, err := parseKeyVal(arg)
+			if err != nil {
+				return err
+			}
+			if opt.SkipIfExists && exists && s.Has(k) {
+				clobberKeys = append(clobberKeys, k)
+				continue
+			}
+			// realize that we're going to fail, and don't prompt the user for any info
+			if len(clobberKeys) > 0 {
+				continue
+			}
+			if v == "" {
+				v = pr(k, prompt, insecure)
+			}
+			if err != nil {
+				return err
+			}
+			err = s.Set(k, v, opt.SkipIfExists)
+			if err != nil {
+				return err
+			}
+		}
+		if len(clobberKeys) > 0 {
+			ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to update} @C{%s}@R{, as the following keys would be clobbered:} @C{%s}\n",
+				path, strings.Join(clobberKeys, ", "))
+			return nil
+		}
+		return v.Write(path, s)
+	}
+
 	r.Dispatch("ask", &Help{
 		Summary: "Create or update an insensitive configuration value",
 		Usage:   "safe ask PATH NAME=[VALUE] [NAME ...]",
@@ -543,46 +585,9 @@ are omitted. Unlike the 'safe set' and 'safe paste' commands, data entry
 is NOT obscured.
 `,
 	}, func(command string, args ...string) error {
-		rc.Apply()
-		if len(args) < 2 {
-			r.ExitWithUsage("ask")
-		}
-		v := connect()
-		path, args := args[0], args[1:]
-		s, err := v.Read(path)
-		if err != nil && !vault.IsNotFound(err) {
-			return err
-		}
-		for _, ask := range args {
-			k, v, err := keyPrompt(ask, false, false)
-			if err != nil {
-				return err
-			}
-			s.Set(k, v)
-		}
-		return v.Write(path, s)
+		//writeHelper is defined right above this subcommand
+		return writeHelper(false, false, "ask", args...)
 	})
-
-	writeHelper := func(prompt bool, command string, args ...string) error {
-		rc.Apply()
-		if len(args) < 2 {
-			r.ExitWithUsage(command)
-		}
-		v := connect()
-		path, args := args[0], args[1:]
-		s, err := v.Read(path)
-		if err != nil && !vault.IsNotFound(err) {
-			return err
-		}
-		for _, set := range args {
-			k, v, err := keyPrompt(set, prompt, true)
-			if err != nil {
-				return err
-			}
-			s.Set(k, v)
-		}
-		return v.Write(path, s)
-	}
 
 	r.Dispatch("set", &Help{
 		Summary: "Create or update a secret",
@@ -599,8 +604,8 @@ you don't want the value to show up in your ~/.bash_history, or in the
 process table.
 `,
 	}, func(command string, args ...string) error {
-		//writeHelper is defined right above this Dispatch
-		return writeHelper(true, "set", args...)
+		//writeHelper is defined right above the ask subcommand
+		return writeHelper(true, true, "set", args...)
 	})
 
 	r.Dispatch("paste", &Help{
@@ -618,9 +623,9 @@ sense when you are pasting in credentials from an external password manager
 like 1password or Lastpass.
 `,
 	}, func(command string, args ...string) error {
-		//writeHelper is defined right about set, which is defined right about this
+		//writeHelper is defined right above the ask subcommand
 		//Dispatch call.
-		return writeHelper(false, "paste", args...)
+		return writeHelper(false, true, "paste", args...)
 	})
 
 	r.Dispatch("exists", &Help{
@@ -819,6 +824,11 @@ to get your bearings.
 			return err
 		}
 
+		if opt.SkipIfExists {
+			ansi.Fprintf(os.Stderr, "@R{!!} @C{--no-clobber} @R{is incompatible with} @C{safe import}\n")
+			r.ExitWithUsage("import")
+		}
+
 		v := connect()
 		for path, s := range data {
 			err = v.Write(path, s)
@@ -848,11 +858,11 @@ to get your bearings.
 			if !opt.Move.Force && !recursively("move", args...) {
 				return nil /* skip this command, process the next */
 			}
-			if err := v.MoveCopyTree(args[0], args[1], v.Move); err != nil && !(vault.IsNotFound(err) && opt.Move.Force) {
+			if err := v.MoveCopyTree(args[0], args[1], v.Move, opt.SkipIfExists); err != nil && !(vault.IsNotFound(err) && opt.Move.Force) {
 				return err
 			}
 		} else {
-			if err := v.Move(args[0], args[1]); err != nil && !(vault.IsNotFound(err) && opt.Move.Force) {
+			if err := v.Move(args[0], args[1], opt.SkipIfExists); err != nil && !(vault.IsNotFound(err) && opt.Move.Force) {
 				return err
 			}
 		}
@@ -877,11 +887,11 @@ to get your bearings.
 			if !opt.Copy.Force && !recursively("copy", args...) {
 				return nil /* skip this command, process the next */
 			}
-			if err := v.MoveCopyTree(args[0], args[1], v.Copy); err != nil && !(vault.IsNotFound(err) && opt.Copy.Force) {
+			if err := v.MoveCopyTree(args[0], args[1], v.Copy, opt.SkipIfExists); err != nil && !(vault.IsNotFound(err) && opt.Copy.Force) {
 				return err
 			}
 		} else {
-			if err := v.Copy(args[0], args[1]); err != nil && !(vault.IsNotFound(err) && opt.Copy.Force) {
+			if err := v.Copy(args[0], args[1], opt.SkipIfExists); err != nil && !(vault.IsNotFound(err) && opt.Copy.Force) {
 				return err
 			}
 		}
@@ -939,7 +949,12 @@ The following options are recognized:
 			if err != nil && !vault.IsNotFound(err) {
 				return err
 			}
-			err = s.Password(key, length, opt.Gen.Policy)
+			exists := (err == nil)
+			if opt.SkipIfExists && exists && s.Has(key) {
+				ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to update} @C{%s:%s} @R{as it is already present in Vault}\n", path, key)
+				continue
+			}
+			err = s.Password(key, length, opt.Gen.Policy, opt.SkipIfExists)
 			if err != nil {
 				return err
 			}
@@ -981,7 +996,12 @@ public key, formatted for use in an SSH authorized_keys file, under 'public'.
 			if err != nil && !vault.IsNotFound(err) {
 				return err
 			}
-			if err = s.SSHKey(bits); err != nil {
+			exists := (err == nil)
+			if opt.SkipIfExists && exists && (s.Has("private") || s.Has("public") || s.Has("fingerprint")) {
+				ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to generate an SSH key at} @C{%s} @R{as it is already present in Vault}\n", path)
+				continue
+			}
+			if err = s.SSHKey(bits, opt.SkipIfExists); err != nil {
 				return err
 			}
 			if err = v.Write(path, s); err != nil {
@@ -1021,7 +1041,12 @@ be PEM-encoded.
 			if err != nil && !vault.IsNotFound(err) {
 				return err
 			}
-			if err = s.RSAKey(bits); err != nil {
+			exists := (err == nil)
+			if opt.SkipIfExists && exists && (s.Has("private") || s.Has("public")) {
+				ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to generate an RSA key at} @C{%s} @R{as it is already present in Vault}\n", path)
+				continue
+			}
+			if err = s.RSAKey(bits, opt.SkipIfExists); err != nil {
 				return err
 			}
 			if err = v.Write(path, s); err != nil {
@@ -1059,7 +1084,12 @@ NBITS defaults to 2048.
 		if err != nil && !vault.IsNotFound(err) {
 			return err
 		}
-		if err = s.DHParam(bits); err != nil {
+		exists := (err == nil)
+		if opt.SkipIfExists && exists && s.Has("dhparam-pem") {
+			ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to generate a DH Param in} @C{%s} @R{as it is already present in Vault}\n", path)
+			return nil
+		}
+		if err = s.DHParam(bits, opt.SkipIfExists); err != nil {
 			return err
 		}
 		return v.Write(path, s)
@@ -1070,6 +1100,10 @@ NBITS defaults to 2048.
 		Usage:   "safe echo Your Message Here:",
 		Type:    NonDestructiveCommand,
 	}, func(command string, args ...string) error {
+		// --no-clobber is ignored here, because there's no context of what you're
+		// about to be writing after a prompt, so not sure if we should our shouldn't prompt
+		// if you need to write something and prompt, but only if it isnt already present
+		// in vault, see the `ask` subcommand
 		fmt.Fprintf(os.Stderr, "%s\n", strings.Join(args, " "))
 		return nil
 	})
@@ -1080,6 +1114,10 @@ NBITS defaults to 2048.
 		Type:    DestructiveCommand,
 	}, func(command string, args ...string) error {
 		rc.Apply()
+
+		if opt.SkipIfExists {
+			ansi.Fprintf(os.Stderr, "@C{--no-clobber} @Y{specified, but is ignored for} @C{safe vault}\n")
+		}
 
 		cmd := exec.Command("vault", args...)
 		cmd.Stdin = os.Stdin
@@ -1126,7 +1164,11 @@ Supported formats:
 		if err != nil {
 			return err
 		}
-		if err = s.Format(oldKey, newKey, fmtType); err != nil {
+		if opt.SkipIfExists && s.Has(newKey) {
+			ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to reformat} @C{%s:%s} @R{to} @C{%s} @R{as it is already present in Vault}\n", path, oldKey, newKey)
+			return nil
+		}
+		if err = s.Format(oldKey, newKey, fmtType, opt.SkipIfExists); err != nil {
 			if vault.IsNotFound(err) {
 				return fmt.Errorf("%s:%s does not exist, cannot create %s encoded copy at %s:%s", path, oldKey, fmtType, path, newKey)
 			}
@@ -1265,7 +1307,10 @@ The following options are recognized:
 			if err != nil && !vault.IsNotFound(err) {
 				return err
 			}
-			s.Set("crl-pem", string(pem))
+			err = s.Set("crl-pem", string(pem), false)
+			if err != nil {
+				return err
+			}
 			return v.Write(path, s)
 		} else {
 			if len(pem) == 0 {
@@ -1312,7 +1357,10 @@ The following options are recognized:
 			if err != nil && !vault.IsNotFound(err) {
 				return err
 			}
-			s.Set("ca-pem", string(pem))
+			err = s.Set("ca-pem", string(pem), false)
+			if err != nil {
+				return err
+			}
 			return v.Write(path, s)
 		} else {
 			if len(pem) == 0 {
@@ -1378,7 +1426,7 @@ be saved as 'combined', and the certificate serial number under 'serial'.
 			AltNames:          opt.Cert.AltNames,
 			ExcludeCNFromSans: opt.Cert.ExcludeCN,
 		}
-		return v.CreateSignedCertificate(opt.Cert.Backend, opt.Cert.Role, args[0], params)
+		return v.CreateSignedCertificate(opt.Cert.Backend, opt.Cert.Role, args[0], params, opt.SkipIfExists)
 	})
 
 	r.Dispatch("revoke", &Help{
@@ -1668,6 +1716,15 @@ The following options are recognized:
 		}
 
 		v := connect()
+		if opt.SkipIfExists {
+			if _, err := v.Read(args[0]); err == nil {
+				ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to create a new certificate in} @C{%s} @R{as it is already present in Vault}\n", args[0])
+				return nil
+			} else if err != nil && !vault.IsNotFound(err) {
+				return err
+			}
+		}
+
 		if opt.X509.Issue.SignedBy != "" {
 			secret, err := v.Read(opt.X509.Issue.SignedBy)
 			if err != nil {
@@ -1702,7 +1759,7 @@ The following options are recognized:
 				return err
 			}
 
-			s, err := ca.Secret()
+			s, err := ca.Secret(opt.SkipIfExists)
 			if err != nil {
 				return err
 			}
@@ -1712,7 +1769,7 @@ The following options are recognized:
 			}
 		}
 
-		s, err := cert.Secret()
+		s, err := cert.Secret(opt.SkipIfExists)
 		if err != nil {
 			return err
 		}
@@ -1766,7 +1823,7 @@ The following options are recognized:
 		/* revoke the Certificate */
 		/* FIXME make sure the CA signed this cert */
 		ca.Revoke(cert)
-		s, err = ca.Secret()
+		s, err = ca.Secret(false) // SkipIfExists doesnt make sense in the context of revoke
 		if err != nil {
 			return err
 		}
@@ -1814,7 +1871,7 @@ Currently, only the --renew option is supported, and it is required:
 		}
 
 		/* simply re-saving the CA X509 object regens the CRL */
-		s, err = ca.Secret()
+		s, err = ca.Secret(false) // SkipIfExists doesn't make sense in the context of crl regeneration
 		if err != nil {
 			return err
 		}

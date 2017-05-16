@@ -353,11 +353,10 @@ func (v *Vault) Write(path string, s *Secret) error {
 // either as a secret or a folder.
 // Can also throw an error if contacting the backend failed, in which case that error
 // is returned.
-func (v *Vault) errIfExists(path, message string, args ...interface{}) error {
+func (v *Vault) errIfFolder(path, message string, args ...interface{}) error {
 	//need to check if length of list is 0 because prior to vault 0.6.0, no 404 is
 	//given for attempting to list a path which does not exist.
 	if paths, err := v.List(path); err == nil && len(paths) != 0 { //...see if it is a subtree "folder"
-		fmt.Println(paths)
 		// the "== nil" is not a typo. if there is an error, NotFound or otherwise,
 		// simply fall through to the error return below
 		// Otherwise, give a different error signifying that the problem is that
@@ -372,7 +371,7 @@ func (v *Vault) errIfExists(path, message string, args ...interface{}) error {
 func (v *Vault) verifySecretExists(path string) error {
 	_, err := v.Read(path)
 	if err != nil && IsNotFound(err) { //if this was not a leaf node (secret)...
-		if folderErr := v.errIfExists(path, "`%s` points to a folder, not a secret", path); folderErr != nil {
+		if folderErr := v.errIfFolder(path, "`%s` points to a folder, not a secret", path); folderErr != nil {
 			return folderErr
 		}
 	}
@@ -467,9 +466,17 @@ func (v *Vault) deleteIfPresent(path string) error {
 // key -> no-key is okay - we assume to keep old key name
 // no-key -> key is bad. That makes no sense and the user should feel bad.
 // Returns KeyNotFoundError if there is no such specified key in the secret at oldpath
-func (v *Vault) Copy(oldpath, newpath string) error {
+func (v *Vault) Copy(oldpath, newpath string, skipIfExists bool) error {
 	if err := v.verifySecretExists(oldpath); err != nil {
 		return err
+	}
+	if skipIfExists {
+		if _, err := v.Read(newpath); err == nil {
+			ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to copy/move data into} @C{%s}@R{, as it would clobber existing data}\n", newpath)
+			return nil
+		} else if !IsNotFound(err) {
+			return err
+		}
 	}
 
 	srcPath, _ := ParsePath(oldpath)
@@ -478,24 +485,31 @@ func (v *Vault) Copy(oldpath, newpath string) error {
 		return err
 	}
 
-	var copyFn func(string, string, *Secret) error
+	var copyFn func(string, string, *Secret, bool) error
 	if PathHasKey(oldpath) {
 		copyFn = v.copyKey
 	} else {
 		copyFn = v.copyEntireSecret
 	}
 
-	return copyFn(oldpath, newpath, srcSecret)
+	return copyFn(oldpath, newpath, srcSecret, skipIfExists)
 }
 
-func (v *Vault) copyEntireSecret(oldpath, newpath string, src *Secret) (err error) {
+func (v *Vault) copyEntireSecret(oldpath, newpath string, src *Secret, skipIfExists bool) (err error) {
 	if PathHasKey(newpath) {
 		return fmt.Errorf("Cannot move full secret `%s` into specific key `%s`", oldpath, newpath)
+	}
+	if skipIfExists {
+		if _, err := v.Read(newpath); err == nil {
+			return ansi.Errorf("@R{BUG: Tried to replace} @C{%s} @R{with} @C{%s}@R{, but it already exists}", oldpath, newpath)
+		} else if !IsNotFound(err) {
+			return err
+		}
 	}
 	return v.Write(newpath, src)
 }
 
-func (v *Vault) copyKey(oldpath, newpath string, src *Secret) (err error) {
+func (v *Vault) copyKey(oldpath, newpath string, src *Secret, skipIfExists bool) (err error) {
 	_, srcKey := ParsePath(oldpath)
 	if !src.Has(srcKey) {
 		return NewKeyNotFoundError(oldpath, srcKey)
@@ -513,28 +527,55 @@ func (v *Vault) copyKey(oldpath, newpath string, src *Secret) (err error) {
 		}
 		dst = NewSecret() //If no secret is already at the dst, initialize a new one
 	}
-	dst.Set(dstKey, src.Get(srcKey))
+	err = dst.Set(dstKey, src.Get(srcKey), skipIfExists)
+	if err != nil {
+		return err
+	}
 	return v.Write(dstPath, dst)
 }
 
 //MoveCopyTree will recursively copy all nodes from the root to the new location.
 // This function will get confused about 'secret:key' syntax, so don't let those
 // get routed here - they don't make sense for a recursion anyway.
-func (v *Vault) MoveCopyTree(oldRoot, newRoot string, f func(string, string) error) error {
+func (v *Vault) MoveCopyTree(oldRoot, newRoot string, f func(string, string, bool) error, skipIfExists bool) error {
 	tree, err := v.Tree(oldRoot, TreeOptions{})
 	if err != nil {
 		return err
 	}
+	if skipIfExists {
+		newTree, err := v.Tree(newRoot, TreeOptions{})
+		if err != nil && !IsNotFound(err) {
+			return err
+		}
+		existing := map[string]bool{}
+		for _, path := range newTree.Paths("/") {
+			existing[path] = true
+		}
+		existingPaths := []string{}
+		for _, path := range tree.Paths("/") {
+			newPath := strings.Replace(path, oldRoot, newRoot, 1)
+			if existing[newPath] {
+				existingPaths = append(existingPaths, newPath)
+			}
+		}
+		if len(existingPaths) > 0 {
+			ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to copy/move data into} @C{%s}@R{, as the following paths would be clobbered:}\n", newRoot)
+			for _, path := range existingPaths {
+				ansi.Fprintf(os.Stderr, "@R{- }@C{%s}\n", path)
+			}
+			return nil
+		}
+	}
 	for _, path := range tree.Paths("/") {
 		newPath := strings.Replace(path, oldRoot, newRoot, 1)
-		err = f(path, newPath)
+		err = f(path, newPath, skipIfExists)
 		if err != nil {
 			return err
 		}
 	}
 
 	if _, err := v.Read(oldRoot); !IsNotFound(err) { // run through a copy unless we successfully got a 404 from this node
-		return f(oldRoot, newRoot)
+		return f(oldRoot, newRoot, skipIfExists)
 	}
 	return nil
 }
@@ -542,12 +583,12 @@ func (v *Vault) MoveCopyTree(oldRoot, newRoot string, f func(string, string) err
 // Move moves secrets from one path to another.
 // A move is semantically a copy and then a deletion of the original item. For
 // more information on the behavior of Move pertaining to keys, look at Copy.
-func (v *Vault) Move(oldpath, newpath string) error {
+func (v *Vault) Move(oldpath, newpath string, skipIfExists bool) error {
 	if err := v.verifySecretExists(oldpath); err != nil {
 		return err
 	}
 
-	err := v.Copy(oldpath, newpath)
+	err := v.Copy(oldpath, newpath, skipIfExists)
 	if err != nil {
 		return err
 	}
@@ -725,7 +766,7 @@ type CertOptions struct {
 	ExcludeCNFromSans bool   `json:"exclude_cn_from_sans,omitempty"`
 }
 
-func (v *Vault) CreateSignedCertificate(backend, role, path string, params CertOptions) error {
+func (v *Vault) CreateSignedCertificate(backend, role, path string, params CertOptions, skipIfExists bool) error {
 	if err := v.CheckPKIBackend(backend); err != nil {
 		return err
 	}
@@ -778,10 +819,22 @@ func (v *Vault) CreateSignedCertificate(backend, role, path string, params CertO
 				if err != nil && !IsNotFound(err) {
 					return err
 				}
-				secret.Set("cert", cert)
-				secret.Set("key", key)
-				secret.Set("combined", cert+key)
-				secret.Set("serial", serial)
+				err = secret.Set("cert", cert, skipIfExists)
+				if err != nil {
+					return err
+				}
+				err = secret.Set("key", key, skipIfExists)
+				if err != nil {
+					return err
+				}
+				err = secret.Set("combined", cert+key, skipIfExists)
+				if err != nil {
+					return err
+				}
+				err = secret.Set("serial", serial, skipIfExists)
+				if err != nil {
+					return err
+				}
 				return v.Write(path, secret)
 			} else {
 				fmt.Errorf("Invalid response datatype requesting certificate %s:\n%v\n", params.CN, d)
