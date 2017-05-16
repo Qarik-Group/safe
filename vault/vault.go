@@ -466,13 +466,15 @@ func (v *Vault) deleteIfPresent(path string) error {
 // key -> no-key is okay - we assume to keep old key name
 // no-key -> key is bad. That makes no sense and the user should feel bad.
 // Returns KeyNotFoundError if there is no such specified key in the secret at oldpath
-func (v *Vault) Copy(oldpath, newpath string, skipIfExists bool) error {
+func (v *Vault) Copy(oldpath, newpath string, skipIfExists bool, quiet bool) error {
 	if err := v.verifySecretExists(oldpath); err != nil {
 		return err
 	}
 	if skipIfExists {
 		if _, err := v.Read(newpath); err == nil {
-			ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to copy/move data into} @C{%s}@R{, as it would clobber existing data}\n", newpath)
+			if !quiet {
+				ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to copy/move data into} @C{%s}@R{, as it would clobber existing data}\n", newpath)
+			}
 			return nil
 		} else if !IsNotFound(err) {
 			return err
@@ -537,7 +539,7 @@ func (v *Vault) copyKey(oldpath, newpath string, src *Secret, skipIfExists bool)
 //MoveCopyTree will recursively copy all nodes from the root to the new location.
 // This function will get confused about 'secret:key' syntax, so don't let those
 // get routed here - they don't make sense for a recursion anyway.
-func (v *Vault) MoveCopyTree(oldRoot, newRoot string, f func(string, string, bool) error, skipIfExists bool) error {
+func (v *Vault) MoveCopyTree(oldRoot, newRoot string, f func(string, string, bool, bool) error, skipIfExists bool, quiet bool) error {
 	tree, err := v.Tree(oldRoot, TreeOptions{})
 	if err != nil {
 		return err
@@ -559,23 +561,25 @@ func (v *Vault) MoveCopyTree(oldRoot, newRoot string, f func(string, string, boo
 			}
 		}
 		if len(existingPaths) > 0 {
-			ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to copy/move data into} @C{%s}@R{, as the following paths would be clobbered:}\n", newRoot)
-			for _, path := range existingPaths {
-				ansi.Fprintf(os.Stderr, "@R{- }@C{%s}\n", path)
+			if !quiet {
+				ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to copy/move data into} @C{%s}@R{, as the following paths would be clobbered:}\n", newRoot)
+				for _, path := range existingPaths {
+					ansi.Fprintf(os.Stderr, "@R{- }@C{%s}\n", path)
+				}
 			}
 			return nil
 		}
 	}
 	for _, path := range tree.Paths("/") {
 		newPath := strings.Replace(path, oldRoot, newRoot, 1)
-		err = f(path, newPath, skipIfExists)
+		err = f(path, newPath, skipIfExists, quiet)
 		if err != nil {
 			return err
 		}
 	}
 
 	if _, err := v.Read(oldRoot); !IsNotFound(err) { // run through a copy unless we successfully got a 404 from this node
-		return f(oldRoot, newRoot, skipIfExists)
+		return f(oldRoot, newRoot, skipIfExists, quiet)
 	}
 	return nil
 }
@@ -583,12 +587,12 @@ func (v *Vault) MoveCopyTree(oldRoot, newRoot string, f func(string, string, boo
 // Move moves secrets from one path to another.
 // A move is semantically a copy and then a deletion of the original item. For
 // more information on the behavior of Move pertaining to keys, look at Copy.
-func (v *Vault) Move(oldpath, newpath string, skipIfExists bool) error {
+func (v *Vault) Move(oldpath, newpath string, skipIfExists bool, quiet bool) error {
 	if err := v.verifySecretExists(oldpath); err != nil {
 		return err
 	}
 
-	err := v.Copy(oldpath, newpath, skipIfExists)
+	err := v.Copy(oldpath, newpath, skipIfExists, quiet)
 	if err != nil {
 		return err
 	}

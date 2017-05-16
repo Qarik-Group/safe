@@ -589,6 +589,9 @@ EOF
 	cat >t/home/want <<EOF ; diffok
 Cowardly refusing to update secret/existing/gen:val as it is already present in Vault
 EOF
+	./safe --quiet --noclobber gen secret/existing/gen val >t/home/got 2>&1; exitok $? 0
+	cat >t/home/want <<EOF ; diffok
+EOF
 	./safe get secret/existing/gen >t/home/got; exitok $? 0
 	cat >t/home/want <<EOF ; diffok
 $expected
@@ -606,6 +609,10 @@ EOF
 	cat >t/home/want <<EOF ; diffok
 val: test2
 Cowardly refusing to update secret/existing/set, as the following keys would be clobbered: val
+EOF
+	./safe --quiet --noclobber set secret/existing/set val=test2 >t/home/got 2>&1; exitok $? 0
+	cat >t/home/want <<EOF ; diffok
+val: test2
 EOF
 	./safe get secret/existing/set >t/home/got; exitok $? 0
 	cat >t/home/want <<EOF ; diffok
@@ -625,6 +632,10 @@ EOF
 val: test2
 Cowardly refusing to update secret/existing/paste, as the following keys would be clobbered: val
 EOF
+	./safe --quiet --noclobber paste secret/existing/paste val=test2 >t/home/got 2>&1; exitok $? 0
+	cat >t/home/want <<EOF ; diffok
+val: test2
+EOF
 	./safe get secret/existing/paste >t/home/got; exitok $? 0
 	cat >t/home/want <<EOF ; diffok
 $expected
@@ -642,6 +653,10 @@ EOF
 	cat >t/home/want <<EOF ; diffok
 val: test2
 Cowardly refusing to update secret/existing/ask, as the following keys would be clobbered: val
+EOF
+	./safe --quiet --noclobber ask secret/existing/ask val=test2 >t/home/got 2>&1; exitok $? 0
+	cat >t/home/want <<EOF ; diffok
+val: test2
 EOF
 	./safe get secret/existing/ask >t/home/got; exitok $? 0
 	cat >t/home/want <<EOF ; diffok
@@ -661,7 +676,7 @@ EOF
 
 	testing $version --noclobber move functionality without existing data
 	./safe set secret/existing/to-move key=val
-	./safe --noclobber move secret/existing/to-move secret/move-existing >t/home/got 2>&1; exitok $? 0
+	./safe --quiet --noclobber move secret/existing/to-move secret/move-existing >t/home/got 2>&1; exitok $? 0
 	cat >t/home/want <<EOF ; diffok
 EOF
 	expected=$(./safe get secret/move-existing)
@@ -670,6 +685,10 @@ EOF
 	./safe --noclobber move secret/existing/to-move secret/move-existing >t/home/got 2>&1; exitok $? 0
 	cat >t/home/want <<EOF ; diffok
 Cowardly refusing to copy/move data into secret/move-existing, as it would clobber existing data
+EOF
+	./safe set secret/existing/to-move key=val2
+	./safe --quiet --noclobber move secret/existing/to-move secret/move-existing >t/home/got 2>&1; exitok $? 0
+	cat >t/home/want <<EOF ; diffok
 EOF
 	./safe get secret/move-existing >t/home/got; exitok $? 0
 	cat >t/home/want <<EOF ; diffok
@@ -688,6 +707,10 @@ EOF
 	./safe --noclobber move secret/existing/key-move:key secret/existing/key-move:key2 >t/home/got 2>&1; exitok $? 0
 	cat >t/home/want <<EOF ; diffok
 Cowardly refusing to copy/move data into secret/existing/key-move:key2, as it would clobber existing data
+EOF
+	./safe set secret/existing/key-move key=val2
+	./safe --quiet --noclobber move secret/existing/key-move:key secret/existing/key-move:key2 >t/home/got 2>&1; exitok $? 0
+	cat >t/home/want <<EOF ; diffok
 EOF
 	./safe get secret/existing/key-move >t/home/got; exitok $? 0
 	cat >t/home/want <<EOF ; diffok
@@ -710,6 +733,12 @@ EOF
 Cowardly refusing to copy/move data into secret/move-recursive-existing, as the following paths would be clobbered:
 - secret/move-recursive-existing/first
 - secret/move-recursive-existing/second
+EOF
+	./safe set secret/move-recursive/first key=val2
+	./safe set secret/move-recursive/second key=val2
+	./safe set secret/move-recursive/third key=val2
+	./safe --quiet --noclobber move -Rf secret/move-recursive secret/move-recursive-existing >t/home/got 2>&1; exitok $? 0
+	cat >t/home/want <<EOF ; diffok
 EOF
 	./safe tree secret/move-recursive-existing >t/home/got; exitok $? 0
 	cat >t/home/want <<EOF ; diffok
@@ -771,6 +800,10 @@ EOF
 	cat >t/home/want <<EOF ; diffok
 Cowardly refusing to copy/move data into secret/copy-existing, as it would clobber existing data
 EOF
+	./safe set secret/existing/to-copy key=val2
+	./safe --quiet --noclobber copy secret/existing/to-copy secret/copy-existing >t/home/got 2>&1; exitok $? 0
+	cat >t/home/want <<EOF ; diffok
+EOF
 	./safe get secret/copy-existing >t/home/got; exitok $? 0
 	cat >t/home/want <<EOF ; diffok
 $expected
@@ -792,6 +825,12 @@ EOF
 Cowardly refusing to copy/move data into secret/copy-recursive-existing, as the following paths would be clobbered:
 - secret/copy-recursive-existing/first
 - secret/copy-recursive-existing/second
+EOF
+	./safe set secret/copy-recursive/first key=val2
+	./safe set secret/copy-recursive/second key=val2
+	./safe set secret/copy-recursive/third key=val2
+	./safe --quiet --noclobber copy -Rf secret/copy-recursive secret/copy-recursive-existing >t/home/got 2>&1; exitok $? 0
+	cat >t/home/want <<EOF ; diffok
 EOF
 	./safe tree secret/copy-recursive-existing >t/home/got; exitok $? 0
 	cat >t/home/want <<EOF ; diffok
@@ -824,6 +863,9 @@ EOF
 	cat >t/home/want <<EOF ; diffok
 Cowardly refusing to generate an SSH key at secret/existing/ssh as it is already present in Vault
 EOF
+	./safe --quiet --noclobber ssh secret/existing/ssh >t/home/got 2>&1; exitok $? 0
+	cat >t/home/want <<EOF ; diffok
+EOF
 	./safe get secret/existing/ssh >t/home/got 2>&1; exitok $? 0
 	cat >t/home/want <<EOF ; diffok
 $expected
@@ -840,6 +882,9 @@ EOF
 	cat >t/home/want <<EOF ; diffok
 Cowardly refusing to generate an RSA key at secret/existing/rsa as it is already present in Vault
 EOF
+	./safe --quiet --noclobber rsa secret/existing/rsa >t/home/got 2>&1; exitok $? 0
+	cat >t/home/want <<EOF ; diffok
+EOF
 	./safe get secret/existing/rsa >t/home/got; exitok $? 0
 	cat >t/home/want <<EOF ; diffok
 $expected
@@ -855,6 +900,9 @@ EOF
 	./safe --noclobber dhparam secret/existing/dhparam >t/home/got 2>&1; exitok $? 0
 	cat >t/home/want <<EOF ; diffok
 Cowardly refusing to generate a DH Param in secret/existing/dhparam as it is already present in Vault
+EOF
+	./safe --quiet --noclobber dhparam secret/existing/dhparam >t/home/got 2>&1; exitok $? 0
+	cat >t/home/want <<EOF ; diffok
 EOF
 	./safe get secret/existing/dhparam >t/home/got; exitok $? 0
 	cat >t/home/want <<EOF ; diffok
@@ -874,6 +922,9 @@ EOF
 	cat >t/home/want <<EOF ; diffok
 Cowardly refusing to reformat secret/existing/to-fmt:val to crypted as it is already present in Vault
 EOF
+	./safe --quiet --noclobber fmt crypt-sha512 secret/existing/to-fmt val crypted >t/home/got 2>&1; exitok $? 0
+	cat >t/home/want <<EOF ; diffok
+EOF
 	./safe get secret/existing/to-fmt:crypted >t/home/got; exitok $? 0
 	cat >t/home/want <<EOF ; diffok
 $expected
@@ -888,6 +939,9 @@ EOF
 	./safe --noclobber x509 issue --ca --name test secret/existing/cert >t/home/got 2>&1; exitok $? 0
 	cat >t/home/want <<EOF ; diffok
 Cowardly refusing to create a new certificate in secret/existing/cert as it is already present in Vault
+EOF
+	./safe --quiet --noclobber x509 issue --ca --name test secret/existing/cert >t/home/got 2>&1; exitok $? 0
+	cat >t/home/want <<EOF ; diffok
 EOF
 	./safe get secret/existing/cert >t/home/got; exitok $? 0
 	cat >t/home/want <<EOF ; diffok
@@ -905,6 +959,7 @@ EOF
 EOF
 	testing $version --noclobber recursive delete functionality
 	./safe --noclobber set secret/existing/to-delete key=val
+	./safe --noclobber set secret/existing/to-delete/subkey key=val
 	./safe --noclobber delete -Rf secret/existing/to-delete >t/home/got 2>&1; exitok $? 0
 	cat >t/home/want <<EOF ; diffok
 EOF

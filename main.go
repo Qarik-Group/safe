@@ -54,6 +54,7 @@ type Options struct {
 	Version      bool `cli:"-v, --version"`
 	Help         bool `cli:"-h, --help"`
 	SkipIfExists bool `cli:"--noclobber"`
+	Quiet        bool `cli:"--quiet"`
 
 	HelpCommand    struct{} `cli:"help"`
 	VersionCommand struct{} `cli:"version"`
@@ -564,8 +565,10 @@ func main() {
 			}
 		}
 		if len(clobberKeys) > 0 {
-			ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to update} @C{%s}@R{, as the following keys would be clobbered:} @C{%s}\n",
-				path, strings.Join(clobberKeys, ", "))
+			if !opt.Quiet {
+				ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to update} @C{%s}@R{, as the following keys would be clobbered:} @C{%s}\n",
+					path, strings.Join(clobberKeys, ", "))
+			}
 			return nil
 		}
 		return v.Write(path, s)
@@ -858,11 +861,11 @@ to get your bearings.
 			if !opt.Move.Force && !recursively("move", args...) {
 				return nil /* skip this command, process the next */
 			}
-			if err := v.MoveCopyTree(args[0], args[1], v.Move, opt.SkipIfExists); err != nil && !(vault.IsNotFound(err) && opt.Move.Force) {
+			if err := v.MoveCopyTree(args[0], args[1], v.Move, opt.SkipIfExists, opt.Quiet); err != nil && !(vault.IsNotFound(err) && opt.Move.Force) {
 				return err
 			}
 		} else {
-			if err := v.Move(args[0], args[1], opt.SkipIfExists); err != nil && !(vault.IsNotFound(err) && opt.Move.Force) {
+			if err := v.Move(args[0], args[1], opt.SkipIfExists, opt.Quiet); err != nil && !(vault.IsNotFound(err) && opt.Move.Force) {
 				return err
 			}
 		}
@@ -887,11 +890,11 @@ to get your bearings.
 			if !opt.Copy.Force && !recursively("copy", args...) {
 				return nil /* skip this command, process the next */
 			}
-			if err := v.MoveCopyTree(args[0], args[1], v.Copy, opt.SkipIfExists); err != nil && !(vault.IsNotFound(err) && opt.Copy.Force) {
+			if err := v.MoveCopyTree(args[0], args[1], v.Copy, opt.SkipIfExists, opt.Quiet); err != nil && !(vault.IsNotFound(err) && opt.Copy.Force) {
 				return err
 			}
 		} else {
-			if err := v.Copy(args[0], args[1], opt.SkipIfExists); err != nil && !(vault.IsNotFound(err) && opt.Copy.Force) {
+			if err := v.Copy(args[0], args[1], opt.SkipIfExists, opt.Quiet); err != nil && !(vault.IsNotFound(err) && opt.Copy.Force) {
 				return err
 			}
 		}
@@ -951,7 +954,9 @@ The following options are recognized:
 			}
 			exists := (err == nil)
 			if opt.SkipIfExists && exists && s.Has(key) {
-				ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to update} @C{%s:%s} @R{as it is already present in Vault}\n", path, key)
+				if !opt.Quiet {
+					ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to update} @C{%s:%s} @R{as it is already present in Vault}\n", path, key)
+				}
 				continue
 			}
 			err = s.Password(key, length, opt.Gen.Policy, opt.SkipIfExists)
@@ -998,7 +1003,9 @@ public key, formatted for use in an SSH authorized_keys file, under 'public'.
 			}
 			exists := (err == nil)
 			if opt.SkipIfExists && exists && (s.Has("private") || s.Has("public") || s.Has("fingerprint")) {
-				ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to generate an SSH key at} @C{%s} @R{as it is already present in Vault}\n", path)
+				if !opt.Quiet {
+					ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to generate an SSH key at} @C{%s} @R{as it is already present in Vault}\n", path)
+				}
 				continue
 			}
 			if err = s.SSHKey(bits, opt.SkipIfExists); err != nil {
@@ -1043,7 +1050,9 @@ be PEM-encoded.
 			}
 			exists := (err == nil)
 			if opt.SkipIfExists && exists && (s.Has("private") || s.Has("public")) {
-				ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to generate an RSA key at} @C{%s} @R{as it is already present in Vault}\n", path)
+				if !opt.Quiet {
+					ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to generate an RSA key at} @C{%s} @R{as it is already present in Vault}\n", path)
+				}
 				continue
 			}
 			if err = s.RSAKey(bits, opt.SkipIfExists); err != nil {
@@ -1086,7 +1095,9 @@ NBITS defaults to 2048.
 		}
 		exists := (err == nil)
 		if opt.SkipIfExists && exists && s.Has("dhparam-pem") {
-			ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to generate a DH Param in} @C{%s} @R{as it is already present in Vault}\n", path)
+			if !opt.Quiet {
+				ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to generate a DH Param in} @C{%s} @R{as it is already present in Vault}\n", path)
+			}
 			return nil
 		}
 		if err = s.DHParam(bits, opt.SkipIfExists); err != nil {
@@ -1165,7 +1176,9 @@ Supported formats:
 			return err
 		}
 		if opt.SkipIfExists && s.Has(newKey) {
-			ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to reformat} @C{%s:%s} @R{to} @C{%s} @R{as it is already present in Vault}\n", path, oldKey, newKey)
+			if !opt.Quiet {
+				ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to reformat} @C{%s:%s} @R{to} @C{%s} @R{as it is already present in Vault}\n", path, oldKey, newKey)
+			}
 			return nil
 		}
 		if err = s.Format(oldKey, newKey, fmtType, opt.SkipIfExists); err != nil {
@@ -1718,7 +1731,9 @@ The following options are recognized:
 		v := connect()
 		if opt.SkipIfExists {
 			if _, err := v.Read(args[0]); err == nil {
-				ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to create a new certificate in} @C{%s} @R{as it is already present in Vault}\n", args[0])
+				if !opt.Quiet {
+					ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to create a new certificate in} @C{%s} @R{as it is already present in Vault}\n", args[0])
+				}
 				return nil
 			} else if err != nil && !vault.IsNotFound(err) {
 				return err
