@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/ghodss/yaml"
+	"github.com/starkandwayne/goutils/ansi"
 	"github.com/tredoe/osutil/user/crypt/sha512_crypt"
 )
 
@@ -40,8 +41,12 @@ func (s *Secret) Get(key string) string {
 }
 
 // Set stores a value in the Secret, under the given key.
-func (s *Secret) Set(key, value string) {
+func (s *Secret) Set(key, value string, skipIfExists bool) error {
+	if s.Has(key) && skipIfExists {
+		return ansi.Errorf("@R{BUG: Something tried to overwrite the} @C{%s} @R{key, but it already existed, and --no-clobber was specified}", key)
+	}
 	s.data[key] = value
+	return nil
 }
 
 // Delete removes the entry with the given key from the Secret.
@@ -60,7 +65,7 @@ func (s *Secret) Empty() bool {
 	return len(s.data) == 0
 }
 
-func (s *Secret) Format(oldKey, newKey, fmtType string) error {
+func (s *Secret) Format(oldKey, newKey, fmtType string, skipIfExists bool) error {
 	if !s.Has(oldKey) {
 		return NewSecretNotFoundError(oldKey)
 	}
@@ -71,9 +76,15 @@ func (s *Secret) Format(oldKey, newKey, fmtType string) error {
 		if err != nil {
 			return err
 		}
-		s.data[newKey] = newVal
+		err = s.Set(newKey, newVal, skipIfExists)
+		if err != nil {
+			return err
+		}
 	case "base64":
-		s.data[newKey] = base64.StdEncoding.EncodeToString([]byte(oldVal))
+		err := s.Set(newKey, base64.StdEncoding.EncodeToString([]byte(oldVal)), skipIfExists)
+		if err != nil {
+			return err
+		}
 	default:
 		return fmt.Errorf("%s is not a valid encoding for the `safe fmt` command", fmtType)
 	}
@@ -81,22 +92,28 @@ func (s *Secret) Format(oldKey, newKey, fmtType string) error {
 	return nil
 }
 
-func (s *Secret) DHParam(length int) error {
+func (s *Secret) DHParam(length int, skipIfExists bool) error {
 	dhparam, err := genDHParam(length)
 	if err != nil {
 		return err
 	}
-	s.Set("dhparam-pem", dhparam)
+	err = s.Set("dhparam-pem", dhparam, skipIfExists)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 // Password creates and stores a new randomized password.
-func (s *Secret) Password(key string, length int, policy string) error {
+func (s *Secret) Password(key string, length int, policy string, skipIfExists bool) error {
 	r, err := random(length, policy)
 	if err != nil {
 		return err
 	}
-	s.data[key] = r
+	err = s.Set(key, r, skipIfExists)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -113,28 +130,42 @@ func crypt_sha512(pass string) (string, error) {
 	return sha, err
 }
 
-func (s *Secret) keypair(private, public string, fingerprint string, err error) error {
+func (s *Secret) keypair(private, public string, fingerprint string, skipIfExists bool) error {
+	err := s.Set("private", private, skipIfExists)
 	if err != nil {
 		return err
 	}
-	s.data["private"] = private
-	s.data["public"] = public
+	err = s.Set("public", public, skipIfExists)
+	if err != nil {
+		return err
+	}
 	if fingerprint != "" {
-		s.data["fingerprint"] = fingerprint
+		err = s.Set("fingerprint", fingerprint, skipIfExists)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
 // RSAKey generates a new public/private keypair, and stores
 // it in the secret, under the 'public' and 'private' keys.
-func (s *Secret) RSAKey(bits int) error {
-	return s.keypair(rsakey(bits))
+func (s *Secret) RSAKey(bits int, skipIfExists bool) error {
+	private, public, err := rsakey(bits)
+	if err != nil {
+		return err
+	}
+	return s.keypair(private, public, "", skipIfExists)
 }
 
 // SSHKey generates a new public/private keypair, and stores
 // it in the secret, under the 'public' and 'private' keys.
-func (s *Secret) SSHKey(bits int) error {
-	return s.keypair(sshkey(bits))
+func (s *Secret) SSHKey(bits int, skipIfExists bool) error {
+	private, public, fingerprint, err := sshkey(bits)
+	if err != nil {
+		return err
+	}
+	return s.keypair(private, public, fingerprint, skipIfExists)
 }
 
 // JSON converts a Secret to its JSON representation and returns it as a string.

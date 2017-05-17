@@ -7,10 +7,10 @@ import (
 	"encoding/pem"
 )
 
-func rsakey(bits int) (string, string, string, error) {
+func rsakey(bits int) (string, string, error) {
 	key, err := rsa.GenerateKey(rand.Reader, bits)
 	if err != nil {
-		return "", "", "", err
+		return "", "", err
 	}
 
 	private := pem.EncodeToMemory(
@@ -22,7 +22,7 @@ func rsakey(bits int) (string, string, string, error) {
 
 	b, err := x509.MarshalPKIXPublicKey(key.Public())
 	if err != nil {
-		return "", "", "", err
+		return "", "", err
 	}
 	public := pem.EncodeToMemory(
 		&pem.Block{
@@ -31,5 +31,5 @@ func rsakey(bits int) (string, string, string, error) {
 		},
 	)
 
-	return string(private), string(public), "", nil
+	return string(private), string(public), nil
 }
