@@ -473,7 +473,7 @@ func (v *Vault) Copy(oldpath, newpath string, skipIfExists bool, quiet bool) err
 	if skipIfExists {
 		if _, err := v.Read(newpath); err == nil {
 			if !quiet {
-				ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to copy/move data into} @C{%s}@R{, as it would clobber existing data}\n", newpath)
+				ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to copy/move data into} @C{%s}@R{, as that would clobber existing data}\n", newpath)
 			}
 			return nil
 		} else if !IsNotFound(err) {

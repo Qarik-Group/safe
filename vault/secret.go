@@ -151,11 +151,11 @@ func (s *Secret) keypair(private, public string, fingerprint string, skipIfExist
 // RSAKey generates a new public/private keypair, and stores
 // it in the secret, under the 'public' and 'private' keys.
 func (s *Secret) RSAKey(bits int, skipIfExists bool) error {
-	private, public, fingerprint, err := rsakey(bits)
+	private, public, err := rsakey(bits)
 	if err != nil {
 		return err
 	}
-	return s.keypair(private, public, fingerprint, skipIfExists)
+	return s.keypair(private, public, "", skipIfExists)
 }
 
 // SSHKey generates a new public/private keypair, and stores

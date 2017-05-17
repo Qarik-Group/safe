@@ -619,6 +619,19 @@ EOF
 $expected
 
 EOF
+	testing $version --noclobber set functionality with different key in same path 
+	./safe --noclobber set secret/existing/set2 val=test; exitok $? 0
+	./safe --noclobber set secret/existing/set2 val2=test2 >t/home/got 2>&1; exitok $? 0
+	cat >t/home/want <<EOF ; diffok
+val2: test2
+EOF
+	./safe --noclobber get secret/existing/set2 >t/home/got 2>&1; exitok $? 0
+	cat >t/home/want <<EOF ; diffok
+--- # secret/existing/set2
+val: test
+val2: test2
+
+EOF
 
 	testing $version --noclobber paste functionality without existing data
 	./safe --noclobber paste secret/existing/paste val=test >t/home/got 2>&1; exitok $? 0
@@ -684,7 +697,7 @@ EOF
 	./safe set secret/existing/to-move key=val2
 	./safe --noclobber move secret/existing/to-move secret/move-existing >t/home/got 2>&1; exitok $? 0
 	cat >t/home/want <<EOF ; diffok
-Cowardly refusing to copy/move data into secret/move-existing, as it would clobber existing data
+Cowardly refusing to copy/move data into secret/move-existing, as that would clobber existing data
 EOF
 	./safe set secret/existing/to-move key=val2
 	./safe --quiet --noclobber move secret/existing/to-move secret/move-existing >t/home/got 2>&1; exitok $? 0
@@ -706,7 +719,7 @@ EOF
 	./safe set secret/existing/key-move key=val2
 	./safe --noclobber move secret/existing/key-move:key secret/existing/key-move:key2 >t/home/got 2>&1; exitok $? 0
 	cat >t/home/want <<EOF ; diffok
-Cowardly refusing to copy/move data into secret/existing/key-move:key2, as it would clobber existing data
+Cowardly refusing to copy/move data into secret/existing/key-move:key2, as that would clobber existing data
 EOF
 	./safe set secret/existing/key-move key=val2
 	./safe --quiet --noclobber move secret/existing/key-move:key secret/existing/key-move:key2 >t/home/got 2>&1; exitok $? 0
@@ -798,7 +811,7 @@ EOF
 	./safe set secret/existing/to-copy key=val2
 	./safe --noclobber copy secret/existing/to-copy secret/copy-existing >t/home/got 2>&1; exitok $? 0
 	cat >t/home/want <<EOF ; diffok
-Cowardly refusing to copy/move data into secret/copy-existing, as it would clobber existing data
+Cowardly refusing to copy/move data into secret/copy-existing, as that would clobber existing data
 EOF
 	./safe set secret/existing/to-copy key=val2
 	./safe --quiet --noclobber copy secret/existing/to-copy secret/copy-existing >t/home/got 2>&1; exitok $? 0
@@ -899,7 +912,7 @@ EOF
 	testing $version --noclobber dhparam functionality with existing data
 	./safe --noclobber dhparam secret/existing/dhparam >t/home/got 2>&1; exitok $? 0
 	cat >t/home/want <<EOF ; diffok
-Cowardly refusing to generate a DH Param in secret/existing/dhparam as it is already present in Vault
+Cowardly refusing to generate a Diffie-Hellman key exchange parameters in secret/existing/dhparam as it is already present in Vault
 EOF
 	./safe --quiet --noclobber dhparam secret/existing/dhparam >t/home/got 2>&1; exitok $? 0
 	cat >t/home/want <<EOF ; diffok

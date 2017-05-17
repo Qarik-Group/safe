@@ -588,7 +588,6 @@ are omitted. Unlike the 'safe set' and 'safe paste' commands, data entry
 is NOT obscured.
 `,
 	}, func(command string, args ...string) error {
-		//writeHelper is defined right above this subcommand
 		return writeHelper(false, false, "ask", args...)
 	})
 
@@ -607,7 +606,6 @@ you don't want the value to show up in your ~/.bash_history, or in the
 process table.
 `,
 	}, func(command string, args ...string) error {
-		//writeHelper is defined right above the ask subcommand
 		return writeHelper(true, true, "set", args...)
 	})
 
@@ -626,7 +624,6 @@ sense when you are pasting in credentials from an external password manager
 like 1password or Lastpass.
 `,
 	}, func(command string, args ...string) error {
-		//writeHelper is defined right above the ask subcommand
 		//Dispatch call.
 		return writeHelper(false, true, "paste", args...)
 	})
@@ -1096,7 +1093,7 @@ NBITS defaults to 2048.
 		exists := (err == nil)
 		if opt.SkipIfExists && exists && s.Has("dhparam-pem") {
 			if !opt.Quiet {
-				ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to generate a DH Param in} @C{%s} @R{as it is already present in Vault}\n", path)
+				ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to generate a Diffie-Hellman key exchange parameters in} @C{%s} @R{as it is already present in Vault}\n", path)
 			}
 			return nil
 		}
@@ -1112,7 +1109,7 @@ NBITS defaults to 2048.
 		Type:    NonDestructiveCommand,
 	}, func(command string, args ...string) error {
 		// --no-clobber is ignored here, because there's no context of what you're
-		// about to be writing after a prompt, so not sure if we should our shouldn't prompt
+		// about to be writing after a prompt, so not sure if we should or shouldn't prompt
 		// if you need to write something and prompt, but only if it isnt already present
 		// in vault, see the `ask` subcommand
 		fmt.Fprintf(os.Stderr, "%s\n", strings.Join(args, " "))
