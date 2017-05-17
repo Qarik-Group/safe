@@ -1,7 +1,7 @@
 # New Features
 
 
-- New global flag `--noclobber` will throw a message up to the user
+- New global flag `--no-clobber` will throw a message up to the user
   that they tried to overwrite an existing credential.
   This is supported in all known write-causing commands,
   except `safe import`.

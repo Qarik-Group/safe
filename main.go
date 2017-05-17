@@ -53,7 +53,8 @@ type Options struct {
 	Insecure     bool `cli:"-k, --insecure"`
 	Version      bool `cli:"-v, --version"`
 	Help         bool `cli:"-h, --help"`
-	SkipIfExists bool `cli:"--noclobber"`
+	Clobber      bool `cli:"--clobber, --no-clobber"`
+	SkipIfExists bool
 	Quiet        bool `cli:"--quiet"`
 
 	HelpCommand    struct{} `cli:"help"`
@@ -184,6 +185,8 @@ func main() {
 	opt.Cert.Role = "default"
 	opt.Cert.Backend = "pki"
 	opt.Revoke.Backend = "pki"
+
+	opt.Clobber = true
 
 	opt.X509.Issue.Bits = 4096
 	opt.X509.Issue.TTL = "10y"
@@ -1911,6 +1914,8 @@ Currently, only the --renew option is supported, and it is required:
 	}
 
 	for p.Next() {
+		opt.SkipIfExists = !opt.Clobber
+
 		if opt.Version {
 			r.Execute("version")
 			return
