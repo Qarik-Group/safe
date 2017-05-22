@@ -240,18 +240,23 @@ func main() {
 			keys = append(keys, name)
 		}
 
-		fmt.Fprintf(os.Stderr, "\n")
-		current := fmt.Sprintf("(*) @G{%%-%ds}\t@Y{%%s}@R{%%s}\n", wide)
-		other := fmt.Sprintf("    %%-%ds\t%%s@R{%%s}\n", wide)
+		current_fmt := fmt.Sprintf("(*) @G{%%-%ds}\t@Y{%%s}@R{%%s}\n", wide)
+		other_fmt := fmt.Sprintf("    %%-%ds\t%%s@R{%%s}\n", wide)
+		has_current := ""
+		if cfg.Current != "" {
+			has_current = " - current target indicated with a (*)"
+		}
+
+		fmt.Fprintf(os.Stderr, "\nKnown Vault targets%s:\n", has_current)
 		sort.Strings(keys)
 		for _, name := range keys {
 			skip := ""
 			if skipverify, ok := cfg.SkipVerify[cfg.Aliases[name]]; ok && skipverify {
 				skip = " (insecure)"
 			}
-			format := other
+			format := other_fmt
 			if name == cfg.Current {
-				format = current
+				format = current_fmt
 			}
 			ansi.Fprintf(os.Stderr, format, name, cfg.Aliases[name], skip)
 		}
@@ -282,19 +287,9 @@ func main() {
 					os.Exit(1)
 				}
 				r.Execute("targets")
-				ansi.Fprintf(os.Stderr, "\n")
-				if cfg.Current == "" {
-					ansi.Fprintf(os.Stderr, "@R{No Vault currently targeted}\n")
-				} else {
-					skip := ""
-					if !cfg.Verified() {
-						skip = " (skipping TLS certificate verification)"
-					}
-					ansi.Fprintf(os.Stderr, "Currently targeting @C{%s} at @C{%s}@R{%s}\n", cfg.Current, cfg.URL(), skip)
-				}
 
-				ansi.Fprintf(os.Stderr, "\nWhich Vault would you like to target?\n")
-				t := prompt.Normal("@G{%s> }", cfg.Current)
+				ansi.Fprintf(os.Stderr, "Which Vault would you like to target?\n")
+				t := prompt.Normal("@G{> }")
 				err := cfg.SetCurrent(t, skipverify)
 				if err != nil {
 					ansi.Fprintf(os.Stderr, "@R{%s}\n", err)
@@ -304,9 +299,12 @@ func main() {
 				if err != nil {
 					return err
 				}
-
-				opt.Target.Interactive = false
-				return r.Execute("target")
+				skip := ""
+				if !cfg.Verified() {
+					skip = " (skipping TLS certificate verification)"
+				}
+				ansi.Fprintf(os.Stderr, "Now targeting @C{%s} at @C{%s}@R{%s}\n\n", cfg.Current, cfg.URL(), skip)
+				return nil
 			}
 		}
 		if len(args) == 0 {
@@ -317,7 +315,7 @@ func main() {
 				if !cfg.Verified() {
 					skip = " (skipping TLS certificate verification)"
 				}
-				ansi.Fprintf(os.Stderr, "Currently targeting @C{%s} at @C{%s}@R{%s}\n", cfg.Current, cfg.URL(), skip)
+				ansi.Fprintf(os.Stderr, "Currently targeting @C{%s} at @C{%s}@R{%s}\n\n", cfg.Current, cfg.URL(), skip)
 			}
 			return nil
 		}
@@ -330,7 +328,7 @@ func main() {
 			if !cfg.Verified() {
 				skip = " (skipping TLS certificate verification)"
 			}
-			ansi.Fprintf(os.Stderr, "Now targeting @C{%s} at @C{%s}@R{%s}\n", cfg.Current, cfg.URL(), skip)
+			ansi.Fprintf(os.Stderr, "Now targeting @C{%s} at @C{%s}@R{%s}\n\n", cfg.Current, cfg.URL(), skip)
 			return cfg.Write()
 		}
 
@@ -344,7 +342,7 @@ func main() {
 			if err != nil {
 				return err
 			}
-			ansi.Fprintf(os.Stderr, "Now targeting @C{%s} at @C{%s}\n", cfg.Current, cfg.URL())
+			ansi.Fprintf(os.Stderr, "Now targeting @C{%s} at @C{%s}\n\n", cfg.Current, cfg.URL())
 			return cfg.Write()
 		}
 
