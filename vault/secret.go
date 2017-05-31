@@ -4,6 +4,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"reflect"
+	"sort"
 
 	"github.com/ghodss/yaml"
 	"github.com/starkandwayne/goutils/ansi"
@@ -38,6 +40,16 @@ func (s *Secret) Has(key string) bool {
 func (s *Secret) Get(key string) string {
 	x, _ := s.data[key]
 	return x
+}
+
+func (s *Secret) Keys() []string {
+	keys := reflect.ValueOf(s.data).MapKeys()
+	str_keys := make([]string, len(keys))
+	for i := 0; i < len(keys); i++ {
+		str_keys[i] = keys[i].String()
+	}
+	sort.Strings(str_keys)
+	return str_keys
 }
 
 // Set stores a value in the Secret, under the given key.
