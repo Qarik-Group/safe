@@ -1,9 +1,12 @@
 #!/bin/bash
+FAIL_FAST="${FAIL_FAST:-}"
 set -u
 
 rc=0
 platform=
 arch=amd64
+old_home="$HOME"
+vault_pid=
 
 case $OSTYPE in
 (darwin*)
@@ -28,12 +31,15 @@ case $OSTYPE in
 esac
 
 
-
 bail() {
 	echo >&2 $*
 	exit 2
 }
 testing() {
+  if [[ $rc -ne 0 && -n $FAIL_FAST ]] ; then
+    echo "Failure encountered, stopping tests!"
+    exit 1
+  fi
 	rm -f t/home/got t/home/want t/home/diff t/home/errors
 	local v=$1 ; shift
 	echo -n "[$v] $*... "
@@ -70,10 +76,38 @@ exitok() {
 	fi
 }
 
-########################################################################
+cleanup() {
+	export HOME=${old_home}
+	if [[ -n $vault_pid ]] ; then
+		kill $vault_pid
+	fi
+	echo
+	echo
+
+	if [[ -f t/home/log ]] ; then
+		if grep -q 'goroutine' t/home/log; then
+			exit 77 # ./try will pick up on this error code
+		fi
+		if [[ ${rc} -ne 0 ]]; then
+			echo >&2 "---[ VAULT LOG ]------------------------------------------"
+			cat  >&2 t/home/log
+			echo >&2 "----------------------------------------------------------"
+		fi
+	fi
+
+	rm -rf t/
+
+	if [[ ${rc} -eq 0 ]]; then
+		echo PASSED
+	else
+		echo FAILED
+	fi
+	exit ${rc}
+}
+
 
 mkdir -p vaults t/tmp
-trap 'rm -rf t/' INT QUIT TERM EXIT
+trap 'cleanup' INT QUIT TERM EXIT
 
 for version in ${versions[@]}; do
 	killall vault-${version} >/dev/null 2>&1 || true
@@ -1325,26 +1359,5 @@ EOF
 	./safe x509 check secret/x509/imposter --ca                      ; exitok $? 0
 	./safe x509 issue secret/x509/imposter --name a.b.c              ; exitok $? 0 # not a CA, now
 	./safe x509 check secret/x509/imposter --ca                      ; exitok $? 1 # not a CA
-
-	export HOME=${old_home}
-	kill $vault_pid
-	echo
-	echo
-
-	if grep -q 'goroutine' t/home/log; then
-		exit 77 # ./try will pick up on this error code
-	fi
-
-	if [[ ${rc} -ne 0 ]]; then
-		echo >&2 "---[ VAULT LOG ]------------------------------------------"
-		cat  >&2 t/home/log
-		echo >&2 "----------------------------------------------------------"
-	fi
 done
 
-if [[ ${rc} -eq 0 ]]; then
-	echo PASSED
-else
-	echo FAILED
-fi
-exit ${rc}
