@@ -260,8 +260,10 @@ func (v *Vault) List(path string) (paths []string, err error) {
 }
 
 type TreeOptions struct {
-	UseANSI    bool /* Use ANSI colorizing sequences */
-	HideLeaves bool /* Hide leaf nodes of the tree (actual secrets) */
+	UseANSI     bool /* Use ANSI colorizing sequences */
+	HideLeaves  bool /* Hide leaf nodes of the tree (actual secrets) */
+	ShowKeys    bool /* Include keys in the output */
+	InSubbranch bool /* If true, suppresses key output on branches */
 }
 
 func (v *Vault) walktree(path string, options TreeOptions) (tree.Node, int, error) {
@@ -271,6 +273,21 @@ func (v *Vault) walktree(path string, options TreeOptions) (tree.Node, int, erro
 		return t, 0, err
 	}
 
+	var key_fmt string
+	if options.UseANSI {
+		key_fmt = "@Y{:%s}"
+	} else {
+		key_fmt = ":%s"
+	}
+	if options.ShowKeys && !options.InSubbranch {
+		if s, err := v.Read(path); err == nil {
+			for _, key := range s.Keys() {
+				key_name := ansi.Sprintf(key_fmt, key)
+				t.Append(tree.New(key_name))
+			}
+		}
+	}
+	options.InSubbranch = true
 	for _, p := range l {
 		if p[len(p)-1:len(p)] == "/" {
 			kid, n, err := v.walktree(path+"/"+p[0:len(p)-1], options)
@@ -278,6 +295,7 @@ func (v *Vault) walktree(path string, options TreeOptions) (tree.Node, int, erro
 				return t, 0, err
 			}
 			if n == 0 {
+				fmt.Fprintf(os.Stderr, "%s\n", kid.Name)
 				continue
 			}
 			if options.UseANSI {
@@ -297,7 +315,19 @@ func (v *Vault) walktree(path string, options TreeOptions) (tree.Node, int, erro
 			} else {
 				name = p
 			}
-			t.Append(tree.New(name))
+			leaf := tree.New(name)
+			if options.ShowKeys {
+				if s, err := v.Read(path + "/" + p); err == nil {
+					for _, key := range s.Keys() {
+						key_name := ansi.Sprintf(key_fmt, key)
+						leaf.Append(tree.New(key_name))
+					}
+				} else {
+					fmt.Fprintf(os.Stderr, "error: %s\n", err)
+				}
+
+			}
+			t.Append(leaf)
 		}
 	}
 	return t, len(l), nil

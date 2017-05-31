@@ -2,17 +2,20 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http/httputil"
 	"os"
 	"os/exec"
+	"reflect"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/ghodss/yaml"
 	"github.com/jhunt/go-cli"
 	"github.com/starkandwayne/goutils/ansi"
 
@@ -72,10 +75,18 @@ type Options struct {
 	Set     struct{} `cli:"set, write"`
 	Paste   struct{} `cli:"paste"`
 	Exists  struct{} `cli:"exists, check"`
-	Get     struct{} `cli:"get, read, cat"`
-	Paths   struct{} `cli:"paths"`
+
+	Get struct {
+		KeysOnly bool `cli:"--keys"`
+		Yaml     bool `cli:"--yaml"`
+	} `cli:"get, read, cat"`
+
+	Paths struct {
+		ShowKeys bool `cli:"--keys"`
+	} `cli:"paths"`
 
 	Tree struct {
+		ShowKeys   bool `cli:"--keys"`
 		HideLeaves bool `cli:"-d, --hide-leaves"`
 	} `cli:"tree"`
 
@@ -663,37 +674,156 @@ certificate validation failure, etc. occur, they will be printed as well.
 	})
 
 	r.Dispatch("get", &Help{
-		Summary: "Retrieve and print the values of one or more paths",
-		Usage:   "safe get PATH [PATH ...]",
-		Type:    NonDestructiveCommand,
+		Summary: "Retrieve the key/value pairs (or just keys) of one or more paths",
+		Usage:   "safe get [--keys] [--yaml] PATH [PATH ...]",
+		Description: `
+Allows you to retrieve one or more values stored in the given secret, or just the
+valid keys.  It operates in the following modes:
+
+If a single path is specified that does not include a :key suffix, the output
+will be the key:value pairs for that secret, in YAML format.  It will not include
+the specified path as the base hash key; instead, it will be output as a comment
+behind the document indicator (---).  To force it to include the full path as
+the root key, specify --yaml.
+
+If a single path is specified including the :key suffix, the single value of that
+path:key will be output in string format.  To force the use of the fully qualified
+{path: {key: value}} output in YAML format, use --yaml option.
+
+If a single path is specified along with --keys, the list of keys for that given
+path will be returned.  If that path does not contain any secrets (ie its not a 
+leaf node or does not exist), it will output nothing, but will not error.  If a
+specific key is specified, it will output only that key if it exists, otherwise 
+nothing. You can specify --yaml to force YAML output.
+
+If you specify more than one path, output is forced to be YAML, with the primary
+hash key being the requested path (not including the key if provided).  If --keys
+is specified, the next level will contain the keys found under that path; if the
+path included a key component, only the specified keys will be present.  Without
+the --keys option, the key: values for each found (or requested) key for the path
+will be output.
+
+If an invalid key or path is requested, an error will be output and nothing else
+unless the --keys option is specified.  In that case, the error will be displayed
+as a warning, but the output will be provided with an empty array for missing
+paths/keys.
+`,
+		Type: NonDestructiveCommand,
 	}, func(command string, args ...string) error {
 		rc.Apply()
 		if len(args) < 1 {
 			r.ExitWithUsage("get")
 		}
+
 		v := connect()
-		for _, path := range args {
-			s, err := v.Read(path)
+
+		// Recessive case of one path
+		if len(args) == 1 && !opt.Get.Yaml {
+			s, err := v.Read(args[0])
 			if err != nil {
 				return err
 			}
-			//Don't show key if specific key was requested
-			if _, key := vault.ParsePath(path); key != "" {
+
+			if opt.Get.KeysOnly {
+				keys := s.Keys()
+				for _, key := range keys {
+					fmt.Printf("%s\n", key)
+				}
+			} else if _, key := vault.ParsePath(args[0]); key != "" {
 				value, err := s.SingleValue()
 				if err != nil {
 					return err
 				}
 				fmt.Printf("%s\n", value)
 			} else {
-				fmt.Printf("--- # %s\n%s\n", path, s.YAML())
+				fmt.Printf("--- # %s\n%s\n", args[0], s.YAML())
 			}
+			return nil
+		}
+
+		// Track errors, paths, keys, values
+		errs := make([]error, 0)
+		results := make(map[string]map[string]string, 0)
+		missing_keys := make(map[string][]string)
+		for _, path := range args {
+			p, k := vault.ParsePath(path)
+			s, err := v.Read(path)
+
+			// Check if the desired path[:key] is found
+			if err != nil {
+				errs = append(errs, err)
+				if k != "" {
+					if _, ok := missing_keys[p]; !ok {
+						missing_keys[p] = make([]string, 0)
+					}
+					missing_keys[p] = append(missing_keys[p], k)
+				}
+				continue
+			}
+
+			if _, ok := results[p]; !ok {
+				results[p] = make(map[string]string, 0)
+			}
+			for _, key := range s.Keys() {
+				results[p][key] = s.Get(key)
+			}
+		}
+
+		// Handle any errors encountered.  Warn for key request, return error otherwise
+		var err error
+		num_errs := len(errs)
+		if num_errs == 1 {
+			err = errs[0]
+		} else if len(errs) > 1 {
+			errStr := "Multiple errors found:"
+			for _, err := range errs {
+				errStr += fmt.Sprintf("\n   - %s", err)
+			}
+			err = errors.New(errStr)
+		}
+		if num_errs > 0 {
+			if opt.Get.KeysOnly {
+				ansi.Fprintf(os.Stderr, "@y{WARNING:} %s\n", err)
+			} else {
+				return err
+			}
+		}
+
+		// Now that we've collected/collated all the data, format and print it
+		fmt.Printf("---\n")
+		if opt.Get.KeysOnly {
+			printed_paths := make(map[string]bool, 0)
+			for _, path := range args {
+				p, _ := vault.ParsePath(path)
+				if printed, _ := printed_paths[p]; printed {
+					continue
+				}
+				printed_paths[p] = true
+				result, ok := results[p]
+				if !ok {
+					yml, _ := yaml.Marshal(map[string][]string{p: []string{}})
+					fmt.Printf("%s", string(yml))
+				} else {
+					found_keys := reflect.ValueOf(result).MapKeys()
+					str_keys := make([]string, len(found_keys))
+					for i := 0; i < len(found_keys); i++ {
+						str_keys[i] = found_keys[i].String()
+					}
+					sort.Strings(str_keys)
+					yml, _ := yaml.Marshal(map[string][]string{p: str_keys})
+					fmt.Printf("%s\n", string(yml))
+				}
+			}
+		} else {
+			yml, _ := yaml.Marshal(results)
+			fmt.Printf("%s\n", string(yml))
 		}
 		return nil
 	})
 
 	r.Dispatch("tree", &Help{
 		Summary: "Print a tree listing of one or more paths",
-		Usage:   "safe tree [-d] [PATH ...]",
+		Usage:   "safe tree [-d|--keys] [PATH ...]",
 		Type:    NonDestructiveCommand,
 		Description: `
 Walks the hierarchy of secrets stored underneath a given path, listing all
@@ -706,24 +836,42 @@ to get your bearings.
 		opts := vault.TreeOptions{
 			UseANSI:    true,
 			HideLeaves: opt.Tree.HideLeaves,
+			ShowKeys:   opt.Tree.ShowKeys,
+		}
+		if opt.Tree.HideLeaves && opt.Tree.ShowKeys {
+			return fmt.Errorf("Cannot specify both -d and --keys at the same time")
 		}
 		if len(args) == 0 {
 			args = append(args, "secret")
 		}
+		r1, _ := regexp.Compile("^ ")
+		r2, _ := regexp.Compile("^└")
 		v := connect()
-		for _, path := range args {
+		for i, path := range args {
 			tree, err := v.Tree(path, opts)
 			if err != nil {
 				return err
 			}
-			fmt.Printf("%s\n", tree.Draw())
+			lines := strings.Split(tree.Draw(), "\n")
+			if i > 0 {
+				lines = lines[1:] // Drop root '.' from subsequent paths
+			}
+			if i < len(args)-1 {
+				lines = lines[:len(lines)-1]
+			}
+			for _, line := range lines {
+				if i < len(args)-1 {
+					line = r1.ReplaceAllString(r2.ReplaceAllString(line, "├"), "│")
+				}
+				fmt.Println(line)
+			}
 		}
 		return nil
 	})
 
 	r.Dispatch("paths", &Help{
 		Summary: "Print all of the known paths, one per line",
-		Usage:   "safe paths PATH [PATH ...]",
+		Usage:   "safe paths [--keys] PATH [PATH ...]",
 		Type:    NonDestructiveCommand,
 	}, func(command string, args ...string) error {
 		rc.Apply()
@@ -733,13 +881,25 @@ to get your bearings.
 		v := connect()
 		for _, path := range args {
 			tree, err := v.Tree(path, vault.TreeOptions{
-				UseANSI: false,
+				UseANSI:  false,
+				ShowKeys: opt.Paths.ShowKeys,
 			})
 			if err != nil {
 				return err
 			}
-			for _, s := range tree.Paths("/") {
-				fmt.Printf("%s\n", s)
+
+			for _, segs := range tree.PathSegments() {
+				var has_key bool
+				var key string
+				if segs[len(segs)-1][0] == ':' {
+					has_key = true
+					key, segs = segs[len(segs)-1], segs[:len(segs)-1]
+				}
+				path := strings.Join(segs, "/")
+				if has_key {
+					path = fmt.Sprintf("%s%s", path, key)
+				}
+				fmt.Printf("%s\n", path)
 			}
 		}
 		return nil

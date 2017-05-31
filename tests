@@ -130,6 +130,75 @@ whos: there
 EOF
 	yamlok
 
+	testing $version get operation with --yaml on single path
+	./safe get --yaml secret/handshake >t/home/got 2>t/home/errors
+	cat >t/home/want <<EOF
+---
+secret/handshake:
+  knock: knock
+  whos: there
+EOF
+	yamlok
+
+  testing $version get operation: multiple requests, some missing
+  ./safe set secret/other/thing get=this > /dev/null
+  ./safe get secret/handshake secret/other/thing secret/non-existant secret/handshake:passcode >t/home/got 2>&1 ; exitok $? 1
+  cat >t/home/want <<'EOF' ;
+!! Multiple errors found:
+   - no secret exists at path `secret/non-existant`
+   - no key `passcode` exists in secret `secret/handshake`
+EOF
+  diffok
+
+  testing $version get operation: multiple requests
+  ./safe get secret/handshake secret/other/thing >t/home/got 2>t/home/errors ; exitok $? 0
+  cat >t/home/want <<'EOF' ; yamlok
+---
+secret/handshake:
+  knock: knock
+  whos: there
+secret/other/thing:
+  get: this
+EOF
+
+  testing $version get --keys operation: multiple requests, some missing
+  ./safe get --keys secret/handshake secret/other/thing secret/code:pssst >t/home/got 2>t/home/warn ; exitok $? 0
+  cat >t/home/want <<'EOF' ;
+---
+secret/handshake:
+- knock
+- whos
+secret/other/thing:
+- get
+secret/code: []
+EOF
+  yamlok
+
+  mv t/home/warn t/home/got
+  cat >t/home/want <<'EOF'; diffok
+WARNING: no secret exists at path `secret/code`
+EOF
+
+
+  testing $version get --keys operation: single key
+  ./safe get --keys secret/handshake >t/home/got 2>&1 ; exitok $? 0
+  cat >t/home/want <<'EOF'
+knock
+whos
+EOF
+  diffok
+
+  testing $version get --keys operation: single key with --yaml
+  ./safe get --keys --yaml secret/handshake >t/home/got 2>&1 ; exitok $? 0
+  cat >t/home/want <<'EOF'
+---
+secret/handshake:
+- knock
+- whos
+EOF
+  yamlok
+  
+
 	testing $version basic check/exists operation
 	./safe exists secret/handshake        ; exitok $? 0
 	./safe exists secret/handshake:knock  ; exitok $? 0
@@ -310,7 +379,7 @@ EOF
 	cat >t/home/want <<EOF
 boop
 EOF
-	./safe get secret/delete/ten:beep >t/home/got t/home/errors; diffok
+	./safe get secret/delete/ten:beep >t/home/got 2>t/home/errors; diffok
 
 	testing $version recursively delete a secret that does not exist with -f should not fail
 	./safe delete -Rf secret/delete/gobbledegook; exitok $? 0
@@ -753,13 +822,10 @@ EOF
 	./safe --quiet --no-clobber move -Rf secret/move-recursive secret/move-recursive-existing >t/home/got 2>&1; exitok $? 0
 	cat >t/home/want <<EOF ; diffok
 EOF
-	./safe tree secret/move-recursive-existing >t/home/got; exitok $? 0
+	./safe paths secret/move-recursive-existing >t/home/got; exitok $? 0
 	cat >t/home/want <<EOF ; diffok
-.
-└── secret/move-recursive-existing
-    ├── first
-    └── second
-
+secret/move-recursive-existing/first
+secret/move-recursive-existing/second
 EOF
 	./safe get secret/move-recursive-existing/first >t/home/got; exitok $? 0
 	cat >t/home/want <<EOF ; diffok
@@ -773,14 +839,11 @@ EOF
 key: val
 
 EOF
-	./safe tree secret/move-recursive>t/home/got; exitok $? 0
+	./safe paths secret/move-recursive>t/home/got; exitok $? 0
 	cat >t/home/want <<EOF ; diffok
-.
-└── secret/move-recursive
-    ├── first
-    ├── second
-    └── third
-
+secret/move-recursive/first
+secret/move-recursive/second
+secret/move-recursive/third
 EOF
 	./safe get secret/move-recursive/first >t/home/got; exitok $? 0
 	cat >t/home/want <<EOF ; diffok
@@ -845,13 +908,10 @@ EOF
 	./safe --quiet --no-clobber copy -Rf secret/copy-recursive secret/copy-recursive-existing >t/home/got 2>&1; exitok $? 0
 	cat >t/home/want <<EOF ; diffok
 EOF
-	./safe tree secret/copy-recursive-existing >t/home/got; exitok $? 0
+	./safe paths secret/copy-recursive-existing >t/home/got; exitok $? 0
 	cat >t/home/want <<EOF ; diffok
-.
-└── secret/copy-recursive-existing
-    ├── first
-    └── second
-
+secret/copy-recursive-existing/first
+secret/copy-recursive-existing/second
 EOF
 	./safe get secret/copy-recursive-existing/first >t/home/got; exitok $? 0
 	cat >t/home/want <<EOF ; diffok
@@ -1076,10 +1136,54 @@ secret/import/robot:
   mark: "2"
 secret/import/a/b/c:
   subkey: the value given
+secret/import/a/b/c/d:
+  subsubkey: really deep
 EOF
 	./safe import secret/import <t/home/want >/dev/null
 	./safe export secret/import >t/home/got 2>t/home/errors
 	yamlok
+
+  testing ${version} tree --keys
+  ./safe tree --keys secret/import/a/b/c >t/home/got 2>t/home/errors ; exitok $? 0
+  cat <<'EOF' >t/home/want ; diffok
+.
+└── secret/import/a/b/c
+    ├── :subkey
+    └── d
+        └── :subsubkey
+
+EOF
+  ./safe tree --keys secret/import/a secret/import/robot >t/home/got 2>t/home/errors ; exitok $? 0
+  cat <<'EOF' >t/home/want ; diffok
+.
+├── secret/import/a
+│   └── b/
+│       ├── c
+│       │   └── :subkey
+│       └── c/
+│           └── d
+│               └── :subsubkey
+└── secret/import/robot
+    ├── :mark
+    ├── :password
+    └── :username
+
+EOF
+
+  testing ${version} paths --keys
+  ./safe paths --keys secret/import/a/b/c >t/home/got 2>t/home/errors ; exitok $? 0
+  cat <<'EOF' >t/home/want ; diffok
+secret/import/a/b/c:subkey
+secret/import/a/b/c/d:subsubkey
+EOF
+  ./safe paths --keys secret/import/a secret/import/robot >t/home/got 2>t/home/errors ; exitok $? 0
+  cat <<'EOF' >t/home/want ; diffok
+secret/import/a/b/c:subkey
+secret/import/a/b/c/d:subsubkey
+secret/import/robot:mark
+secret/import/robot:password
+secret/import/robot:username
+EOF
 
 	testing ${version} x509 commands
 	./safe x509 issue                                                ; exitok $? 1 # need a path
