@@ -336,6 +336,59 @@ EOF
 		echo "ok"
 	fi
 
+	testing $version set key from file
+	echo -n "this is a value" >t/home/value-file
+	echo -n "" >t/home/empty-file
+	cat >t/home/long-file <<EOF
+this
+is
+a
+multiline
+value
+EOF
+	./safe set secret/from-files/content value@t/home/value-file blank@t/home/empty-file long@t/home/long-file ; exitok $? 0
+	./safe get secret/from-files/content --yaml >t/home/got 2>t/home/errors ; exitok $? 0
+	cat >t/home/want <<EOF ; cp t/home/want /tmp; yamlok
+---
+secret/from-files/content:
+  value: this is a value
+  blank: ""
+  long: |
+    this
+    is
+    a
+    multiline
+    value
+EOF
+
+	testing $version set key to empty value
+	./safe set secret/setec/astronomy too= many="" ; exitok $? 0
+	./safe get secret/setec/astronomy --yaml >t/home/got 2>t/home/errors ; exitok $? 0
+	cat >t/home/want <<EOF ; cp t/home/want /tmp; yamlok
+---
+secret/setec/astronomy:
+  too: ""
+  many: ""
+EOF
+
+	testing $version set key from file - error conditions
+	./safe set secret/from-file/content nothing@non-existant-file 2>t/home/got >t/home/null; exitok $? 1
+	cat > t/home/want<<EOF ; diffok
+!! Failed to read contents of non-existant-file: open non-existant-file: no such file or directory
+EOF
+	mv -f t/home/null t/home/got
+	echo -n "" > t/home/want ; diffok
+	./safe get secret/from-file/content:nothing; exitok $? 1
+
+	./safe set secret/from-file/content no-file@ 2>t/home/got >t/home/null; exitok $? 1
+	cat > t/home/want<<EOF ; diffok
+!! No file specified: expecting no-file@<filename>
+EOF
+	mv -f t/home/null t/home/got
+	echo -n "" > t/home/want ; diffok
+	./safe get secret/from-file/content:no-file; exitok $? 1
+	
+
 	###### DELETE TESTS ######
 
 	testing $version secret deletion

@@ -553,7 +553,7 @@ func main() {
 		exists := (err == nil)
 		clobberKeys := []string{}
 		for _, arg := range args {
-			k, v, err := parseKeyVal(arg)
+			k, v, missing, err := parseKeyVal(arg)
 			if err != nil {
 				return err
 			}
@@ -565,7 +565,7 @@ func main() {
 			if len(clobberKeys) > 0 {
 				continue
 			}
-			if v == "" {
+			if missing {
 				v = pr(k, prompt, insecure)
 			}
 			if err != nil {
