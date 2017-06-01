@@ -37,9 +37,10 @@ bail() {
 }
 testing() {
   if [[ $rc -ne 0 && -n $FAIL_FAST ]] ; then
-    echo "Failure encountered, stopping tests!"
-    exit 1
-  fi
+		dump_log 1
+		echo "Failure encountered, stopping tests!"
+		exit 4
+	fi
 	rm -f t/home/got t/home/want t/home/diff t/home/errors
 	local v=$1 ; shift
 	echo -n "[$v] $*... "
@@ -76,26 +77,32 @@ exitok() {
 	fi
 }
 
-cleanup() {
-	export HOME=${old_home}
-	if [[ -n $vault_pid ]] ; then
-		kill $vault_pid
-	fi
-	echo
-	echo
-
+dump_log() {
 	if [[ -f t/home/log ]] ; then
 		if grep -q 'goroutine' t/home/log; then
 			exit 77 # ./try will pick up on this error code
 		fi
-		if [[ ${rc} -ne 0 ]]; then
+		if [[ ${rc} -ne 0 || -n ${1:-} ]]; then
+			echo
 			echo >&2 "---[ VAULT LOG ]------------------------------------------"
 			cat  >&2 t/home/log
 			echo >&2 "----------------------------------------------------------"
+			echo
 		fi
 	fi
+}
 
+kill_running_vault() {
+	if [[ -n $vault_pid ]] ; then
+		kill $vault_pid
+		vault_pid=
+	fi
+}
+
+cleanup() {
+	export HOME=${old_home}
 	rm -rf t/
+	kill_running_vault
 
 	if [[ ${rc} -eq 0 ]]; then
 		echo PASSED
@@ -110,20 +117,20 @@ mkdir -p vaults t/tmp
 trap 'cleanup' INT QUIT TERM EXIT
 
 for version in ${versions[@]}; do
-	killall vault-${version} >/dev/null 2>&1 || true
+	killall vault-${platform}-${version} >/dev/null 2>&1 || true
 done
 for version in ${versions[@]}; do
 	echo "VAULT ${version}"
-	killall vault-${version} >/dev/null 2>&1 || true
+	killall vault-${platform}-${version} >/dev/null 2>&1 || true
 	echo "----------------------------------------------"
-	if [[ ! -f vaults/vault-${version} ]]; then
+	if [[ ! -f vaults/vault-${platform}-${version} ]]; then
 		echo "Downloading Vault ${version} CLI..."
 		curl --fail -L > t/tmp/archive.zip \
 			https://releases.hashicorp.com/vault/${version}/vault_${version}_${platform}_${arch}.zip \
 			|| bail "download of vault ${version} failed"
 
 		unzip -d t/tmp t/tmp/archive.zip
-		mv t/tmp/vault vaults/vault-${version}
+		mv t/tmp/vault vaults/vault-${platform}-${version}
 		echo "DONE"
 		echo
 	fi
@@ -133,8 +140,9 @@ for version in ${versions[@]}; do
 
 	rm -rf t/home ; mkdir -p t/home
 	#trap "rm -rf t/home" INT TERM QUIT EXIT
-
-	./vaults/vault-${version} server -dev >t/home/log 2>&1 &
+  
+	kill_running_vault
+	./vaults/vault-${platform}-${version} server -dev >t/home/log 2>&1 &
 	vault_pid=$!
 	waitfor=600
 	while ! grep -iq '^root token: ' t/home/log; do
@@ -143,6 +151,7 @@ for version in ${versions[@]}; do
 			sleep 0.1
 		else
 			echo "FAILED - timed out waiting for vault server (-dev) to start"
+			dump_log 1
 			exit 3 # FIXME: this is the wrong thing to do
 		fi
 	done
@@ -231,7 +240,6 @@ secret/handshake:
 - whos
 EOF
   yamlok
-  
 
 	testing $version basic check/exists operation
 	./safe exists secret/handshake        ; exitok $? 0
@@ -1412,5 +1420,7 @@ EOF
 	./safe x509 check secret/x509/imposter --ca                      ; exitok $? 0
 	./safe x509 issue secret/x509/imposter --name a.b.c              ; exitok $? 0 # not a CA, now
 	./safe x509 check secret/x509/imposter --ca                      ; exitok $? 1 # not a CA
+
+	dump_log
 done
 
