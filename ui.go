@@ -21,13 +21,15 @@ func fail(err error) {
 	}
 }
 
-func parseKeyVal(key string) (string, string, bool, error) {
+func parseKeyVal(key string, quiet bool) (string, string, bool, error) {
 	if strings.Index(key, "=") >= 0 {
 		l := strings.SplitN(key, "=", 2)
 		if l[1] == "" {
 			return l[0], "", false, nil
 		}
-		ansi.Fprintf(os.Stderr, "%s: @G{%s}\n", l[0], l[1])
+		if !quiet {
+			ansi.Fprintf(os.Stderr, "%s: @G{%s}\n", l[0], l[1])
+		}
 		return l[0], l[1], false, nil
 	} else if strings.Index(key, "@") >= 0 {
 		l := strings.SplitN(key, "@", 2)
@@ -39,7 +41,9 @@ func parseKeyVal(key string) (string, string, bool, error) {
 		if err != nil {
 			return l[0], "", true, fmt.Errorf("Failed to read contents of %s: %s", l[1], err)
 		}
-		ansi.Fprintf(os.Stderr, "%s: <@C{%s}\n", l[0], l[1])
+		if !quiet {
+			ansi.Fprintf(os.Stderr, "%s: <@C{%s}\n", l[0], l[1])
+		}
 		return l[0], string(b), false, nil
 	}
 	return key, "", true, nil
