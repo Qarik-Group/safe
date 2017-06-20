@@ -13,6 +13,7 @@ case $OSTYPE in
 	platform=darwin
 	declare -a versions=(
 		0.6.5
+		0.7.3
 	)
 	;;
 (linux*)
@@ -22,6 +23,7 @@ case $OSTYPE in
 		0.5.2
 		0.6.4
 		0.6.5
+		0.7.3
 	)
 	;;
 (*)
