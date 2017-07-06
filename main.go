@@ -1277,6 +1277,9 @@ using the 'crypt-sha512' format.
 Supported formats:
 
     base64          Base64 encodes the value
+    bcrypt          Salt and hash the value, using bcrypt (Blowfish, in crypt format).
+    crypt-md5       Salt and hash the value, using MD5, in crypt format (legacy).
+    crypt-sha256    Salt and hash the value, using SHA-256, in crypt format.
     crypt-sha512    Salt and hash the value, using SHA-512, in crypt format.
 
 `,

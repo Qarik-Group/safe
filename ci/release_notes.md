@@ -1,3 +1,10 @@
+## New Features
+
+- `safe fmt` picked up some new formats: `bcrypt` for
+  Blowfish-based bcrypt (best for password storage), `crypt-md5`
+  for legacy systems that need MD5 hashes, and `crypt-sha256` for
+  a middle-ground between MD5 and SHA-512.
+
 ## Improvements
 
 - The pki-backend commands in safe have now been officially

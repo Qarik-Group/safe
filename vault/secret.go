@@ -9,7 +9,10 @@ import (
 
 	"github.com/ghodss/yaml"
 	"github.com/starkandwayne/goutils/ansi"
+	"github.com/tredoe/osutil/user/crypt/md5_crypt"
+	"github.com/tredoe/osutil/user/crypt/sha256_crypt"
 	"github.com/tredoe/osutil/user/crypt/sha512_crypt"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // A Secret contains a set of key/value pairs that store anything you
@@ -83,6 +86,26 @@ func (s *Secret) Format(oldKey, newKey, fmtType string, skipIfExists bool) error
 	}
 	oldVal := s.Get(oldKey)
 	switch fmtType {
+	case "crypt-md5":
+		newVal, err := crypt_md5(oldVal)
+		if err != nil {
+			return err
+		}
+		err = s.Set(newKey, newVal, skipIfExists)
+		if err != nil {
+			return err
+		}
+
+	case "crypt-sha256":
+		newVal, err := crypt_sha256(oldVal)
+		if err != nil {
+			return err
+		}
+		err = s.Set(newKey, newVal, skipIfExists)
+		if err != nil {
+			return err
+		}
+
 	case "crypt-sha512":
 		newVal, err := crypt_sha512(oldVal)
 		if err != nil {
@@ -92,6 +115,17 @@ func (s *Secret) Format(oldKey, newKey, fmtType string, skipIfExists bool) error
 		if err != nil {
 			return err
 		}
+
+	case "bcrypt":
+		newVal, err := crypt_bcrypt(oldVal)
+		if err != nil {
+			return err
+		}
+		err = s.Set(newKey, newVal, skipIfExists)
+		if err != nil {
+			return err
+		}
+
 	case "base64":
 		err := s.Set(newKey, base64.StdEncoding.EncodeToString([]byte(oldVal)), skipIfExists)
 		if err != nil {
@@ -129,6 +163,32 @@ func (s *Secret) Password(key string, length int, policy string, skipIfExists bo
 	return nil
 }
 
+func crypt_md5(pass string) (string, error) {
+	c := md5_crypt.New()
+	salt, err := random(16, "a-zA-Z")
+	if err != nil {
+		return "", err
+	}
+	md5, err := c.Generate([]byte(pass), []byte("$1$"+salt))
+	if err != nil {
+		return "", fmt.Errorf("Error generating MD5 crypt for password: %s\n", err)
+	}
+	return md5, err
+}
+
+func crypt_sha256(pass string) (string, error) {
+	c := sha256_crypt.New()
+	salt, err := random(16, "a-zA-Z")
+	if err != nil {
+		return "", err
+	}
+	sha, err := c.Generate([]byte(pass), []byte("$5$"+salt))
+	if err != nil {
+		return "", fmt.Errorf("Error generating SHA-256 crypt for password: %s\n", err)
+	}
+	return sha, err
+}
+
 func crypt_sha512(pass string) (string, error) {
 	c := sha512_crypt.New()
 	salt, err := random(16, "a-zA-Z")
@@ -137,9 +197,18 @@ func crypt_sha512(pass string) (string, error) {
 	}
 	sha, err := c.Generate([]byte(pass), []byte("$6$"+salt))
 	if err != nil {
-		return "", fmt.Errorf("Error generating crypt for password: %s\n", err)
+		return "", fmt.Errorf("Error generating SHA-512 crypt for password: %s\n", err)
 	}
 	return sha, err
+}
+
+func crypt_bcrypt(pass string) (string, error) {
+	// for now, use a fixed worker cost of 12
+	hashed, err := bcrypt.GenerateFromPassword([]byte(pass), 12)
+	if err != nil {
+		return "", err
+	}
+	return string(hashed), nil
 }
 
 func (s *Secret) keypair(private, public string, fingerprint string, skipIfExists bool) error {
