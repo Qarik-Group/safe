@@ -144,7 +144,7 @@ for version in ${versions[@]}; do
 	#trap "rm -rf t/home" INT TERM QUIT EXIT
   
 	kill_running_vault
-	./vaults/vault-${platform}-${version} server -dev >t/home/log 2>&1 &
+	./vaults/vault-${platform}-${version} server -dev -dev-listen-address 127.0.0.1:8199 >t/home/log 2>&1 &
 	vault_pid=$!
 	waitfor=600
 	while ! grep -iq '^root token: ' t/home/log; do
@@ -161,7 +161,7 @@ for version in ${versions[@]}; do
 	root_token=$(awk '/^Root Token:/ { print $3 }' < t/home/log | head -n1)
 	unseal_key=$(awk '/^Unseal Key:/ { print $3 }' < t/home/log | head -n1)
 
-	./safe target unit-tests http://127.0.0.1:8200
+	./safe target unit-tests http://127.0.0.1:8199
 	./safe auth token <<<${root_token}
 
 	testing $version basic set/get operation
