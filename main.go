@@ -517,7 +517,7 @@ func main() {
 		exists := (err == nil)
 		clobberKeys := []string{}
 		for _, arg := range args {
-			k, v, missing, err := parseKeyVal(arg)
+			k, v, missing, err := parseKeyVal(arg, opt.Quiet)
 			if err != nil {
 				return err
 			}

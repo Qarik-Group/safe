@@ -778,7 +778,6 @@ Cowardly refusing to update secret/existing/set, as the following keys would be 
 EOF
 	./safe --quiet --no-clobber set secret/existing/set val=test2 >t/home/got 2>&1; exitok $? 0
 	cat >t/home/want <<EOF ; diffok
-val: test2
 EOF
 	./safe get secret/existing/set >t/home/got; exitok $? 0
 	cat >t/home/want <<EOF ; diffok
@@ -813,7 +812,6 @@ Cowardly refusing to update secret/existing/paste, as the following keys would b
 EOF
 	./safe --quiet --no-clobber paste secret/existing/paste val=test2 >t/home/got 2>&1; exitok $? 0
 	cat >t/home/want <<EOF ; diffok
-val: test2
 EOF
 	./safe get secret/existing/paste >t/home/got; exitok $? 0
 	cat >t/home/want <<EOF ; diffok
@@ -835,7 +833,6 @@ Cowardly refusing to update secret/existing/ask, as the following keys would be 
 EOF
 	./safe --quiet --no-clobber ask secret/existing/ask val=test2 >t/home/got 2>&1; exitok $? 0
 	cat >t/home/want <<EOF ; diffok
-val: test2
 EOF
 	./safe get secret/existing/ask >t/home/got; exitok $? 0
 	cat >t/home/want <<EOF ; diffok
