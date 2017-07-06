@@ -397,7 +397,41 @@ EOF
 	mv -f t/home/null t/home/got
 	echo -n "" > t/home/want ; diffok
 	./safe get secret/from-file/content:no-file; exitok $? 1
-	
+
+
+
+	###### FORMAT TESTS ######
+	testing $version fmt - all formats
+	./safe gen secret/fmt/formats original
+	./safe get secret/fmt/formats:original; exitok $? 0
+
+	./safe fmt base64       secret/fmt/formats original base64;       exitok $? 0
+	./safe fmt bcrypt       secret/fmt/formats original bcrypt;       exitok $? 0
+	./safe fmt crypt-md5    secret/fmt/formats original crypt-md5;    exitok $? 0
+	./safe fmt crypt-sha256 secret/fmt/formats original crypt-sha256; exitok $? 0
+	./safe fmt crypt-sha512 secret/fmt/formats original crypt-sha512; exitok $? 0
+
+	./safe get secret/fmt/formats:base64;       exitok $? 0
+	./safe get secret/fmt/formats:bcrypt;       exitok $? 0
+	./safe get secret/fmt/formats:crypt-md5;    exitok $? 0
+	./safe get secret/fmt/formats:crypt-sha256; exitok $? 0
+	./safe get secret/fmt/formats:crypt-sha512; exitok $? 0
+
+	# note that the tests do not support the optional parameters in crypt format
+	# (i.e. `$<id>[$<param>=<value>(,<param>=<value>)*][$<salt>[$<hash>]]`)
+	testing $version fmt - bcrypt
+	./safe get secret/fmt/formats:bcrypt | grep -qE '^\$2[axy]?\$[a-zA-Z0-9+/=]+\$.+'; exitok $? 0
+
+	testing $version fmt - crypt-md5
+	./safe get secret/fmt/formats:crypt-md5 | grep -qE '^\$1\$[a-zA-Z0-9+/=]+\$.+'; exitok $? 0
+
+	testing $version fmt - crypt-sha256
+	./safe get secret/fmt/formats:crypt-sha256 | grep -qE '^\$5\$[a-zA-Z0-9+/=]+\$.+'; exitok $? 0
+
+	testing $version fmt - crypt-sha512
+	./safe get secret/fmt/formats:crypt-sha512 | grep -qE '^\$6\$[a-zA-Z0-9+/=]+\$.+'; exitok $? 0
+
+
 
 	###### DELETE TESTS ######
 

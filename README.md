@@ -298,6 +298,9 @@ in an alternate format (for htpass files, or /etc/shadow).
 Currently supported formats:
 
 - base64
+- bcrypt
+- crypt-md5
+- crypt-sha256
 - crypt-sha512
 
 ```
