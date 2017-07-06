@@ -36,8 +36,24 @@
 			"Rev": "7d3ee1afa71c90fd1514c8f557ae6c5f414208eb"
 		},
 		{
+			"ImportPath": "github.com/tredoe/osutil/user/crypt/md5_crypt",
+			"Rev": "7d3ee1afa71c90fd1514c8f557ae6c5f414208eb"
+		},
+		{
+			"ImportPath": "github.com/tredoe/osutil/user/crypt/sha256_crypt",
+			"Rev": "7d3ee1afa71c90fd1514c8f557ae6c5f414208eb"
+		},
+		{
 			"ImportPath": "github.com/tredoe/osutil/user/crypt/sha512_crypt",
 			"Rev": "7d3ee1afa71c90fd1514c8f557ae6c5f414208eb"
+		},
+		{
+			"ImportPath": "golang.org/x/crypto/bcrypt",
+			"Rev": "1f22c0103821b9390939b6776727195525381532"
+		},
+		{
+			"ImportPath": "golang.org/x/crypto/blowfish",
+			"Rev": "1f22c0103821b9390939b6776727195525381532"
 		},
 		{
 			"ImportPath": "golang.org/x/crypto/curve25519",
@@ -58,10 +74,6 @@
 		{
 			"ImportPath": "gopkg.in/yaml.v2",
 			"Rev": "f7716cbe52baa25d2e9b0d0da546fcf909fc16b4"
-		},
-		{
-			"ImportPath": "github.com/jhunt/go-cli/vendor/github.com/jhunt/go-snapshot",
-			"Rev": "f04a1744b5e341ae543d4ba4f6b2290425627a3a"
 		}
 	]
 }
