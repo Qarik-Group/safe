@@ -1745,8 +1745,8 @@ prints out information about a certificate, including:
 				fmt.Printf("  issued by: @C{%s}\n\n", cert.Issuer())
 			}
 
-			toStart := time.Until(cert.Certificate.NotBefore)
-			toEnd := time.Until(cert.Certificate.NotAfter)
+			toStart := cert.Certificate.NotBefore.Sub(time.Now())
+			toEnd := cert.Certificate.NotAfter.Sub(time.Now())
 
 			days := int(toStart.Hours() / 24)
 			if days == 1 {
