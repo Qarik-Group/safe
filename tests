@@ -1,7 +1,9 @@
 #!/bin/bash
+# vim:et:ts=2:sts=2:sw=2
 FAIL_FAST="${FAIL_FAST:-}"
 set -u
 
+done_testing=0
 rc=0
 platform=
 arch=amd64
@@ -10,108 +12,216 @@ vault_pid=
 
 case $OSTYPE in
 (darwin*)
-	platform=darwin
-	declare -a versions=(
-		0.6.5
-		0.7.3
-	)
-	;;
+  platform=darwin
+  declare -a versions=(
+    0.6.5
+    0.7.3
+  )
+  ;;
 (linux*)
-	platform=linux
-	declare -a versions=(
-		0.5.0
-		0.5.2
-		0.6.4
-		0.6.5
-		0.7.3
-	)
-	;;
+  platform=linux
+  declare -a versions=(
+    0.5.0
+    0.5.2
+    0.6.4
+    0.6.5
+    0.7.3
+  )
+  ;;
 (*)
-	echo >&2 "UNRECOGNIZED OSTYPE '$OSTYPE'"
-	exit 1
-	;;
+  echo >&2 "UNRECOGNIZED OSTYPE '$OSTYPE'"
+  exit 1
+  ;;
 esac
 
 
 bail() {
-	echo >&2 $*
-	exit 2
+  echo >&2 $*
+  exit 2
 }
+ok() {
+  if [[ -t 1 ]]; then
+    echo -e "\033[1;32mok\033[0m"
+  else
+    echo "ok"
+  fi
+}
+failed() {
+  if [[ -t 1 ]]; then
+    echo -e "\033[1;31mfail\033[0m"
+  else
+    echo "fail"
+  fi
+}
+tests_passed() {
+  if [[ -t 1 ]]; then
+    echo -e "\033[1;32mALL TESTS PASSED\033[0m"
+  else
+    echo "ALL TESTS PASSED"
+  fi
+}
+tests_failed() {
+  if [[ -t 1 ]]; then
+    echo -e "\033[1;31mTESTS FAILED\033[0m"
+  else
+    echo "TESTS FAILED"
+  fi
+}
+test=""
 testing() {
   if [[ $rc -ne 0 && -n $FAIL_FAST ]] ; then
-		dump_log 1
-		echo "Failure encountered, stopping tests!"
-		exit 4
-	fi
-	rm -f t/home/got t/home/want t/home/diff t/home/errors
-	local v=$1 ; shift
-	echo -n "[$v] $*... "
+    dump_log 1
+    echo "Failure encountered, stopping tests!"
+    exit 4
+  fi
+  rm -f t/home/got t/home/want t/home/diff t/home/errors
+  echo
+  local v=$1 ; shift
+  if [[ -t 1 ]]; then
+    echo -e "[\033[1;36m$v\033[0m] \033[1;34m$*\033[0m"
+  else
+    echo "[$v] $*"
+  fi
+  test="$*"
+}
+clearvault() {
+  (./safe paths | xargs ./safe rm) &>/dev/null
+}
+now() {
+  if [[ -n "${1:-}" ]]; then
+    test="$*"
+  fi
+}
+run() {
+  rm -f t/tmp/errors
+  exec &>t/tmp/errors
+}
+step() {
+  echo -n "  $*... "
 }
 diffok() {
-	if [[ -f t/home/errors && -s t/home/errors ]]; then
-		echo "FAILED! (with errors:)"
-		rc=1
-		cat t/home/errors
-		echo ; echo
-	elif ! diff -u t/home/got t/home/want >t/home/diff 2>&1; then
-		echo "FAILED!"
-		rc=1
-		cat t/home/diff
-		echo ; echo
-	else
-		echo "ok"
-	fi
+  step "$test"
+  if [[ -f t/home/errors && -s t/home/errors ]]; then
+    failed
+    rc=1
+    cat t/home/errors
+    echo ; echo
+
+  elif ! diff -Bu t/home/got t/home/want >t/home/diff 2>&1; then
+    failed
+    rc=1
+    cat t/home/diff
+    echo ; echo
+  else
+
+    ok
+  fi
 }
 yamlok() {
-	[ -s t/home/got ] || echo "--- {}" > t/home/got
-	spruce merge t/home/got  > t/home/got.x   ; mv t/home/got.x  t/home/got
-	spruce merge t/home/want > t/home/want.x  ; mv t/home/want.x t/home/want
-	diffok
+  [ -s t/home/got ] || echo "--- {}" > t/home/got
+  spruce merge t/home/got  > t/home/got.x   ; mv t/home/got.x  t/home/got
+  spruce merge t/home/want > t/home/want.x  ; mv t/home/want.x t/home/want
+  diffok
 }
 exitok() {
-	if [[ $1 -eq $2 ]]; then
-		echo "ok"
-	else
-		echo "FAILED!"
-		rc=1
-		echo " expected process to exit $2"
-		echo "   but it actually exited $1"
-	fi
+  step "$test"
+  if [[ $1 -eq ${2:-0} ]]; then
+    ok
+  else
+    failed
+    rc=1
+    echo " expected process to exit $2"
+    echo "   but it actually exited $1"
+    if [[ -f t/tmp/errors ]]; then
+      echo
+      echo "---[ command output ]------------------"
+      cat t/tmp/errors
+      echo "---------------------------------------"
+      rm t/tmp/errors
+    else
+      echo "   (no output from command)"
+    fi
+  fi
+}
+
+eq_key() {
+  key1=$1
+  key2=$2
+  now retrieving "$key1" from vault
+  (run; ./safe get "$key1" >t/home/got) ; exitok $? 0
+  cp t/home/got t/home/want
+
+  now retrieving "$key2" from vault
+  (run; ./safe get "$key2" >t/home/got) ; exitok $? 0
+
+  now checking that "$key1" == "$key2"
+  diffok
+}
+is_key() {
+  key=$1
+  val=$2
+  alt=${3:-}
+  if [[ -z "${alt}" ]]; then
+    alt="'$2'"
+  fi
+  now retrieving "$key" from vault
+  (run; ./safe get "$key" >t/home/got) ; exitok $? 0
+
+  now checking that "$key" == "$alt"
+  cat >t/home/want <<EOF ; diffok
+$val
+EOF
+}
+ok_key() {
+  for key in "$@"; do
+    now checking that "$key" exists in vault
+    (run; ./safe exists "$key"); exitok $? 0
+  done
+}
+no_key() {
+  for key in "$@"; do
+    now checking that "$key" does not exist in vault
+    (run; ./safe exists "$key"); exitok $? 1
+  done
+}
+generate() {
+  now generating secret "'$1'" to test with
+  (run; ./safe set $*); exitok $? 0
 }
 
 dump_log() {
-	if [[ -f t/home/log ]] ; then
-		if grep -q 'goroutine' t/home/log; then
-			exit 77 # ./try will pick up on this error code
-		fi
-		if [[ ${rc} -ne 0 || -n ${1:-} ]]; then
-			echo
-			echo >&2 "---[ VAULT LOG ]------------------------------------------"
-			cat  >&2 t/home/log
-			echo >&2 "----------------------------------------------------------"
-			echo
-		fi
-	fi
+  if [[ -f t/home/log ]] ; then
+    if grep -q 'goroutine' t/home/log; then
+      exit 77 # ./try will pick up on this error code
+    fi
+    if [[ ${rc} -ne 0 || -n ${1:-} ]]; then
+      echo
+      echo >&2 "---[ VAULT LOG ]------------------------------------------"
+      cat  >&2 t/home/log
+      echo >&2 "----------------------------------------------------------"
+      echo
+    fi
+  fi
 }
 
 kill_running_vault() {
-	if [[ -n $vault_pid ]] ; then
-		kill $vault_pid
-		vault_pid=
-	fi
+  if [[ -n $vault_pid ]] ; then
+    kill $vault_pid
+    vault_pid=
+  fi
 }
 
 cleanup() {
-	export HOME=${old_home}
-	rm -rf t/
-	kill_running_vault
+  export HOME=${old_home}
+  rm -rf t/
+  kill_running_vault
 
-	if [[ ${rc} -eq 0 ]]; then
-		echo PASSED
-	else
-		echo FAILED
-	fi
-	exit ${rc}
+  if [[ ${done_testing} -eq 1 && ${rc} -eq 0 ]]; then
+    tests_passed
+  else
+    tests_failed
+  fi
+  exit ${rc}
 }
 
 
@@ -119,84 +229,139 @@ mkdir -p vaults t/tmp
 trap 'cleanup' INT QUIT TERM EXIT
 
 for version in ${versions[@]}; do
-	killall vault-${platform}-${version} >/dev/null 2>&1 || true
+  killall vault-${platform}-${version} >/dev/null 2>&1 || true
 done
 for version in ${versions[@]}; do
-	echo "VAULT ${version}"
-	killall vault-${platform}-${version} >/dev/null 2>&1 || true
-	echo "----------------------------------------------"
-	if [[ ! -f vaults/vault-${platform}-${version} ]]; then
-		echo "Downloading Vault ${version} CLI..."
-		curl --fail -L > t/tmp/archive.zip \
-			https://releases.hashicorp.com/vault/${version}/vault_${version}_${platform}_${arch}.zip \
-			|| bail "download of vault ${version} failed"
+  echo "VAULT ${version}"
+  killall vault-${platform}-${version} >/dev/null 2>&1 || true
+  echo "----------------------------------------------"
+  if [[ ! -f vaults/vault-${platform}-${version} ]]; then
+    echo "Downloading Vault ${version} CLI..."
+    curl --fail -L > t/tmp/archive.zip \
+      https://releases.hashicorp.com/vault/${version}/vault_${version}_${platform}_${arch}.zip \
+      || bail "download of vault ${version} failed"
 
-		unzip -d t/tmp t/tmp/archive.zip
-		mv t/tmp/vault vaults/vault-${platform}-${version}
-		echo "DONE"
-		echo
-	fi
+    unzip -d t/tmp t/tmp/archive.zip
+    mv t/tmp/vault vaults/vault-${platform}-${version}
+    echo "DONE"
+    echo
+  fi
 
-	old_home=$HOME
-	export HOME=${PWD}/t/home
+  old_home=$HOME
+  export HOME=${PWD}/t/home
 
-	rm -rf t/home ; mkdir -p t/home
-	#trap "rm -rf t/home" INT TERM QUIT EXIT
-  
-	kill_running_vault
-	./vaults/vault-${platform}-${version} server -dev -dev-listen-address 127.0.0.1:8199 >t/home/log 2>&1 &
-	vault_pid=$!
-	waitfor=600
-	while ! grep -iq '^root token: ' t/home/log; do
-		if [[ $waitfor -gt 0 ]]; then
-			waitfor=$((waitfor - 1))
-			sleep 0.1
-		else
-			echo "FAILED - timed out waiting for vault server (-dev) to start"
-			dump_log 1
-			exit 3 # FIXME: this is the wrong thing to do
-		fi
-	done
+  rm -rf t/home ; mkdir -p t/home
+  #trap "rm -rf t/home" INT TERM QUIT EXIT
 
-	root_token=$(awk '/^Root Token:/ { print $3 }' < t/home/log | head -n1)
-	unseal_key=$(awk '/^Unseal Key:/ { print $3 }' < t/home/log | head -n1)
+  kill_running_vault
+  ./vaults/vault-${platform}-${version} server -dev -dev-listen-address 127.0.0.1:8199 >t/home/log 2>&1 &
+  vault_pid=$!
+  waitfor=600
+  while ! grep -iq '^root token: ' t/home/log; do
+    if [[ $waitfor -gt 0 ]]; then
+      waitfor=$((waitfor - 1))
+      sleep 0.1
+    else
+      failed "timed out waiting for vault server (-dev) to start"
+      dump_log 1
+      exit 3 # FIXME: this is the wrong thing to do
+    fi
+  done
 
-	./safe target unit-tests http://127.0.0.1:8199
-	./safe auth token <<<${root_token}
+  root_token=$(awk '/^Root Token:/ { print $3 }' < t/home/log | head -n1)
+  unseal_key=$(awk '/^Unseal Key:/ { print $3 }' < t/home/log | head -n1)
 
-	testing $version basic set/get operation
-	./safe set secret/handshake knock=knock >/dev/null
-	./safe ask secret/handshake whos=there >/dev/null
-	./safe get secret/handshake >t/home/got 2>t/home/errors
-	cat >t/home/want <<EOF
+
+
+   ######  ######## ######## ##     ## ########
+  ##    ## ##          ##    ##     ## ##     ##
+  ##       ##          ##    ##     ## ##     ##
+   ######  ######      ##    ##     ## ########
+        ## ##          ##    ##     ## ##
+  ##    ## ##          ##    ##     ## ##
+   ######  ########    ##     #######  ##
+
+  #######
+  clearvault
+  testing $version setup
+  now targeting test vault server
+  (run; ./safe target unit-tests http://127.0.0.1:8199) ; exitok $? 0
+
+  now authenticating with ${root_token} root token
+  (run; echo "$root_token" | ./safe auth token)         ; exitok $? 0
+
+
+
+   ######   ######## ########       ##  ######  ######## ########
+  ##    ##  ##          ##         ##  ##    ## ##          ##
+  ##        ##          ##        ##   ##       ##          ##
+  ##   #### ######      ##       ##     ######  ######      ##
+  ##    ##  ##          ##      ##           ## ##          ##
+  ##    ##  ##          ##     ##      ##    ## ##          ##
+   ######   ########    ##    ##        ######  ########    ##
+
+  #######
+  clearvault
+  testing $version basic set/get operation
+  now setting a key=value on a new path
+  (run; ./safe set secret/handshake knock=knock) ; exitok $? 0
+
+  now asking for a key, but providing the value anyway
+  (run; ./safe ask secret/handshake whos=there)  ; exitok $? 0
+
+  now retrieving the test path
+  (run; ./safe get secret/handshake >t/home/got) ; exitok $? 0
+
+  now checking that we got the expected secrets in the output
+  cat >t/home/want <<EOF ; yamlok
 --- # secret/handshake
 knock: knock
 whos: there
 EOF
-	yamlok
 
-	testing $version get operation with --yaml on single path
-	./safe get --yaml secret/handshake >t/home/got 2>t/home/errors
-	cat >t/home/want <<EOF
+
+  #######
+  #clearvault
+  testing $version get operation with --yaml on single path
+  now retrieving secret/handshake as --yaml
+  (run; ./safe get --yaml secret/handshake >t/home/got) ; exitok $? 0
+
+  now checking that the response is properly formatted
+  cat >t/home/want <<EOF ; yamlok
 ---
 secret/handshake:
   knock: knock
   whos: there
 EOF
-	yamlok
 
+
+  #######
+  #clearvault
   testing $version get operation: multiple requests, some missing
-  ./safe set secret/other/thing get=this > /dev/null
-  ./safe get secret/handshake secret/other/thing secret/non-existant secret/handshake:passcode >t/home/got 2>&1 ; exitok $? 1
-  cat >t/home/want <<'EOF' ;
+  now setting secret/other/thing to a valid value
+  (run; ./safe set secret/other/thing get=this); exitok $? 0
+
+  now checking that a get where some of the paths are missing fails
+  (run; ./safe get secret/handshake \
+                   secret/other/thing \
+                   secret/non-existent \
+                   secret/handshake:passcode >t/home/got 2>&1) ; exitok $? 1
+
+  now checking that we get errors about missing paths and keys
+  cat >t/home/want <<'EOF' ; diffok
 !! Multiple errors found:
-   - no secret exists at path `secret/non-existant`
+   - no secret exists at path `secret/non-existent`
    - no key `passcode` exists in secret `secret/handshake`
 EOF
-  diffok
 
+
+  #######
+  #clearvault
   testing $version get operation: multiple requests
-  ./safe get secret/handshake secret/other/thing >t/home/got 2>t/home/errors ; exitok $? 0
+  now checking that a get of multiple existing paths succeeds
+  (run; ./safe get secret/handshake secret/other/thing >t/home/got) ; exitok $? 0
+
+  now checking that we get back the paths we want
   cat >t/home/want <<'EOF' ; yamlok
 ---
 secret/handshake:
@@ -206,9 +371,15 @@ secret/other/thing:
   get: this
 EOF
 
+
+  #######
+  #clearvault
   testing $version get --keys operation: multiple requests, some missing
-  ./safe get --keys secret/handshake secret/other/thing secret/code:pssst >t/home/got 2>t/home/warn ; exitok $? 0
-  cat >t/home/want <<'EOF' ;
+  now checking that a get where some of the keys are missing still works
+  (run; ./safe get --keys secret/handshake secret/other/thing secret/code:pssst >t/home/got 2>t/home/warn); exitok $? 0
+
+  now checking that we get back the paths we want
+  cat >t/home/want <<'EOF' ; yamlok
 ---
 secret/handshake:
 - knock
@@ -217,148 +388,261 @@ secret/other/thing:
 - get
 secret/code: []
 EOF
-  yamlok
 
   mv t/home/warn t/home/got
+  now checking that we got a warning about the missing secrets
   cat >t/home/want <<'EOF'; diffok
 WARNING: no secret exists at path `secret/code`
 EOF
 
 
+  #######
+  #clearvault
   testing $version get --keys operation: single key
-  ./safe get --keys secret/handshake >t/home/got 2>&1 ; exitok $? 0
-  cat >t/home/want <<'EOF'
+  now retrieving a single path and all of its --keys
+  (run;./safe get --keys secret/handshake >t/home/got) ; exitok $? 0
+
+  now checking that we got the values of the keys
+  cat >t/home/want <<'EOF' ; diffok
 knock
 whos
 EOF
-  diffok
 
+  #######
+  #clearvault
   testing $version get --keys operation: single key with --yaml
-  ./safe get --keys --yaml secret/handshake >t/home/got 2>&1 ; exitok $? 0
-  cat >t/home/want <<'EOF'
+  now retrieving a single path and all of its --keys in --yaml format
+  (run; ./safe get --keys --yaml secret/handshake >t/home/got) ; exitok $? 0
+
+  now checking that we got the yaml output we wanted
+  cat >t/home/want <<'EOF' ; yamlok
 ---
 secret/handshake:
 - knock
 - whos
 EOF
-  yamlok
 
-	testing $version basic check/exists operation
-	./safe exists secret/handshake        ; exitok $? 0
-	./safe exists secret/handshake:knock  ; exitok $? 0
-	./safe exists secret/handshake:enoent ; exitok $? 1
-	./safe exists secret/enoent           ; exitok $? 1
-	./safe exists secret/enoent:sub       ; exitok $? 1
 
-	testing $version multiple-attribute set operation
-	./safe set secret/account username=admin password=sekrit >/dev/null
-	./safe get secret/account >t/home/got 2>t/home/errors
-	cat >t/home/want <<EOF
+  #######
+  clearvault
+  testing $version multiple-attribute set operation
+  now setting multiple keys on the same path
+  (run; ./safe set secret/account username=admin password=sekrit) ; exitok $? 0
+
+  now retrieving secret/account to check for our keys
+  (run; ./safe get secret/account >t/home/got)                    ; exitok $? 0
+
+  now checking that our keys are found in the output
+  cat >t/home/want <<EOF ; yamlok
 --- # secret/account
 username: admin
 password: sekrit
 EOF
-	yamlok
-
-	testing $version password randomization
-	./safe gen secret/random one     >/dev/null
-	./safe gen secret/random another >/dev/null
-	./safe get secret/random | spruce json >t/home/got 2>t/home/errors
-	one=$(jq -r .one < t/home/got)
-	another=$(jq -r .another < t/home/got)
-	if [[ ${one} == ${another} ]]; then
-		echo "FAILED"
-		rc=1
-		echo "  ... expected generated password '${one}'"
-		echo "            to not be the same as '${another}'"
-	else
-		echo "ok"
-	fi
-
-	testing $version command chaining
-	./safe gen secret/chained a -- gen secret/chained b -- gen secret/chained c >/dev/null
-	./safe get secret/chained | spruce json > t/home/got 2>t/home/errors
-	for k in a b c; do
-		v=$(jq -r .$k < t/home/got)
-		if [[ -z "$v" ]]; then
-			echo "FAILED"
-			rc=1
-			echo "  ... expected secret/chained/$k to exist"
-		else
-			echo "ok"
-		fi
-	done
 
 
-	testing $version custom password runes randomization
 
-	./safe gen --policy "1-9" 64 secret/random one #    >/dev/null
-	./safe get secret/random | spruce json >t/home/runed # 2>t/home/errors
+   ######  ##     ## ########  ######  ##    ##
+  ##    ## ##     ## ##       ##    ## ##   ##
+  ##       ##     ## ##       ##       ##  ##
+  ##       ######### ######   ##       #####
+  ##       ##     ## ##       ##       ##  ##
+  ##    ## ##     ## ##       ##    ## ##   ##
+   ######  ##     ## ########  ######  ##    ##
 
-	one=$(jq -r .one < t/home/runed)
-	if [[ "$one" =~ ^[1-9]+$ ]]; then
-		echo "ok"
-	else
-		echo "FAILED"
-		rc=1
-		echo "  expected generated password: '$one'"
-		echo "              to only contain: [1-9]"
-	fi
+  #######
+  clearvault
+  testing $version basic check/exists operation
+  now setting secret/handshake
+  (run; ./safe set secret/handshake knock=knock) ; exitok $? 0
 
-	testing $version password with secret:key syntax
-	./safe gen 64 secret/random:two
-	exitok $? 0
-	./safe get secret/random:two
-	exitok $? 0
+  now checking that secret/handshake:knock exists
+  (run; ./safe exists secret/handshake:knock)    ; exitok $? 0
 
-	testing $version gen with multiple passwords to make
-	./safe gen 64 secret/random:three secret/random four secret/random:five
-	exitok $? 0
-	./safe get secret/random:three; exitok $? 0
-	./safe get secret/random:four; exitok $? 0
-	./safe get secret/random:five; exitok $? 0
+  now checking that secret/handshake:enoent does not exist
+  (run; ./safe exists secret/handshake:enoent)   ; exitok $? 1
 
-	testing $version gen with length flag
-	./safe gen secret/random:six -l 10
-	./safe get secret/random:six | tr -d '\n' >t/home/got
-	if [[ $(cat t/home/got | wc -m) -ne 10 ]]; then
-	  echo "FAILED"
-		rc=1
-		echo "Expected generated password to have 10 characters"
-		echo "Got $(cat t/home/got | wc -m) instead"
+  now checking that secret/enoent does not exist
+  (run; ./safe exists secret/enoent)             ; exitok $? 1
+
+  now checking that secret/enoent:sub does not exist
+  (run; ./safe exists secret/enoent:sub)         ; exitok $? 1
+
+
+
+   ######   ######## ##    ##
+  ##    ##  ##       ###   ##
+  ##        ##       ####  ##
+  ##   #### ######   ## ## ##
+  ##    ##  ##       ##  ####
+  ##    ##  ##       ##   ###
+   ######   ######## ##    ##
+
+  #######
+  clearvault
+  testing $version password randomization
+  now generating some random secrets
+  (run; ./safe gen secret/random one    ) ; exitok $? 0
+  (run; ./safe gen secret/random another) ; exitok $? 0
+
+  now retrieving generated credentials
+  (run; ./safe get secret/random | spruce json >t/home/got) ; exitok $? 0
+  one=$(jq -r .one < t/home/got)
+  another=$(jq -r .another < t/home/got)
+  step "checking that the two generated passwords are different"
+  if [[ ${one} == ${another} ]]; then
+    failed
+    rc=1
+    echo "  ... expected generated password '${one}'"
+    echo "            to not be the same as '${another}'"
+  else
+    ok
   fi
 
-	testing $version gen with incorrectly mixed path:key should fail
-	./safe gen secret/random secret/random:seven 2>/dev/null; exitok $? 1
 
-	testing $version gen with missing key should fail
-	./safe gen secret/random 2>/dev/null; exitok $? 1
 
-	testing $version single-value retrieval
-	./safe set secret/single/value foo=bar baz=quux >/dev/null
-	foo=$(./safe get secret/single/value:foo)
-	if [[ ${foo} != "bar" ]]; then
-		echo "FAILED"
-		rc=1
-		echo "  ... expected foo='bar'"
-		echo "               got '${foo}'"
-	else
-		echo "ok"
-	fi
+   ######  ##     ##    ###    #### ##    ##
+  ##    ## ##     ##   ## ##    ##  ###   ##
+  ##       ##     ##  ##   ##   ##  ####  ##
+  ##       ######### ##     ##  ##  ## ## ##
+  ##       ##     ## #########  ##  ##  ####
+  ##    ## ##     ## ##     ##  ##  ##   ###
+   ######  ##     ## ##     ## #### ##    ##
 
-	testing $version set key from file
-	echo -n "this is a value" >t/home/value-file
-	echo -n "" >t/home/empty-file
-	cat >t/home/long-file <<EOF
+  #######
+  clearvault
+  testing $version command chaining
+  now generating three credentials via a command chain
+  (run; ./safe gen secret/chained a -- \
+               gen secret/chained b -- \
+               gen secret/chained c)                          ; exitok $? 0
+
+  now retrieving our generated credentials
+  (run; ./safe get secret/chained | spruce json > t/home/got) ; exitok $? 0
+
+  for k in a b c; do
+    step "checking that each credential exists"
+    v=$(jq -r .$k < t/home/got)
+    if [[ -z "$v" ]]; then
+      failed
+      rc=1
+      echo "  ... expected secret/chained/$k to exist"
+    else
+      ok
+    fi
+  done
+
+
+  #######
+  clearvault
+  testing $version custom password runes randomization
+  now generating credentials consisting of only the digits 1 - 9
+  (run; ./safe gen --policy "1-9" 64 secret/random one)       ; exitok $? 0
+
+  now retrieving our generated credentials
+  (run; ./safe get secret/random | spruce json >t/home/runed) ; exitok $? 0
+
+  step "checking that the generated credential only consists of the digits 1-9"
+  one=$(jq -r .one < t/home/runed)
+  if [[ "$one" =~ ^[1-9]+$ ]]; then
+    ok
+  else
+    failed
+    rc=1
+    echo "  expected generated password: '$one'"
+    echo "              to only contain: [1-9]"
+  fi
+
+
+  #######
+  clearvault
+  testing $version password with secret:key syntax
+  now generating a random secret at secret/random:two
+  (run; ./safe gen 64 secret/random:two) ; exitok $? 0
+
+  now retrieving our generated credentials
+  (run; ./safe get secret/random:two)    ; exitok $? 0
+
+
+  #######
+  clearvault
+  testing $version gen with multiple passwords to make
+  now generating passwords
+  (run; ./safe gen 64 secret/random:three secret/random four secret/random:five) ; exitok $? 0
+  ok_key secret/random:{three,four,five}
+
+
+  #######
+  clearvault
+  testing $version gen with length flag
+  now generating a 10-character password
+  (run; ./safe gen secret/random:six -l 10) ; exitok $? 0
+
+  now retrieving our 10-character password
+  (run; ./safe get secret/random:six | tr -d '\n' >t/home/got) ; exitok $? 0
+
+  step "testing that the password is only 10 characters long"
+  if [[ $(cat t/home/got | wc -m) -eq 10 ]]; then
+    ok
+  else
+    failed
+    rc=1
+    echo "Expected generated password to have 10 characters"
+    echo "Got $(cat t/home/got | wc -m) instead"
+  fi
+
+  #######
+  clearvault
+  testing $version gen with incorrectly mixed path:key should fail
+  (run; ./safe gen secret/random secret/random:seven) ; exitok $? 1
+  no_key secret/random
+
+
+  #######
+  clearvault
+  testing $version gen with missing key should fail
+  (run; ./safe gen secret/random) ; exitok $? 1
+  no_key secret/random
+
+
+  #######
+  clearvault
+  testing $version single-value retrieval
+  (run; ./safe set secret/single/value foo=bar baz=quux) ; exitok $? 0
+  foo=$(./safe get secret/single/value:foo)
+  step "retrieving our single value"
+  if [[ ${foo} = "bar" ]]; then
+    ok
+  else
+    failed
+    rc=1
+    echo "  ... expected foo='bar'"
+    echo "               got '${foo}'"
+  fi
+
+
+  #######
+  clearvault
+  testing $version set key from file
+  echo -n "this is a value" >t/home/value-file
+  echo -n "" >t/home/empty-file
+  cat >t/home/long-file <<EOF
 this
 is
 a
 multiline
 value
 EOF
-	./safe set secret/from-files/content value@t/home/value-file blank@t/home/empty-file long@t/home/long-file ; exitok $? 0
-	./safe get secret/from-files/content --yaml >t/home/got 2>t/home/errors ; exitok $? 0
-	cat >t/home/want <<EOF ; cp t/home/want /tmp; yamlok
+  now setting values from files
+  (run; ./safe set secret/from-files/content \
+                     value@t/home/value-file \
+                     blank@t/home/empty-file \
+                     long@t/home/long-file) ; exitok $? 0
+
+  now retrieving set values
+  (run; ./safe get secret/from-files/content --yaml >t/home/got) ; exitok $? 0
+
+  now checking that we got back the correct multiline and single-line values
+  cat >t/home/want <<EOF ; yamlok
 ---
 secret/from-files/content:
   value: this is a value
@@ -371,813 +655,975 @@ secret/from-files/content:
     value
 EOF
 
-	testing $version set key to empty value
-	./safe set secret/setec/astronomy too= many="" ; exitok $? 0
-	./safe get secret/setec/astronomy --yaml >t/home/got 2>t/home/errors ; exitok $? 0
-	cat >t/home/want <<EOF ; cp t/home/want /tmp; yamlok
----
-secret/setec/astronomy:
-  too: ""
-  many: ""
+
+  #######
+  clearvault
+  testing $version set key to empty value
+  now setting values
+  (run; ./safe set secret/setec/astronomy too= many="") ; exitok $? 0
+  is_key secret/setec/astronomy:too  ""
+  is_key secret/setec/astronomy:many ""
+
+
+  #######
+  clearvault
+  testing $version set key from file - error conditions
+  now setting values from a non-existent file - should fail
+  (run; ./safe set secret/from-file/content nothing@non-existent-file 2>t/home/got) ; exitok $? 1
+  now checking the output error
+  cat > t/home/want<<EOF ; diffok
+!! Failed to read contents of non-existent-file: open non-existent-file: no such file or directory
 EOF
 
-	testing $version set key from file - error conditions
-	./safe set secret/from-file/content nothing@non-existant-file 2>t/home/got >t/home/null; exitok $? 1
-	cat > t/home/want<<EOF ; diffok
-!! Failed to read contents of non-existant-file: open non-existant-file: no such file or directory
-EOF
-	mv -f t/home/null t/home/got
-	echo -n "" > t/home/want ; diffok
-	./safe get secret/from-file/content:nothing; exitok $? 1
+  now checking that we did not set a secret in vault
+  (run; ./safe get secret/from-file/content:nothing)               ; exitok $? 1
 
-	./safe set secret/from-file/content no-file@ 2>t/home/got >t/home/null; exitok $? 1
-	cat > t/home/want<<EOF ; diffok
+  now setting values using file syntax, but missing the file argument
+  (run; ./safe set secret/from-file/content no-file@ 2>t/home/got) ; exitok $? 1
+
+  now checking the output error
+  cat > t/home/want<<EOF ; diffok
 !! No file specified: expecting no-file@<filename>
 EOF
-	mv -f t/home/null t/home/got
-	echo -n "" > t/home/want ; diffok
-	./safe get secret/from-file/content:no-file; exitok $? 1
+
+  now checking that we did not set a secret in vault
+  (run; ./safe get secret/from-file/content:no-file)               ; exitok $? 1
 
 
 
-	###### FORMAT TESTS ######
-	testing $version fmt - all formats
-	./safe gen secret/fmt/formats original
-	./safe get secret/fmt/formats:original; exitok $? 0
+  ######## ##     ## ########
+  ##       ###   ###    ##
+  ##       #### ####    ##
+  ######   ## ### ##    ##
+  ##       ##     ##    ##
+  ##       ##     ##    ##
+  ##       ##     ##    ##
 
-	./safe fmt base64       secret/fmt/formats original base64;       exitok $? 0
-	./safe fmt bcrypt       secret/fmt/formats original bcrypt;       exitok $? 0
-	./safe fmt crypt-md5    secret/fmt/formats original crypt-md5;    exitok $? 0
-	./safe fmt crypt-sha256 secret/fmt/formats original crypt-sha256; exitok $? 0
-	./safe fmt crypt-sha512 secret/fmt/formats original crypt-sha512; exitok $? 0
+  #######
+  clearvault
+  testing $version fmt - all formats
+  now generating a test secret to format
+  (run; ./safe gen secret/fmt/formats original) ; exitok $? 0
 
-	./safe get secret/fmt/formats:base64;       exitok $? 0
-	./safe get secret/fmt/formats:bcrypt;       exitok $? 0
-	./safe get secret/fmt/formats:crypt-md5;    exitok $? 0
-	./safe get secret/fmt/formats:crypt-sha256; exitok $? 0
-	./safe get secret/fmt/formats:crypt-sha512; exitok $? 0
+  now verifying that our secret got created
+  (run; ./safe get secret/fmt/formats:original) ; exitok $? 0
 
-	# note that the tests do not support the optional parameters in crypt format
-	# (i.e. `$<id>[$<param>=<value>(,<param>=<value>)*][$<salt>[$<hash>]]`)
-	testing $version fmt - bcrypt
-	./safe get secret/fmt/formats:bcrypt | grep -qE '^\$2[axy]?\$[a-zA-Z0-9+/=]+\$.+'; exitok $? 0
+  for f in base64 bcrypt crypt-{md5,sha256,sha512}; do
+    now formatting $f
+    (run; ./safe fmt $f secret/fmt/formats original $f) ; exitok $? 0
 
-	testing $version fmt - crypt-md5
-	./safe get secret/fmt/formats:crypt-md5 | grep -qE '^\$1\$[a-zA-Z0-9+/=]+\$.+'; exitok $? 0
+    now verifying that we generated a secret for $f
+    (run; ./safe get secret/fmt/formats:$f)             ; exitok $? 0
 
-	testing $version fmt - crypt-sha256
-	./safe get secret/fmt/formats:crypt-sha256 | grep -qE '^\$5\$[a-zA-Z0-9+/=]+\$.+'; exitok $? 0
+  done
 
-	testing $version fmt - crypt-sha512
-	./safe get secret/fmt/formats:crypt-sha512 | grep -qE '^\$6\$[a-zA-Z0-9+/=]+\$.+'; exitok $? 0
+  # note that the tests do not support the optional parameters in crypt format
+  # (i.e. `$<id>[$<param>=<value>(,<param>=<value>)*][$<salt>[$<hash>]]`)
+  now checking bcrypt format
+  (run; ./safe get secret/fmt/formats:bcrypt \
+        | grep -qE '^\$2[axy]?\$[a-zA-Z0-9+/=]+\$.+') ; exitok $? 0
+
+  now checking crypt-md5 format
+  (run; ./safe get secret/fmt/formats:crypt-md5 \
+        | grep -qE '^\$1\$[a-zA-Z0-9+/=]+\$.+')       ; exitok $? 0
+
+  now checking crypt-sha256 format
+  (run; ./safe get secret/fmt/formats:crypt-sha256 \
+        | grep -qE '^\$5\$[a-zA-Z0-9+/=]+\$.+')       ; exitok $? 0
+
+  now checking crypt-sha512 format
+  (run; ./safe get secret/fmt/formats:crypt-sha512 \
+        | grep -qE '^\$6\$[a-zA-Z0-9+/=]+\$.+')       ; exitok $? 0
 
 
 
-	###### DELETE TESTS ######
+  ########  ######## ##       ######## ######## ########
+  ##     ## ##       ##       ##          ##    ##
+  ##     ## ##       ##       ##          ##    ##
+  ##     ## ######   ##       ######      ##    ######
+  ##     ## ##       ##       ##          ##    ##
+  ##     ## ##       ##       ##          ##    ##
+  ########  ######## ######## ########    ##    ########
 
-	testing $version secret deletion
-	./safe set secret/delete/one hello=world
-	./safe delete secret/delete/one; exitok $? 0
-	./safe get secret/delete/one; exitok $? 1
+  #######
+  clearvault
+  testing $version secret deletion
+  no_key secret/delete
+  generate secret/delete hello=world
+  is_key secret/delete:hello world
 
-	testing $version multiple secret deletion
-	./safe set secret/delete/two foo=bar
-	./safe set secret/delete/three wom=bat
-	./safe delete secret/delete/two secret/delete/three; exitok $? 0
-	./safe get secret/delete/two; exitok $? 1
-	./safe get secret/delete/three; exitok $? 1
+  now removing the secret
+  (run; ./safe delete secret/delete) ; exitok $? 0
+  no_key secret/delete
 
-	testing $version key deletion with key remaining within secret afterwards
-	./safe set secret/delete/four foo=bar wom=bat
-	./safe delete secret/delete/four:wom; exitok $? 0
-	./safe get secret/delete/four:wom; exitok $? 1
-	./safe get secret/delete/four:foo; exitok $? 0
 
-	testing $version key deletion with no keys remaining should delete secret
-	./safe set secret/delete/five foo=bar
-	./safe delete secret/delete/five:foo; exitok $? 0
-	./safe get secret/delete/five; exitok $? 1
+  #######
+  clearvault
+  testing $version multiple secret deletion
+  no_key secret/delete/{two,three}
+  generate secret/delete/two foo=bar
+  generate secret/delete/three wom=bat
 
-	testing $version multiple key deletion
-	./safe set secret/delete/six foo=bar wom=bat beep=boop
-	./safe delete secret/delete/six:foo secret/delete/six:wom; exitok $? 0
-	./safe get secret/delete/six:foo; exitok $? 1
-	./safe get secret/delete/six:wom; exitok $? 1
-	./safe get secret/delete/six:beep; exitok $? 0
+  now deleting both secrets
+  (run; ./safe delete secret/delete/two secret/delete/three) ; exitok $? 0
+  no_key secret/delete/two
+  no_key secret/delete/three
 
-	testing $version attempt to delete non-existent key should fail
-	./safe delete secret/delete/gobbledegook; exitok $? 1
 
-	testing $version attempt to delete non-existing key within existing secret should error
-	./safe set secret/delete/seven foo=bar
-	./safe delete secret/delete/seven:gobbledegook; exitok $? 1
-	./safe get secret/delete/seven:foo; exitok $? 0
+  #######
+  clearvault
+  testing $version key deletion with key remaining within secret afterwards
+  generate secret/delete foo=bar wom=bat
 
-	testing $version delete non-existent key should not fail if -f is given
-	./safe delete secret/delete/gobbledegook -f; exitok $? 0
+  now deleting a single key in the multi-key path
+  (run; ./safe delete secret/delete:wom) ; exitok $? 0
+  no_key secret/delete:wom
+  is_key secret/delete:foo "bar"
 
-	testing $version deleting non-existent key with -f specified should fail silently
-	./safe set secret/delete/eight foo=bar
-	./safe delete secret/delete/eight:gobbledegook -f; exitok $? 0
-	./safe get secret/delete/eight:foo; exitok $? 0
 
-	testing $version recursively delete a subtree
-	./safe set secret/delete/subtree1/one foo=bar
-	./safe set secret/delete/subtree1/two beep=boop
-	./safe delete -Rf secret/delete/subtree1; exitok $? 0
-	./safe get secret/delete/subtree1/one; exitok $? 1
-	./safe get secret/delete/subtree1/two; exitok $? 1
+  #######
+  clearvault
+  testing $version key deletion with no keys remaining should delete secret
+  generate secret/delete foo=bar
 
-	testing $version attempting to delete a subtree without -R should fail
-	./safe set secret/delete/subtree2/one foo=bar
-	./safe set secret/delete/subtree2/two foo=bar
-	./safe delete -f secret/delete/subtree2; exitok $? 1
-	cat >t/home/want <<EOF
-bar
+  now deleting the last key in a single path
+  (run; ./safe delete secret/delete:foo)  ; exitok $? 0
+  no_key secret/delete
+
+
+  #######
+  clearvault
+  testing $version multiple key deletion
+  generate secret/delete foo=bar wom=bat beep=boop
+
+  now deleting the a subset of the keys
+  (run; ./safe delete secret/delete:foo secret/delete:wom) ; exitok $? 0
+  no_key secret/delete:{foo,wom}
+  is_key secret/delete:beep "boop"
+
+
+  #######
+  clearvault
+  testing $version attempt to delete non-existent key should fail
+  no_key secret/delete
+  (run; ./safe delete secret/delete) ; exitok $? 1
+  no_key secret/delete
+
+
+  #######
+  clearvault
+  testing $version attempt to delete non-existing key within existing secret should error
+  no_key secret/delete
+  generate secret/delete foo=bar
+
+  now deleting the a non-existent key under an existing path
+  (run; ./safe delete secret/delete:gobbledegook) ; exitok $? 1
+  is_key secret/delete:foo "bar"
+
+
+  #######
+  clearvault
+  testing $version delete non-existent key should not fail if -f is given
+  no_key secret/delete
+  (run; ./safe delete secret/delete -f) ; exitok $? 0
+  no_key secret/delete
+
+
+  #######
+  clearvault
+  testing $version deleting non-existent key with -f specified should fail silently
+  no_key secret/delete
+  generate secret/delete foo=bar
+
+  now deleting a non-existent key with -f
+  (run; ./safe delete secret/delete:gobbledegook -f) ; exitok $? 0
+  no_key secret/delete:gobbledegook
+  is_key secret/delete:foo "bar"
+
+
+  #######
+  clearvault
+  testing $version recursively delete a subtree
+  no_key secret/delete/subtree/{one,two}
+  generate secret/delete/subtree/one foo=bar
+  generate secret/delete/subtree/two beep=boop
+
+  (run; ./safe delete -Rf secret/delete/subtree) ; exitok $? 0
+  no_key secret/delete/subtree/{one,two}
+
+
+  #######
+  clearvault
+  testing $version attempting to delete a subtree without -R should fail
+  no_key secret/delete/subtree/{one,two}
+  generate secret/delete/subtree/one foo=bar
+  generate secret/delete/subtree/two foo=bar
+
+  now attempting to delete the subtree without -R
+  (run; ./safe delete -f secret/delete/subtree) ; exitok $? 1
+
+  is_key secret/delete/subtree/one:foo "bar"
+  is_key secret/delete/subtree/two:foo "bar"
+
+
+  #######
+  clearvault
+  testing $version recursively delete a leaf node secret
+  no_key secret/delete
+  generate secret/delete foo=bar
+
+  now deleting the single secret
+  (run; ./safe delete -Rf secret/delete)  ; exitok $? 0
+  no_key secret/delete
+
+
+  #######
+  clearvault
+  testing $version recursively delete a key
+  generate secret/delete foo=bar beep=boop
+
+  now deleting a key recursively
+  (run; ./safe delete -Rf secret/delete:foo) ; exitok $? 0
+  no_key secret/delete:foo
+  is_key secret/delete:beep "boop"
+
+
+  #######
+  clearvault
+  testing $version recursively delete a secret that does not exist with -f should not fail
+  no_key secret/delete
+
+  now deleting a non-existent secret
+  (run; ./safe delete -Rf secret/delete) ; exitok $? 0
+  no_key secret/delete
+
+
+  #######
+  clearvault
+  testing $version recursively delete a key that does not exist with -f should not fail
+  generate secret/delete beep=boop
+
+  now deleting a non-existent key with -Rf
+  (run; ./safe delete -Rf secret/delete:foo) ; exitok $? 0
+  is_key secret/delete:beep "boop"
+
+
+
+   ######   #######  ########  ##    ##
+  ##    ## ##     ## ##     ##  ##  ##
+  ##       ##     ## ##     ##   ####
+  ##       ##     ## ########     ##
+  ##       ##     ## ##           ##
+  ##    ## ##     ## ##           ##
+   ######   #######  ##           ##
+
+  #######
+  clearvault
+  testing $version copy a secret to another location
+  no_key secret/copy/{from,to}
+  generate secret/copy/from beep=boop
+
+  now copying a single secret
+  (run; ./safe copy secret/copy/from secret/copy/to) ; exitok $? 0
+  eq_key secret/copy/{from,to}:beep
+
+
+  #######
+  clearvault
+  testing $version copy a key to another secret without a key specified
+  no_key secret/copy/{from,to}
+  generate secret/copy/from beep=boop foo=bar
+
+  now copying secrets
+  (run; ./safe copy secret/copy/from:beep secret/copy/to) ; exitok $? 0
+  eq_key secret/copy/{from,to}:beep
+  no_key secret/copy/to:foo
+
+
+  #######
+  clearvault
+  testing $version copy a key to another specified key where the dest secret exists
+  no_key secret/copy/{from,to}
+  generate secret/copy/from beep=boop foo=bar
+  generate secret/copy/to wom=bat
+
+  now copying
+  (run; ./safe copy secret/copy/from:beep secret/copy/to:another) ; exitok $? 0
+
+  is_key secret/copy/from:foo "bar"
+  is_key secret/copy/to:wom   "bat"
+  eq_key secret/copy/{from:beep,to:another}
+
+
+  #######
+  clearvault
+  testing $version copy a key to another specified key where the dest secret does not exist
+  no_key secret/copy/{from,to}
+  generate secret/copy/from beep=boop foo=bar
+
+  now copying
+  (run; ./safe copy secret/copy/from:beep secret/copy/to:another) ; exitok $? 0
+  eq_key secret/copy/{from:beep,to:another}
+
+
+  #######
+  clearvault
+  testing $version copying a full secret to a specified key should fail
+  (run; ./safe set secret/copy/from beep=boop)             ; exitok $? 0
+  (run; ./safe copy secret/copy/from secret/copy/to:hell) ; exitok $? 1
+  is_key secret/copy/from:beep "boop"
+  no_key secret/copy/to
+
+
+  #######
+  clearvault
+  testing $version copying from a secret that does not exist should fail
+  (run; ./safe copy secret/copy/from6 secret/copy/to) ; exitok $? 1
+  no_key secret/copy/from6
+  no_key secret/copy/to
+
+
+  #######
+  clearvault
+  testing $version copying from a key where the underlying secret does not exist should fail
+  no_key secret/copy/from7:beep
+  (run; ./safe copy secret/copy/from7:beep secret/copy/to) ; exitok $? 1
+  no_key secret/copy/to
+
+
+  #######
+  clearvault
+  testing $version copying from a missing key where the underlying secret exists should fail
+  (run; ./safe set secret/copy/from8 foo=bar)              ; exitok $? 0
+  (run; ./safe copy secret/copy/from8:beep secret/copy/to) ; exitok $? 1
+  no_key secret/copy/to
+
+
+  #######
+  clearvault
+  testing $version copying recursively from a leaf node secret
+  now generating some secrets to test with
+  (run; ./safe set secret/copy/from foo=bar)             ; exitok $? 0
+
+  now copying a leaf node secret
+  (run; ./safe copy -Rf secret/copy/from secret/copy/to) ; exitok $? 0
+  eq_key secret/copy/{from,to}:foo
+
+
+  #######
+  clearvault
+  testing $version copying recursively from a key
+  now generating some secrets to test with
+  (run; ./safe set secret/copy/from foo=bar)                   ; exitok $? 0
+
+  now recursively copying from:foo to to
+  (run; ./safe copy -Rf secret/copy/from:foo secret/copy/to) ; exitok $? 0
+  eq_key secret/copy/{from,to}:foo
+
+
+  #######
+  clearvault
+  testing $version copying recursively from a subtree
+  now generating some secrets to test with
+  (run; ./safe set secret/copy/fromtree/one foo=bar)              ; exitok $? 0
+
+  now recursively copying secret/copy/fromtree/* to secret/copy/totree/*
+  (run; ./safe copy -Rf secret/copy/fromtree secret/copy/totree) ; exitok $? 0
+  eq_key secret/copy/{from,to}tree/one:foo
+
+
+  #######
+  clearvault
+  testing $version attempting to copy a subtree without -R should fail
+  now generating some secrets to test with
+  (run; ./safe set secret/copy/fromtree/one foo=bar); exitok $? 0
+
+  now copying secret/copy/fromtree/* to secret/copy/totree/* without -R
+  (run; ./safe copy -f secret/copy/fromtree secret/copy/totree) ; exitok $? 1
+  is_key secret/copy/fromtree/one:foo "bar"
+  no_key secret/copy/totree/one
+
+
+  #######
+  clearvault
+  testing $version copying a non-existent secret with -f should fail silently
+  now copying
+  (run; ./safe copy -f secret/copy/gobbledegook secret/copy/fakedes) ; exitok $? 0
+  no_key secret/copy/fakedes
+
+
+  #######
+  clearvault
+  testing $version copying a non-existent key with -f should fail silently
+  now generating some secrets to test with
+  (run; ./safe set secret/copy/from foo=bar)                   ; exitok $? 0
+
+  now copying non-existent key with -f
+  (run; ./safe copy -f secret/copy/from:beep secret/copy/to) ; exitok $? 0
+  no_key secret/copy/to
+
+
+
+  ##     ##  #######  ##     ## ########
+  ###   ### ##     ## ##     ## ##
+  #### #### ##     ## ##     ## ##
+  ## ### ## ##     ## ##     ## ######
+  ##     ## ##     ##  ##   ##  ##
+  ##     ## ##     ##   ## ##   ##
+  ##     ##  #######     ###    ########
+
+  #######
+  clearvault
+  testing $version move a secret to another location
+  no_key secret/move/from
+  no_key secret/move/to
+
+  now generating some secrets to test with
+  (run; ./safe set secret/move/from beep=boop)       ; exitok $? 0
+
+  now moving a single secret
+  (run; ./safe move secret/move/from secret/move/to) ; exitok $? 0
+  no_key secret/move/from:beep
+  is_key secret/move/to:beep "boop"
+
+
+  #######
+  clearvault
+  testing $version move a key to another secret without a key specified
+  no_key secret/move/{from,to}
+  generate secret/move/from beep=boop foo=bar
+
+  now moving a secret without a key
+  (run; ./safe move secret/move/from:beep secret/move/to) ; exitok $? 0
+  no_key secret/move/from:beep
+  is_key secret/move/from:foo  "bar"
+
+  is_key secret/move/to:beep   "boop"
+  no_key secret/move/to:foo
+
+
+  #######
+  clearvault
+  testing $version move a key to another specified key where the dest secret exists
+  no_key secret/move/{from,to}
+  generate secret/move/from beep=boop foo=bar
+  generate secret/move/to   wom=bat
+
+  now moving a secret key to an existing secret
+  (run; ./safe move secret/move/from:beep secret/move/to:another) ; exitok $? 0
+
+  no_key secret/move/from:beep
+  is_key secret/move/from:foo   "bar"
+
+  is_key secret/move/to:another "boop"
+  is_key secret/move/to:wom     "bat"
+
+
+  #######
+  clearvault
+  testing $version move a key to another specified key where the dest secret does not exist
+  no_key secret/move/from
+  no_key secre/move/to
+
+  now generating some secrets to test with
+  (run; ./safe set secret/move/from beep=boop foo=bar)            ; exitok $? 0
+
+  now moving one secret key to a new secret key
+  (run; ./safe move secret/move/from:beep secret/move/to:another) ; exitok $? 0
+
+  no_key secret/move/from:beep
+  is_key secret/move/from:foo   "bar"
+
+  is_key secret/move/to:another "boop"
+  no_key secret/move/to:foo
+
+
+  #######
+  clearvault
+  testing $version moving a full secret to a specified key should fail
+  no_key secret/move/from
+  no_key secret/move/to
+  generate secret/move/from beep=boop
+
+  now moving one secret subkey to another existing secret
+  (run; ./safe move secret/move/from secret/move/to:beep) ; exitok $? 1
+  is_key secret/move/from:beep "boop"
+  no_key secret/move/to:beep
+
+
+  #######
+  clearvault
+  testing $version moving from a secret that does not exist should fail
+  no_key secret/move/from
+  no_key secret/move/to
+
+  (run; ./safe move secret/copy/from secret/move/to) ; exitok $? 1
+  no_key secret/move/from
+  no_key secret/move/to
+
+
+  #######
+  clearvault
+  testing $version moving from a key where the underlying secret does not exist should fail
+  no_key secret/move/from
+  no_key secret/move/to
+
+  (run; ./safe move secret/move/from:beep secret/move/to) ; exitok $? 1
+  no_key secret/move/from
+  no_key secret/move/to
+
+
+  #######
+  clearvault
+  testing $version moving from a missing key where the underlying secret exists should fail
+  no_key secret/move/from
+  no_key secret/move/to
+  generate secret/move/from foo=bar
+
+  now moving a non-existent key to a new secret
+  (run; ./safe move secret/move/from:beep secret/move/to) ; exitok $? 1
+  is_key secret/move/from:foo "bar"
+  no_key secret/move/to
+
+
+  #######
+  clearvault
+  testing $version moving recursively from a leaf node secret
+  no_key secret/move/from
+  no_key secret/move/to
+  generate secret/move/from foo=bar
+
+  now moving a single secret resursively
+  (run; ./safe move -Rf secret/move/from secret/move/to) ; exitok $? 0
+  no_key secret/move/from:foo
+  is_key secret/move/to:foo "bar"
+
+
+  #######
+  clearvault
+  testing $version moving recursively from a key
+  no_key secret/move/{from,to}
+  generate secret/move/from foo=bar
+
+  now moving a key recursively
+  (run; ./safe move -Rf secret/move/from:foo secret/move/to) ; exitok $? 0
+  no_key secret/move/from
+  is_key secret/move/to:foo "bar"
+
+
+  #######
+  clearvault
+  testing $version moving recursively from a subtree
+  no_key secret/{from,to}tree{,/one}
+  generate secret/move/fromtree/one foo=bar
+
+  now moving a subtree recursively
+  (run; ./safe move -Rf secret/move/fromtree secret/move/totree) ; exitok $? 0
+  no_key secret/move/fromtree/one
+  is_key secret/move/totree/one:foo "bar"
+
+
+  #######
+  clearvault
+  testing $version attempting to copy a subtree without -R should fail
+  no_key secret/{from,to}tree{,/one}
+  generate secret/move/fromtree/one foo=bar
+
+  now moving a subtree without the -R option
+  (run; ./safe move -f secret/move/fromtree secret/move/totree) ; exitok $? 1
+  no_key secret/move/totree/on
+
+
+  #######
+  clearvault
+  testing $version moving a non-existent secret with -f should fail silently
+  no_key secret/move/gobbledegook
+  (run; ./safe move -f secret/move/gobbledegook secret/move/fakedes) ; exitok $? 0
+  no_key secret/move/fakedes
+
+
+  #######
+  clearvault
+  testing $version moving a non-existent key with -f should fail silently
+  no_key secret/copy/{from,to}
+  generate secret/move/from foo=bar
+
+  now moving non-existent key
+  (run; ./safe copy -f secret/move/from:beep secret/move/to) ; exitok $? 0
+  no_key secret/move/to
+
+
+
+   ######  ##        #######  ########  ########  ######## ########
+  ##    ## ##       ##     ## ##     ## ##     ## ##       ##     ##
+  ##       ##       ##     ## ##     ## ##     ## ##       ##     ##
+  ##       ##       ##     ## ########  ########  ######   ########
+  ##       ##       ##     ## ##     ## ##     ## ##       ##   ##
+  ##    ## ##       ##     ## ##     ## ##     ## ##       ##    ##
+   ######  ########  #######  ########  ########  ######## ##     ##
+
+  #######
+  clearvault
+  testing $version safe gen --no-clobber
+  no_key secret/existing
+  now running safe gen --no-clobber with no pre-existing secrets
+  (run; ./safe gen --no-clobber secret/existing val) ; exitok $? 0
+  expected=$(./safe get secret/existing:val)
+
+  now running safe gen --no-clobber with pre-existing secrets
+  (run; ./safe gen --no-clobber secret/existing val >t/home/got 2>&1) ; exitok $? 0
+
+  now checking the error output
+  cat >t/home/want <<EOF ; diffok
+Cowardly refusing to update secret/existing:val as it is already present in Vault
 EOF
-	./safe get secret/delete/subtree2/one:foo >t/home/got 2>t/home/errors; diffok
-	./safe get secret/delete/subtree2/two:foo >t/home/got 2>t/home/errors; diffok
+  is_key secret/existing:val "$expected"
 
-	testing $version recursively delete a leaf node secret
-	./safe set secret/delete/nine foo=bar
-	./safe delete -Rf secret/delete/nine; exitok $? 0
-	./safe get secret/delete/nine; exitok $? 1
+  now running safe gen --no-clobber with pre-existing secrets in --quiet mode
+  (run; ./safe gen --no-clobber --quiet secret/existing val >t/home/got 2>&1) ; exitok $? 0
 
-	testing $version recursively delete a key
-	./safe set secret/delete/ten foo=bar beep=boop
-	./safe delete -Rf secret/delete/ten:foo
-	./safe get secret/delete/ten:foo; exitok $? 1
-	cat >t/home/want <<EOF
-boop
+  now checking that we got no error output under --quiet
+  cat >t/home/want <<EOF ; diffok
 EOF
-	./safe get secret/delete/ten:beep >t/home/got 2>t/home/errors; diffok
+  is_key secret/existing:val "$expected"
 
-	testing $version recursively delete a secret that does not exist with -f should not fail
-	./safe delete -Rf secret/delete/gobbledegook; exitok $? 0
 
-	testing $version recursively delete a key that does not exist with -f should not fail
-	./safe set secret/delete/eleven beep=boop
-	./safe delete -Rf secret/delete/eleven:foo; exitok $? 0
-	cat >t/home/want <<EOF
-boop
+  for op in set paste ask; do
+    #######
+    clearvault
+    testing $version safe $op --no-clobber
+    no_key secret/existing
+
+    now running safe $op --no-clobber with no pre-existing secrets
+    (run; ./safe $op --no-clobber secret/existing val=original >t/home/got 2>&1) ; exitok $? 0
+    is_key secret/existing:val "original"
+
+    now running safe $op --no-clobber with pre-existing secrets
+    (run; ./safe $op --no-clobber secret/existing val=override 2>t/home/got)     ; exitok $? 0
+    now checking the error output
+    cat >t/home/want <<EOF ; diffok
+val: override
+Cowardly refusing to update secret/existing, as the following keys would be clobbered: val
 EOF
-	./safe get secret/delete/eleven:beep >t/home/got 2>t/home/errors; diffok
+    is_key secret/existing:val "original"
 
-	###### COPY TESTS ######
-
-	testing $version copy a secret to another location
-	./safe set secret/copy/from1 beep=boop
-	./safe copy secret/copy/from1 secret/copy/to1; exitok $? 0
-	cat >t/home/want <<EOF
-boop
+    now running safe $op --no-clobber with pre-existing secrets in --quiet mode
+    (run; ./safe $op --no-clobber --quiet secret/existing val=OVER 2>t/home/got) ; exitok $? 0
+    now checking the error output
+    cat >t/home/want <<EOF ; diffok
 EOF
-	./safe get secret/copy/from1:beep >t/home/got 2>t/home/errors; diffok
-	./safe get secret/copy/to1:beep >t/home/got 2>t/home/errors; diffok
+    is_key secret/existing:val "original"
 
 
-	testing $version copy a key to another secret without a key specified
-	./safe set secret/copy/from2 beep=boop foo=bar
-	./safe copy secret/copy/from2:beep secret/copy/to2; exitok $? 0
-	cat >t/home/want <<EOF
-boop
-EOF
-	./safe get secret/copy/from2:beep >t/home/got 2>t/home/errors; diffok
-	./safe get secret/copy/to2:beep >t/home/got 2>t/home/errors; diffok
-	cat >t/home/want <<EOF
-bar
-EOF
-  ./safe get secret/copy/from2:foo >t/home/got 2>t/home/errors; diffok
-	./safe get secret/copy/to2:foo; exitok $? 1
+    #######
+    clearvault
+    testing $version safe $op --no-clobber, with different key in same path
+    no_key secret/existing
+
+    now running safe $op --no-clobber with no pre-existing secrets
+    (run; ./safe $op --no-clobber secret/existing val=test)   ; exitok $? 0
+    is_key secret/existing:val  "test"
+
+    now running safe $op --no-clobber with pre-existing secrets but a new key
+    (run; ./safe $op --no-clobber secret/existing val2=test2) ; exitok $? 0
+    is_key secret/existing:val2 "test2"
+  done
 
 
-	testing $version copy a key to another specified key where the dest secret exists
-	./safe set secret/copy/from3 beep=boop foo=bar
-	./safe set secret/copy/to3 wom=bat
-	./safe copy secret/copy/from3:beep secret/copy/to3:another; exitok $? 0
-	cat >t/home/want <<EOF
-boop
-EOF
-	./safe get secret/copy/from3:beep >t/home/got 2>t/home/errors; diffok
-	./safe get secret/copy/to3:another >t/home/got 2>t/home/errors; diffok
-	cat >t/home/want <<EOF
-bar
-EOF
-  ./safe get secret/copy/from3:foo >t/home/got 2>t/home/errors; diffok
-	./safe get secret/copy/to3:foo; exitok $? 1
-cat >t/home/want <<EOF
-bat
-EOF
-  ./safe get secret/copy/to3:wom >t/home/got 2>t/home/errors; diffok
+  #######
+  clearvault
+  testing $version safe import --no-clobber
+  no_key safe/existing/import
 
-
-	testing $version copy a key to another specified key where the dest secret does not exist
-	./safe set secret/copy/from4 beep=boop foo=bar
-	./safe copy secret/copy/from4:beep secret/copy/to4:another; exitok $? 0
-	cat >t/home/want <<EOF
-boop
-EOF
-	./safe get secret/copy/from3:beep >t/home/got 2>t/home/errors; diffok
-	./safe get secret/copy/to3:another >t/home/got 2>t/home/errors; diffok
-	cat >t/home/want <<EOF
-bar
-EOF
-  ./safe get secret/copy/from3:foo >t/home/got 2>t/home/errors; diffok
-	./safe get secret/copy/to3:foo; exitok $? 1
-
-
-	testing $version copying a full secret to a specified key should fail
-	./safe set secret/copy/from5 beep=boop
-	./safe copy secret/copy/from5 secret/copy/to5:hello; exitok $? 1
-	cat >t/home/want <<EOF
-boop
-EOF
-	./safe get secret/copy/from5:beep >t/home/got 2>t/home/errors; diffok
-
-
-	testing $version copying from a secret that does not exist should fail
-	./safe copy secret/copy/from6 secret/copy/to6; exitok $? 1
-
-
-	testing $version copying from a key where the underlying secret does not exist should fail
-	./safe copy secret/copy/from7:beep secret/copy/to7; exitok $? 1
-
-
-	testing $version copying from a missing key where the underlying secret exists should fail
-	./safe set secret/copy/from8 foo=bar
-	./safe copy secret/copy/from8:beep secret/copy/to8; exitok $? 1
-
-	testing $version copying recursively from a leaf node secret
-	./safe set secret/copy/from9 foo=bar
-	./safe copy -Rf secret/copy/from9 secret/copy/to9; exitok $? 0
-	cat >t/home/want <<EOF
-bar
-EOF
-	./safe get secret/copy/from9:foo >t/home/got 2>t/home/errors; diffok
-	./safe get secret/copy/to9:foo >t/home/got 2>t/home/errors; diffok
-
-	testing $version copying recursively from a key
-	./safe set secret/copy/from10 foo=bar
-	./safe copy -Rf secret/copy/from10:foo secret/copy/to10; exitok $? 0
-	cat >t/home/want <<EOF
-bar
-EOF
-	./safe get secret/copy/from10:foo >t/home/got 2>t/home/errors; diffok
-	./safe get secret/copy/to10:foo >t/home/got 2>t/home/errors; diffok
-
-	testing $version copying recursively from a subtree
-	./safe set secret/copy/fromtree1/one foo=bar
-	./safe copy -Rf secret/copy/fromtree1 secret/copy/totree1; exitok $? 0
-	cat >t/home/want <<EOF
-bar
-EOF
-	./safe get secret/copy/fromtree1/one:foo >t/home/got 2>t/home/errors; diffok
-	./safe get secret/copy/totree1/one:foo >t/home/got 2>t/home/errors; diffok
-
-	testing $version attempting to copy a subtree without -R should fail
-	./safe set secret/copy/fromtree2/one foo=bar
-	./safe copy -f secret/copy/fromtree2 secret/copy/totree2; exitok $? 1
-	./safe get secret/copy/totree2/one; exitok $? 1
-
-	testing $version copying a non-existent secret with -f should fail silently
-	./safe copy -f secret/copy/gobbledegook secret/copy/fakedest; exitok $? 0
-	./safe get secret/copy/fakedest; exitok $? 1
-
-	testing $version copying a non-existent key with -f should fail silently
-	./safe set secret/copy/from11 foo=bar
-	./safe copy -f secret/copy/from11:beep secret/copy/to11; exitok $? 0
-	./safe get secret/copy/to11; exitok $? 1
-
-	###### MOVE TESTS ######
-
-	testing $version move a secret to another location
-	./safe set secret/move/from1 beep=boop
-	./safe move secret/move/from1 secret/move/to1; exitok $? 0
-	cat >t/home/want <<EOF
-boop
-EOF
-	./safe get secret/move/from1:beep; exitok $? 1
-	./safe get secret/move/to1:beep >t/home/got 2>t/home/errors; diffok
-
-
-	testing $version move a key to another secret without a key specified
-	./safe set secret/move/from2 beep=boop foo=bar
-	./safe move secret/move/from2:beep secret/move/to2; exitok $? 0
-	cat >t/home/want <<EOF
-boop
-EOF
-	./safe get secret/move/from2:beep; exitok $? 1
-	./safe get secret/move/to2:beep >t/home/got 2>t/home/errors; diffok
-	cat >t/home/want <<EOF
-bar
-EOF
-  ./safe get secret/move/from2:foo >t/home/got 2>t/home/errors; diffok
-	./safe get secret/move/to2:foo; exitok $? 1
-
-
-	testing $version move a key to another specified key where the dest secret exists
-	./safe set secret/move/from3 beep=boop foo=bar
-	./safe set secret/move/to3 wom=bat
-	./safe move secret/move/from3:beep secret/move/to3:another; exitok $? 0
-	cat >t/home/want <<EOF
-boop
-EOF
-	./safe get secret/move/from3:beep; exitok $? 1
-	./safe get secret/move/to3:another >t/home/got 2>t/home/errors; diffok
-	cat >t/home/want <<EOF
-bar
-EOF
-  ./safe get secret/move/from3:foo >t/home/got 2>t/home/errors; diffok
-	./safe get secret/move/to3:foo; exitok $? 1
-cat >t/home/want <<EOF
-bat
-EOF
-  ./safe get secret/move/to3:wom >t/home/got 2>t/home/errors; diffok
-
-
-	testing $version move a key to another specified key where the dest secret does not exist
-	./safe set secret/move/from4 beep=boop foo=bar
-	./safe move secret/move/from4:beep secret/move/to4:another; exitok $? 0
-	cat >t/home/want <<EOF
-boop
-EOF
-	./safe get secret/move/from3:beep; exitok $? 1
-	./safe get secret/move/to3:another >t/home/got 2>t/home/errors; diffok
-	cat >t/home/want <<EOF
-bar
-EOF
-  ./safe get secret/move/from3:foo >t/home/got 2>t/home/errors; diffok
-	./safe get secret/move/to3:foo; exitok $? 1
-
-
-	testing $version moving a full secret to a specified key should fail
-	./safe set secret/move/from5 beep=boop
-	./safe move secret/move/from5 secret/move/to5:beep; exitok $? 1
-	cat >t/home/want <<EOF
-boop
-EOF
-	./safe get secret/move/from5:beep >t/home/got 2>t/home/errors; diffok
-
-
-	testing $version moving from a secret that does not exist should fail
-	./safe move secret/copy/from6 secret/move/to6; exitok $? 1
-
-
-	testing $version moving from a key where the underlying secret does not exist should fail
-	./safe move secret/move/from7:beep secret/move/to7; exitok $? 1
-
-
-	testing $version moving from a missing key where the underlying secret exists should fail
-	./safe set secret/move/from8 foo=bar
-	./safe move secret/move/from8:beep secret/move/to8; exitok $? 1
-
-
-	testing $version moving recursively from a leaf node secret
-	./safe set secret/move/from9 foo=bar
-	./safe move -Rf secret/move/from9 secret/move/to9; exitok $? 0
-	cat >t/home/want <<EOF
-bar
-EOF
-	./safe get secret/move/from9; exitok $? 1
-	./safe get secret/move/to9:foo >t/home/got 2>t/home/errors; diffok
-
-
-	testing $version moving recursively from a key
-	./safe set secret/move/from10 foo=bar
-	./safe move -Rf secret/move/from10:foo secret/move/to10; exitok $? 0
-	cat >t/home/want <<EOF
-bar
-EOF
-	./safe get secret/move/from9; exitok $? 1
-	./safe get secret/copy/to9:foo >t/home/got 2>t/home/errors; diffok
-
-
-	testing $version moving recursively from a subtree
-	./safe set secret/move/fromtree1/one foo=bar
-	./safe move -Rf secret/move/fromtree1 secret/move/totree1; exitok $? 0
-	cat >t/home/want <<EOF
-bar
-EOF
-	./safe get secret/move/fromtree1/one; exitok $? 1
-	./safe get secret/move/totree1/one:foo >t/home/got 2>t/home/errors; diffok
-
-	testing $version attempting to copy a subtree without -R should fail
-	./safe set secret/move/fromtree2/one foo=bar
-	./safe move -f secret/move/fromtree2 secret/move/totree2; exitok $? 1
-	./safe get secret/move/totree2/one; exitok $? 1
-
-	testing $version moving a non-existent secret with -f should fail silently
-	./safe move -f secret/move/gobbledegook secret/move/fakedest; exitok $? 0
-	./safe get secret/move/fakedest; exitok $? 1
-
-	testing $version moving a non-existent key with -f should fail silently
-	./safe set secret/move/from11 foo=bar
-	./safe copy -f secret/move/from11:beep secret/move/to11; exitok $? 0
-	./safe get secret/move/to11; exitok $? 1
-	cat >t/home/want <<EOF
-bar
-EOF
-	./safe get secret/move/from11:foo >t/home/got 2>t/home/errors; diffok
-
-  ###### --no-clobber TESTS #####
-	testing $version --no-clobber gen functionality without existing data
-	./safe --no-clobber gen secret/existing/gen val >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-EOF
-	expected=$(./safe get secret/existing/gen)
-	testing $version --no-clobber gen functionality with existing data
-	./safe --no-clobber gen secret/existing/gen val >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-Cowardly refusing to update secret/existing/gen:val as it is already present in Vault
-EOF
-	./safe --quiet --no-clobber gen secret/existing/gen val >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-EOF
-	./safe get secret/existing/gen >t/home/got; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-$expected
-
-EOF
-
-	testing $version --no-clobber set functionality without existing data
-	./safe --no-clobber set secret/existing/set val=test >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-val: test
-EOF
-	expected=$(./safe get secret/existing/set)
-	testing $version --no-clobber set functionality with existing data
-	./safe --no-clobber set secret/existing/set val=test2 >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-val: test2
-Cowardly refusing to update secret/existing/set, as the following keys would be clobbered: val
-EOF
-	./safe --quiet --no-clobber set secret/existing/set val=test2 >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-EOF
-	./safe get secret/existing/set >t/home/got; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-$expected
-
-EOF
-	testing $version --no-clobber set functionality with different key in same path 
-	./safe --no-clobber set secret/existing/set2 val=test; exitok $? 0
-	./safe --no-clobber set secret/existing/set2 val2=test2 >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-val2: test2
-EOF
-	./safe --no-clobber get secret/existing/set2 >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
---- # secret/existing/set2
-val: test
-val2: test2
-
-EOF
-
-	testing $version --no-clobber paste functionality without existing data
-	./safe --no-clobber paste secret/existing/paste val=test >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-val: test
-EOF
-	expected=$(./safe get secret/existing/paste)
-	testing $version --no-clobber paste functionality with existing data
-	./safe --no-clobber paste secret/existing/paste val=test2 >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-val: test2
-Cowardly refusing to update secret/existing/paste, as the following keys would be clobbered: val
-EOF
-	./safe --quiet --no-clobber paste secret/existing/paste val=test2 >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-EOF
-	./safe get secret/existing/paste >t/home/got; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-$expected
-
-EOF
-
-	testing $version --no-clobber ask functionality without existing data
-	./safe --no-clobber ask secret/existing/ask val=test >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-val: test
-EOF
-	expected=$(./safe get secret/existing/ask)
-	testing $version --no-clobber ask functionality with existing data
-	./safe --no-clobber ask secret/existing/ask val=test2 >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-val: test2
-Cowardly refusing to update secret/existing/ask, as the following keys would be clobbered: val
-EOF
-	./safe --quiet --no-clobber ask secret/existing/ask val=test2 >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-EOF
-	./safe get secret/existing/ask >t/home/got; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-$expected
-
-EOF
-
-	testing $version --no-clobber import functionality
-	./safe --no-clobber import secret/existing/import <<EOF >t/home/got 2>&1; exitok $? 1
+  now running safe import --no-clobber
+  (run; ./safe import --no-clobber secret/existing/import <<EOF >t/home/got 2>&1) ; exitok $? 1
 {"secret/existing/import":{"should": "not import"}}
 EOF
-	cat >t/home/want <<EOF ; diffok
+  now checking the error output
+  cat >t/home/want <<EOF ; diffok
 !! --no-clobber is incompatible with safe import
 safe import - Import name/value pairs into the current Vault
 USAGE: safe import <backup/file.json
 EOF
 
-	testing $version --no-clobber move functionality without existing data
-	./safe set secret/existing/to-move key=val
-	./safe --quiet --no-clobber move secret/existing/to-move secret/move-existing >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-EOF
-	expected=$(./safe get secret/move-existing)
-	testing $version --no-clobber move functionality with existing data
-	./safe set secret/existing/to-move key=val2
-	./safe --no-clobber move secret/existing/to-move secret/move-existing >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-Cowardly refusing to copy/move data into secret/move-existing, as that would clobber existing data
-EOF
-	./safe set secret/existing/to-move key=val2
-	./safe --quiet --no-clobber move secret/existing/to-move secret/move-existing >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-EOF
-	./safe get secret/move-existing >t/home/got; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-$expected
 
-EOF
+  for op in move copy; do
+    #######
+    clearvault
+    testing $version safe $op --no-clobber
+    no_key secret/existing/{from,to}
+    generate secret/existing/from key=val
 
-	testing $version --no-clobber move to key functionality without existing data
-	./safe set secret/existing/key-move key=val
-	./safe --no-clobber move secret/existing/key-move:key secret/existing/key-move:key2 >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-EOF
-	expected=$(./safe get secret/existing/key-move)
-	testing $version --no-clobber move to key functionality with existing data
-	./safe set secret/existing/key-move key=val2
-	./safe --no-clobber move secret/existing/key-move:key secret/existing/key-move:key2 >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-Cowardly refusing to copy/move data into secret/existing/key-move:key2, as that would clobber existing data
-EOF
-	./safe set secret/existing/key-move key=val2
-	./safe --quiet --no-clobber move secret/existing/key-move:key secret/existing/key-move:key2 >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-EOF
-	./safe get secret/existing/key-move >t/home/got; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-$expected
+    now running safe $op --no-clobber with no pre-existing destination secrets
+    (run; ./safe $op --no-clobber secret/existing/{from,to} >t/home/got 2>&1) ; exitok $? 0
+    is_key secret/existing/to:key "val"
+    if [[ $op == "move" ]]; then
+      no_key secret/existing/from
+    else
+      is_key secret/existing/from:key "val"
+    fi
 
-EOF
+    #######
+    clearvault
+    testing $version safe $op --no-clobber with pre-existing destination secrets
+    no_key secret/existing/{from,to}
+    generate secret/existing/from key=FROM
+    generate secret/existing/to   key=TO
 
-	testing $version --no-clobber recursive move functionality without existing data
-	./safe set secret/move-recursive/first key=val
-	./safe set secret/move-recursive/second key=val
-	./safe --no-clobber move -Rf secret/move-recursive secret/move-recursive-existing >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
+    now running safe $op --no-clobber with pre-existing destination secrets
+    (run; ./safe $op --no-clobber secret/existing/{from,to} >t/home/got 2>&1) ; exitok $? 0
+    now checking the error output
+    cat >t/home/want <<EOF ; diffok
+Cowardly refusing to copy/move data into secret/existing/to, as that would clobber existing data
 EOF
-	testing $version --no-clobber recursive move functionality with existing data
-	./safe set secret/move-recursive/first key=val2
-	./safe set secret/move-recursive/second key=val2
-	./safe set secret/move-recursive/third key=val2
-	./safe --no-clobber move -Rf secret/move-recursive secret/move-recursive-existing >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-Cowardly refusing to copy/move data into secret/move-recursive-existing, as the following paths would be clobbered:
-- secret/move-recursive-existing/first
-- secret/move-recursive-existing/second
-EOF
-	./safe set secret/move-recursive/first key=val2
-	./safe set secret/move-recursive/second key=val2
-	./safe set secret/move-recursive/third key=val2
-	./safe --quiet --no-clobber move -Rf secret/move-recursive secret/move-recursive-existing >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-EOF
-	./safe paths secret/move-recursive-existing >t/home/got; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-secret/move-recursive-existing/first
-secret/move-recursive-existing/second
-EOF
-	./safe get secret/move-recursive-existing/first >t/home/got; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
---- # secret/move-recursive-existing/first
-key: val
+    #is_key secret/existing/from:key "FROM" # FIXME
+    is_key secret/existing/to:key   "TO"
 
-EOF
-	./safe get secret/move-recursive-existing/second >t/home/got; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
---- # secret/move-recursive-existing/second
-key: val
+    #######
+    clearvault
+    testing $version safe $op --no-clobber with pre-existing destination secrets in --quiet mode
+    no_key secret/existing/{from,to}
+    generate secret/existing/from key=FROM
+    generate secret/existing/to   key=TO
 
+    now running safe $op --no-clobber with pre-existing destination secrets in --quiet mode
+    (run; ./safe $op --no-clobber --quiet secret/existing/{from,to} >t/home/got 2>&1) ; exitok $? 0
+    now checking the error output
+    cat >t/home/want <<EOF ; diffok
 EOF
-	./safe paths secret/move-recursive>t/home/got; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-secret/move-recursive/first
-secret/move-recursive/second
-secret/move-recursive/third
-EOF
-	./safe get secret/move-recursive/first >t/home/got; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
---- # secret/move-recursive/first
-key: val2
+    #is_key secret/existing/from:key "FROM" # FIXME
+    is_key secret/existing/to:key   "TO"
 
-EOF
-	./safe get secret/move-recursive/second >t/home/got; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
---- # secret/move-recursive/second
-key: val2
+    #######
+    clearvault
+    testing $version safe $op --no-clobber recursive
+    no_key secret/existing/from/{first,second} \
+           secret/existing/to/{first,second}
+    generate secret/existing/from/first  key=val
+    generate secret/existing/from/second key=val
 
+    now running safe $op --no-clobber -Rf with no pre-existing secrets
+    (run; ./safe $op --no-clobber -Rf secret/existing/{from,to} >t/home/got 2>&1) ; exitok $? 0
+    now checking the error output
+    cat >t/home/want <<EOF ; diffok
 EOF
-	./safe get secret/move-recursive/third >t/home/got; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
---- # secret/move-recursive/third
-key: val2
+    is_key secret/existing/to/first:key  "val"
+    is_key secret/existing/to/second:key "val"
 
-EOF
+    #######
+    clearvault
+    testing $version $op --no-clobber recursive, with existing data
+    no_key secret/existing/from/{first,second} \
+           secret/existing/to/{first,second}
+    generate secret/existing/from/first  key=FROM-1
+    generate secret/existing/from/second key=FROM-2
+    generate secret/existing/to/first    key=TO-1
 
-	testing $version --no-clobber copy functionality without existing data
-	./safe set secret/existing/to-copy key=val
-	./safe --no-clobber copy secret/existing/to-copy secret/copy-existing >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-EOF
-	expected=$(./safe get secret/copy-existing)
-	testing $version --no-clobber copy functionality with existing data
-	./safe set secret/existing/to-copy key=val2
-	./safe --no-clobber copy secret/existing/to-copy secret/copy-existing >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-Cowardly refusing to copy/move data into secret/copy-existing, as that would clobber existing data
-EOF
-	./safe set secret/existing/to-copy key=val2
-	./safe --quiet --no-clobber copy secret/existing/to-copy secret/copy-existing >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-EOF
-	./safe get secret/copy-existing >t/home/got; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-$expected
+    now running safe $op --no-clobber -Rf with pre-existing destination secrets
+    (run; ./safe $op --no-clobber -Rf secret/existing/{from,to} >t/home/got 2>&1) ; exitok $? 0
 
+    now checking the error output
+    cat >t/home/want <<EOF ; diffok
+Cowardly refusing to copy/move data into secret/existing/to, as the following paths would be clobbered:
+- secret/existing/to/first
 EOF
+    #is_key secret/existing/from/first:key  "FROM-1" # FIXME
+    #is_key secret/existing/from/second:key "FROM-2" # FIXME
+    is_key secret/existing/to/first:key    "TO-1"
+    no_key secret/existing/to/second
 
-	testing $version --no-clobber recurive copy functionality without existing data
-	./safe set secret/copy-recursive/first key=val
-	./safe set secret/copy-recursive/second key=val
-	./safe --no-clobber copy -Rf secret/copy-recursive secret/copy-recursive-existing >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-EOF
-	testing $version --no-clobber recursive copy functionality with existing data
-	./safe set secret/copy-recursive/first key=val2
-	./safe set secret/copy-recursive/second key=val2
-	./safe set secret/copy-recursive/third key=val2
-	./safe --no-clobber copy -Rf secret/copy-recursive secret/copy-recursive-existing >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-Cowardly refusing to copy/move data into secret/copy-recursive-existing, as the following paths would be clobbered:
-- secret/copy-recursive-existing/first
-- secret/copy-recursive-existing/second
-EOF
-	./safe set secret/copy-recursive/first key=val2
-	./safe set secret/copy-recursive/second key=val2
-	./safe set secret/copy-recursive/third key=val2
-	./safe --quiet --no-clobber copy -Rf secret/copy-recursive secret/copy-recursive-existing >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-EOF
-	./safe paths secret/copy-recursive-existing >t/home/got; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-secret/copy-recursive-existing/first
-secret/copy-recursive-existing/second
-EOF
-	./safe get secret/copy-recursive-existing/first >t/home/got; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
---- # secret/copy-recursive-existing/first
-key: val
+    now running safe $op --no-clobber -Rf with pre-existing destination secrets in --quiet mode
+    (run; ./safe $op --no-clobber --quiet -Rf secret/existing/{from,to} >t/home/got 2>&1) ; exitok $? 0
 
+    now checking the error output
+    cat >t/home/want <<EOF ; diffok
 EOF
-	./safe get secret/copy-recursive-existing/second >t/home/got; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
---- # secret/copy-recursive-existing/second
-key: val
+    #is_key secret/existing/from/first:key  "FROM-1" # FIXME
+    #is_key secret/existing/from/second:key "FROM-2" # FIXME
+    is_key secret/existing/to/first:key    "TO-1"
+    no_key secret/existing/to/second
+  done
 
-EOF
 
-	testing $version --no-clobber ssh functionality without existing data
-	./safe --no-clobber ssh secret/existing/ssh >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-EOF
-	expected=$(./safe get secret/existing/ssh)
-	testing $version --no-clobber ssh functionality with existing data
-	./safe --no-clobber ssh secret/existing/ssh >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-Cowardly refusing to generate an SSH key at secret/existing/ssh as it is already present in Vault
-EOF
-	./safe --quiet --no-clobber ssh secret/existing/ssh >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-EOF
-	./safe get secret/existing/ssh >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-$expected
+  if [[ -z "${TEST_QUICK:-}" ]]; then
+  for op in ssh rsa dhparam; do
+    case $op in
+    ssh)     what="an SSH key" ;;
+    rsa)     what="an RSA key" ;;
+    dhparam) what="a Diffie-Hellman key exchange parameter set" ;;
+    *)       what="(i don't know what)" ;;
+    esac
 
-EOF
+    #######
+    clearvault
+    testing $version safe $op --no-clobber
+    no_key secret/existing
 
-	testing $version --no-clobber rsa functionality without existing data
-	./safe --no-clobber rsa secret/existing/rsa >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
+    now running safe $op --no-clobber with no pre-existing secrets
+    (run; ./safe $op --no-clobber secret/existing >t/home/got 2>/dev/null) ; exitok $? 0
+    cat >t/home/want <<EOF ; diffok
 EOF
-	expected=$(./safe get secret/existing/rsa)
-	testing $version --no-clobber rsa functionality with existing data
-	./safe --no-clobber rsa secret/existing/rsa >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-Cowardly refusing to generate an RSA key at secret/existing/rsa as it is already present in Vault
-EOF
-	./safe --quiet --no-clobber rsa secret/existing/rsa >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-EOF
-	./safe get secret/existing/rsa >t/home/got; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-$expected
+    expected=$(./safe get secret/existing)
 
-EOF
+    now running safe $op --no-clobber with pre-existing secrets
+    (run; ./safe $op --no-clobber secret/existing >t/home/got 2>&1) ; exitok $? 0
 
-	testing $version --no-clobber dhparam functionality without existing data
-	./safe --no-clobber dhparam secret/existing/dhparam >t/home/got; exitok $? 0 # don't care about stderr for this one
-	cat >t/home/want <<EOF ; diffok
+    now checking the error output
+    cat >t/home/want <<EOF ; diffok
+Cowardly refusing to generate $what at secret/existing as it is already present in Vault
 EOF
-	expected=$(./safe get secret/existing/dhparam)
-	testing $version --no-clobber dhparam functionality with existing data
-	./safe --no-clobber dhparam secret/existing/dhparam >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-Cowardly refusing to generate a Diffie-Hellman key exchange parameters in secret/existing/dhparam as it is already present in Vault
-EOF
-	./safe --quiet --no-clobber dhparam secret/existing/dhparam >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-EOF
-	./safe get secret/existing/dhparam >t/home/got; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-$expected
+    is_key secret/existing "$expected" '<existing>'
 
-EOF
+    now running safe $op --no-clobber with pre-existing secrets in --quiet mode
+    (run; ./safe $op --no-clobber --quiet secret/existing >t/home/got 2>&1) ; exitok $? 0
 
-	testing $version --no-clobber fmt functionality without existing data
-	./safe set secret/existing/to-fmt val=value
-	./safe --no-clobber fmt crypt-sha512 secret/existing/to-fmt val crypted >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
+    now checking the error output
+    cat >t/home/want <<EOF ; diffok
 EOF
-	expected=$(./safe get secret/existing/to-fmt:crypted)
-	testing $version --no-clobber fmt functionality with existing data
-	./safe set secret/existing/to-fmt val=value2
-	./safe --no-clobber fmt crypt-sha512 secret/existing/to-fmt val crypted >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-Cowardly refusing to reformat secret/existing/to-fmt:val to crypted as it is already present in Vault
-EOF
-	./safe --quiet --no-clobber fmt crypt-sha512 secret/existing/to-fmt val crypted >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-EOF
-	./safe get secret/existing/to-fmt:crypted >t/home/got; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-$expected
-EOF
+    is_key secret/existing "$expected" '<existing>'
+  done
+  fi
 
-	testing $version --no-clobber x509 issue functionality without existing data
-	./safe --no-clobber x509 issue --ca --name test secret/existing/cert >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-EOF
-	expected=$(./safe get secret/existing/cert)
-	testing $version --no-clobber x509 issue functionality with existing data
-	./safe --no-clobber x509 issue --ca --name test secret/existing/cert >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-Cowardly refusing to create a new certificate in secret/existing/cert as it is already present in Vault
-EOF
-	./safe --quiet --no-clobber x509 issue --ca --name test secret/existing/cert >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-EOF
-	./safe get secret/existing/cert >t/home/got; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-$expected
 
-EOF
+  #######
+  clearvault
+  testing $version safe fmt --no-clobber
+  no_key secret/existing
+  generate secret/existing val=original
 
-	./safe --no-clobber x509 revoke --signed-by secret/existing/cert secret/existing/cert >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-EOF
-	testing $version --no-clobber delete functionality
-	./safe --no-clobber set secret/existing/to-delete key=val
-	./safe --no-clobber delete -f secret/existing/to-delete >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-EOF
-	testing $version --no-clobber recursive delete functionality
-	./safe --no-clobber set secret/existing/to-delete key=val
-	./safe --no-clobber set secret/existing/to-delete/subkey key=val
-	./safe --no-clobber delete -Rf secret/existing/to-delete >t/home/got 2>&1; exitok $? 0
-	cat >t/home/want <<EOF ; diffok
-EOF
+  now running safe fmt --no-clobber with no pre-existing formatted key
+  (run; ./safe fmt --no-clobber crypt-sha512 \
+                   secret/existing val crypted >t/home/got 2>&1) ; exitok $? 0
 
-  ###### TREE TESTS ######
+  now checking the error output
+  cat >t/home/want <<EOF ; diffok
+EOF
+  expected=$(./safe get secret/existing:crypted)
 
-	testing $version tree display
-	./safe gen secret/tree/alpha     x >/dev/null
-	./safe gen secret/tree/g         x >/dev/null
-	./safe gen secret/tree/g/a       x >/dev/null
-	./safe gen secret/tree/beta/name x >/dev/null
-	./safe gen secret/tree/beta/env  x >/dev/null
-	./safe gen secret/tree/g/a/m     x >/dev/null
-	./safe gen secret/tree/g/a/m/m   x >/dev/null
-	./safe gen secret/tree/g/a/m/m/a x >/dev/null
-	./safe tree secret/tree >t/home/got 2>t/home/errors
-	cat >t/home/want <<EOF
+  now running safe fmt --no-clobber with a pre-existing formatted key
+  (run; ./safe fmt --no-clobber crypt-sha512 \
+               secret/existing val crypted >t/home/got 2>&1) ; exitok $? 0
+
+  now checking the error output
+  cat >t/home/want <<EOF ; diffok
+Cowardly refusing to reformat secret/existing:val to crypted as it is already present in Vault
+EOF
+  is_key secret/existing:val     "original"
+  is_key secret/existing:crypted "$expected"
+
+  now running safe fmt --no-clobber with a pre-existing formatted key in --query mode
+  (run; ./safe fmt --no-clobber --quiet crypt-sha512 \
+               secret/existing val crypted >t/home/got 2>&1) ; exitok $? 0
+
+  now checking the error output
+  cat >t/home/want <<EOF ; diffok
+EOF
+  is_key secret/existing:val     "original"
+  is_key secret/existing:crypted "$expected"
+
+
+  if [[ -z "${TEST_QUICK:-}" ]]; then
+    #######
+    clearvault
+    no_key secret/existing
+
+    testing $version safe x509 --no-clobber
+    now running safe x509 issue --no-clobber with no pre-existing certificates
+    (run; ./safe x509 issue --no-clobber \
+                 --ca --name test \
+                 secret/existing >t/home/got 2>&1) ; exitok $? 0
+
+    now checking the error output
+    cat >t/home/want <<EOF ; diffok
+EOF
+    expected=$(./safe get secret/existing)
+
+    now running safe x509 issue --no-clobber with pre-existing certificates
+    (run; ./safe x509 issue \
+                 --no-clobber --ca --name test \
+                 secret/existing >t/home/got 2>&1) ; exitok $? 0
+
+    now checking the error output
+    cat >t/home/want <<EOF ; diffok
+Cowardly refusing to create a new certificate in secret/existing as it is already present in Vault
+EOF
+    is_key secret/existing "$expected" "<existing>"
+
+    now running safe x509 issue --no-clobber with pre-existing certificates in --quiet mode
+    (run; ./safe x509 issue --quiet --no-clobber \
+                 --ca --name test \
+                 secret/existing >t/home/got 2>&1) ; exitok $? 0
+
+    now checking the error output
+    cat >t/home/want <<EOF ; diffok
+EOF
+    is_key secret/existing "$expected" "<existing>"
+
+    now running safe x509 revoke --no-clobber with no pre-existing revocation list
+    (run; ./safe x509 revoke --no-clobber \
+                 --signed-by secret/existing \
+                 secret/existing >t/home/got 3>&1) ; exitok $? 0
+    cat >t/home/want <<EOF ; diffok
+EOF
+  fi
+
+
+  #######
+  clearvault
+  testing $version safe delete --no-clobber
+  no_key secret/existing
+  generate secret/existing key=val
+
+  now running safe delete --no-clobber
+  (run; ./safe delete --no-clobber -f secret/existing >t/home/got 2>&1) ; exitok $? 0
+
+  now checking the error output
+  cat >t/home/want <<EOF ; diffok
+EOF
+  no_key secret/existing
+
+
+  #######
+  clearvault
+  testing $version safe delete --no-clobber recursively
+  no_key secret/existing{,/subkey}
+  generate secret/existing key=val
+  generate secret/existing/subkey key=val
+
+  now running safe delete --no-clobber recursively
+  (run; ./safe delete --no-clobber -Rf secret/existing >t/home/got 2>&1) ; exitok $? 0
+  cat >t/home/want <<EOF ; diffok
+EOF
+  no_key secret/existing{,/subkey}
+
+
+
+  ######## ########  ######## ########
+     ##    ##     ## ##       ##
+     ##    ##     ## ##       ##
+     ##    ########  ######   ######
+     ##    ##   ##   ##       ##
+     ##    ##    ##  ##       ##
+     ##    ##     ## ######## ########
+
+  #######
+  clearvault
+  testing $version tree display
+  now generating secrets to test with
+  (run; ./safe gen secret/tree/alpha     x)  ; exitok $? 0
+  (run; ./safe gen secret/tree/g         x)  ; exitok $? 0
+  (run; ./safe gen secret/tree/g/a       x)  ; exitok $? 0
+  (run; ./safe gen secret/tree/beta/name x)  ; exitok $? 0
+  (run; ./safe gen secret/tree/beta/env  x)  ; exitok $? 0
+  (run; ./safe gen secret/tree/g/a/m     x)  ; exitok $? 0
+  (run; ./safe gen secret/tree/g/a/m/m   x)  ; exitok $? 0
+  (run; ./safe gen secret/tree/g/a/m/m/a x)  ; exitok $? 0
+
+  now running safe tree
+  (run; ./safe tree secret/tree >t/home/got) ; exitok $? 0
+
+  now checking the output
+  cat >t/home/want <<EOF ; diffok
 .
 └── secret/tree
     ├── alpha
@@ -1195,9 +1641,12 @@ EOF
                     └── a
 
 EOF
-	diffok
-	./safe tree -d secret/tree >t/home/got 2>t/home/errors
-	cat >t/home/want <<EOF
+
+  now running safe tree with -d to limit display to parent paths
+  (run; ./safe tree -d secret/tree >t/home/got) ; exitok $? 0
+
+  now checking the output
+  cat >t/home/want <<EOF ; diffok
 .
 └── secret/tree
     ├── beta/
@@ -1207,38 +1656,106 @@ EOF
                 └── m/
 
 EOF
-	diffok
-	./safe tree -d secret/tree >t/home/got 2>t/home/errors
-	cat >t/home/want <<EOF
+
+  #######
+  clearvault
+  testing ${version} tree --keys
+  generate secret/tree/a/b/c   subkey=foo
+  generate secret/tree/a/b/c/d subsubkey=bar
+  generate secret/tree/robot   mark=val password=sekrit username=robo
+
+  now retrieving a single subtree
+  (run; ./safe tree --keys secret/tree/a/b/c >t/home/got) ; exitok $? 0
+
+  now checking that tree output contains :keys
+  cat <<'EOF' >t/home/want ; diffok
 .
-└── secret/tree
-    ├── beta/
-    └── g/
-        └── a/
-            └── m/
-                └── m/
+└── secret/tree/a/b/c
+    ├── :subkey
+    └── d
+        └── :subsubkey
 
 EOF
-	diffok
+  now retrieving multiple disjoint subtrees
+  (run; ./safe tree --keys secret/tree/a secret/tree/robot >t/home/got) ; exitok $? 0
 
-	case ${version} in
-	(0.5.0|0.5.2) ;;
-	(*)
-		testing ${version} tree not found errors
-		./safe tree secret/enoent >t/home/got 2>&1
-		cat >t/home/want <<EOF
-!! no secret exists at path \`secret/enoent\`
+  now checking that tree output contains :keys
+  cat <<'EOF' >t/home/want ; diffok
+.
+├── secret/tree/a
+│   └── b/
+│       ├── c
+│       │   └── :subkey
+│       └── c/
+│           └── d
+│               └── :subsubkey
+└── secret/tree/robot
+    ├── :mark
+    ├── :password
+    └── :username
+
 EOF
-		diffok
-		;;
-	esac
 
-	testing ${version} tree export
-	./safe set secret/export/admin username=admin password=sekrit         >/dev/null
-	./safe set secret/export/robot username=bot password=beep-boop mark=2 >/dev/null
-	./safe set secret/export/a/b/c subkey='the value given'               >/dev/null
-	./safe export secret/export >t/home/got 2>t/home/errors
-	cat >t/home/want <<EOF
+
+
+  ########     ###    ######## ##     ##  ######
+  ##     ##   ## ##      ##    ##     ## ##    ##
+  ##     ##  ##   ##     ##    ##     ## ##
+  ########  ##     ##    ##    #########  ######
+  ##        #########    ##    ##     ##       ##
+  ##        ##     ##    ##    ##     ## ##    ##
+  ##        ##     ##    ##    ##     ##  ######
+
+  #######
+  clearvault
+  testing ${version} paths --keys
+  no_key secret/{a/b/c,robot}
+  generate secret/a/b/c   subkey=value
+  generate secret/a/b/c/d subsubkey=value
+  generate secret/robot   username=bot password=sekrit
+
+  now retrieving a single path
+  (run; ./safe paths --keys secret/a/b/c >t/home/got) ; exitok $? 0
+
+  now paths should report on path:key per line
+  cat <<'EOF' >t/home/want ; diffok
+secret/a/b/c:subkey
+secret/a/b/c/d:subsubkey
+EOF
+
+  now retrieving multiple paths
+  (run; ./safe paths --keys secret/a secret/robot >t/home/got) ; exitok $? 0
+  now should get all paths, and all the keys
+  cat <<'EOF' >t/home/want ; diffok
+secret/a/b/c:subkey
+secret/a/b/c/d:subsubkey
+secret/robot:password
+secret/robot:username
+EOF
+
+
+
+  ######## ##     ## ########   #######  ########  ########
+  ##        ##   ##  ##     ## ##     ## ##     ##    ##
+  ##         ## ##   ##     ## ##     ## ##     ##    ##
+  ######      ###    ########  ##     ## ########     ##
+  ##         ## ##   ##        ##     ## ##   ##      ##
+  ##        ##   ##  ##        ##     ## ##    ##     ##
+  ######## ##     ## ##         #######  ##     ##    ##
+
+  #######
+  clearvault
+  testing ${version} tree export
+  no_key secret/export{,/admin,/robot,/a/b/c}
+  generate secret/export/admin username=admin password=sekrit
+  generate secret/export/robot username=bot password=beep-boop mark=2
+  generate secret/export/a/b/c subkey='the-value-given'
+
+  now exporting the vault data
+  (run; ./safe export secret/export >t/home/got) ; exitok $? 0
+
+  now checking that the export contained our data
+  cat >t/home/want <<EOF ; yamlok
 ---
 secret/export/admin:
   username: admin
@@ -1248,12 +1765,23 @@ secret/export/robot:
   password: beep-boop
   mark: "2"
 secret/export/a/b/c:
-  subkey: the value given
+  subkey: the-value-given
 EOF
-	yamlok
 
-	testing ${version} tree import
-	cat <<EOF | spruce json >t/home/want
+
+
+  #### ##     ## ########   #######  ########  ########
+   ##  ###   ### ##     ## ##     ## ##     ##    ##
+   ##  #### #### ##     ## ##     ## ##     ##    ##
+   ##  ## ### ## ########  ##     ## ########     ##
+   ##  ##     ## ##        ##     ## ##   ##      ##
+   ##  ##     ## ##        ##     ## ##    ##     ##
+  #### ##     ## ##         #######  ##     ##    ##
+
+  #######
+  clearvault
+  testing ${version} tree import
+  cat <<EOF | spruce json >t/home/want
 ---
 secret/import/admin:
   username: admin
@@ -1263,197 +1791,206 @@ secret/import/robot:
   password: beep-boop
   mark: "2"
 secret/import/a/b/c:
-  subkey: the value given
+  subkey: the-value-given
 secret/import/a/b/c/d:
   subsubkey: really deep
 EOF
-	./safe import secret/import <t/home/want >/dev/null
-	./safe export secret/import >t/home/got 2>t/home/errors
-	yamlok
+  now importing our data
+  (run; ./safe import secret/import <t/home/want) ; exitok $? 0
 
-  testing ${version} tree --keys
-  ./safe tree --keys secret/import/a/b/c >t/home/got 2>t/home/errors ; exitok $? 0
-  cat <<'EOF' >t/home/want ; diffok
-.
-└── secret/import/a/b/c
-    ├── :subkey
-    └── d
-        └── :subsubkey
+  now exporting our data
+  (run; ./safe export secret/import >t/home/got)  ; exitok $? 0
 
-EOF
-  ./safe tree --keys secret/import/a secret/import/robot >t/home/got 2>t/home/errors ; exitok $? 0
-  cat <<'EOF' >t/home/want ; diffok
-.
-├── secret/import/a
-│   └── b/
-│       ├── c
-│       │   └── :subkey
-│       └── c/
-│           └── d
-│               └── :subsubkey
-└── secret/import/robot
-    ├── :mark
-    ├── :password
-    └── :username
+  now checking that the export matches the import
+  yamlok
 
-EOF
 
-  testing ${version} paths --keys
-  ./safe paths --keys secret/import/a/b/c >t/home/got 2>t/home/errors ; exitok $? 0
-  cat <<'EOF' >t/home/want ; diffok
-secret/import/a/b/c:subkey
-secret/import/a/b/c/d:subsubkey
-EOF
-  ./safe paths --keys secret/import/a secret/import/robot >t/home/got 2>t/home/errors ; exitok $? 0
-  cat <<'EOF' >t/home/want ; diffok
-secret/import/a/b/c:subkey
-secret/import/a/b/c/d:subsubkey
-secret/import/robot:mark
-secret/import/robot:password
-secret/import/robot:username
-EOF
 
-	testing ${version} x509 commands
-	./safe x509 issue                                                ; exitok $? 1 # need a path
-	./safe x509 issue --signed-by secret/enoent                      ; exitok $? 1 # still need a name...
-	./safe x509 issue --signed-by secret/enoent secret/cert          ; exitok $? 1 # ca must exist
+  ##     ##     ########   #####    #######
+   ##   ##      ##        ##   ##  ##     ##
+    ## ##       ##       ##     ## ##     ##
+     ###        #######  ##     ##  ########
+    ## ##             ## ##     ##        ##
+   ##   ##  ### ##    ##  ##   ##  ##     ##
+  ##     ## ###  ######    #####    #######
 
-	./safe x509 issue secret/x509/self-signed --name www.example.com ; exitok $? 0
-	./safe x509 validate secret/x509/self-signed                     ; exitok $? 0
-	./safe exists secret/x509/self-signed:certificate                ; exitok $? 0
-	./safe exists secret/x509/self-signed:key                        ; exitok $? 0
-	./safe exists secret/x509/self-signed:combined                   ; exitok $? 0
-	./safe exists secret/x509/self-signed:serial                     ; exitok $? 1  # not a CA
-	./safe exists secret/x509/self-signed:crl                        ; exitok $? 1  # not a CA
-	./safe x509 check secret/x509/self-signed                        ; exitok $? 0
-	./safe x509 check secret/x509/self-signed --for www.example.com  ; exitok $? 0
-	./safe x509 check secret/x509/self-signed --for mail.example.com ; exitok $? 1
-	./safe x509 check secret/x509/self-signed --for test@example.com ; exitok $? 1
-	./safe x509 check secret/x509/self-signed --for 10.40.5.6        ; exitok $? 1
+  if [[ -z "${TEST_QUICK:-}" ]]; then
+    #######
+    clearvault
+    testing ${version} x509 commands
+  
+    now running safe x509 issue without a path
+    (run; ./safe x509 issue)                                                ; exitok $? 1
+    now running safe x509 issue without a name
+    (run; ./safe x509 issue --signed-by secret/enoent)                      ; exitok $? 1
+    now running safe x509 issue with a non-existent ca
+    (run; ./safe x509 issue --signed-by secret/enoent secret/cert)          ; exitok $? 1
+  
+    now generating a new self-signed certificate
+    (run; ./safe x509 issue secret/x509/self-signed --name www.example.com) ; exitok $? 0
+    now validating our self-signed certificate
+    (run; ./safe x509 validate secret/x509/self-signed)                     ; exitok $? 0
+  
+    ok_key secret/x509/self-signed:{certificate,key,combined}
+    no_key secret/x509/self-signed:{serial,crl}
+  
+    now validating the certificate applicability
+    (run; ./safe x509 check secret/x509/self-signed)                        ; exitok $? 0
+    (run; ./safe x509 check secret/x509/self-signed --for www.example.com)  ; exitok $? 0
+    (run; ./safe x509 check secret/x509/self-signed --for mail.example.com) ; exitok $? 1
+    (run; ./safe x509 check secret/x509/self-signed --for test@example.com) ; exitok $? 1
+    (run; ./safe x509 check secret/x509/self-signed --for 10.40.5.6)        ; exitok $? 1
+  
+    now running safe x509 issue without a name
+    (run; ./safe x509 issue secret/fail-without-name)                       ; exitok $? 1
+    no_key secret/fail-without-name:{certificate,key,combined,serial,crl}
+  
+    now generate a CA certificate
+    (run; ./safe x509 issue secret/x509/ca --name ca.example.com --ca)      ; exitok $? 0
+    ok_key secret/x509/ca:{certificate,key,combined,serial,crl}
+  
+    now validating our new CA certificate
+    (run; ./safe x509 validate secret/x509/ca --ca)                         ; exitok $? 0
+    (run; ./safe x509 validate secret/x509/ca --not-expired)                ; exitok $? 0
+    (run; ./safe x509 validate secret/x509/ca --for ca.example.com)         ; exitok $? 0
+    (run; ./safe x509 validate secret/x509/ca --for www.example.com)        ; exitok $? 1
+    (run; ./safe x509 validate secret/x509/ca --signed-by secret/x509/ca \
+                                              --not-revoked)                ; exitok $? 0
+  
+    now running safe x509 check without a path
+    (run; ./safe x509 check)                                                ; exitok $? 1
+    now running safe x509 check with --signed-by but no path
+    (run; ./safe x509 check --signed-by secret/enoent)                      ; exitok $? 1
+    now running safe x509 check with no CA
+    (run; ./safe x509 check --signed-by secret/enoent secret/cert)          ; exitok $? 1
+    now running safe x509 check with a bad certificate path
+    (run; ./safe x509 check --signed-by secret/x509/ca secret/enoent)       ; exitok $? 1
+  
+    now issuing a CA-signed certificate
+    (run; ./safe x509 issue secret/x509/signed --signed-by secret/x509/ca \
+                                               --name mail.example.com)     ; exitok $? 0
+    now validating our CA-signed certificate
+    (run; ./safe x509 validate secret/x509/signed --signed-by secret/x509/ca \
+                                                  --not-expired \
+                                                  --not-revoked \
+                                                  --for mail.example.com)   ; exitok $? 0
+  
+    now running safe x509 revoke without a path
+    (run; ./safe x509 revoke)                                               ; exitok $? 1
+    (run; ./safe x509 revoke --signed-by secret/x509/ca)                    ; exitok $? 1
+    now running safe x509 revoke with a bad path
+    (run; ./safe x509 revoke --signed-by secret/x509/ca secret/enoent)      ; exitok $? 1
+    now running safe x509 revoke with a bad CA
+    (run; ./safe x509 revoke --signed-by secret/enoent secret/x509/signed)  ; exitok $? 1
+  
+    now running safe x509 crl --renew without a path
+    (run; ./safe x509 crl --renew)                                          ; exitok $? 1
+    now running safe x509 crl with a CA path but no --renew
+    (run; ./safe x509 crl secret/x509/ca)                                   ; exitok $? 1
+    now running safe x509 crl --renew against a bad path
+    (run; ./safe x509 crl --renew secret/enoent)                            ; exitok $? 1
+    now running safe x509 crl --renew without a CA
+    (run; ./safe x509 crl --renew secret/x509/signed)                       ; exitok $? 1
+    now running safe x509 crl --renew
+    (run; ./safe x509 crl --renew secret/x509/ca)                           ; exitok $? 0
+  
+    now revoke our signed certificate
+    (run; ./safe x509 revoke secret/x509/signed --signed-by secret/x509/ca) ; exitok $? 0
+    now validating that our signed certificate is only revoked
+    (run; ./safe x509 validate secret/x509/signed --signed-by secret/x509/ca \
+                                                  --not-expired \
+                                                  --revoked \
+                                                  --for mail.example.com)   ; exitok $? 0
+  
+    now issuing a certificate with lots of subjectAltNames
+    (run; ./safe x509 issue secret/x509/multi --signed-by secret/x509/ca \
+                                              --name dns.example.com \
+                                              --name *.dns.example.com \
+                                              --name 10.255.6.7 \
+                                              --name 10.255.6.8 \
+                                              --name admin@example.com \
+                                              --name safe.vault@example.com) ; exitok $? 0
+    now validating our SAN certificate
+    (run; ./safe x509 check secret/x509/multi --signed-by secret/x509/ca \
+                                              --not-expired \
+                                              --not-revoked \
+                                              --for dns.example.com \
+                                              --for 10.255.6.7 \
+                                              --for 10.255.6.8 \
+                                              --for admin@example.com \
+                                              --for safe.vault@example.com) ; exitok $? 0
+    now checking our SAN certificate applicability
+    (run; ./safe x509 check secret/x509/multi --for whatever.dns.example.com \
+                                              --for anything.dns.example.com \
+                                              --for x.dns.example.com)     ; exitok $? 0
+    (run; ./safe x509 check secret/x509/multi --for x.y.dns.example.com)   ; exitok $? 1
+    (run; ./safe x509 check secret/x509/multi --for x.com)                 ; exitok $? 1
+  
+    now issuing a wildcard SAN certificate
+    (run; ./safe x509 issue secret/x509/wild --signed-by secret/x509/ca \
+                                             --name cn.tld \
+                                             --name '*.tld' \
+                                             --name '*.*.tld' \
+                                             --name '*.*.*.tld')           ; exitok $? 0
+    now validating our wildcard SAN certificate applicability
+    (run; ./safe x509 check secret/x509/wild --signed-by secret/x509/ca \
+                                             --for cn.tld \
+                                             --for x.tld \
+                                             --for x.y.tld \
+                                             --for x.y.z.tld)              ; exitok $? 0
+    (run; ./safe x509 check secret/x509/wild --signed-by secret/x509/ca \
+                                             --for tld)                    ; exitok $? 1
+    (run; ./safe x509 check secret/x509/wild --signed-by secret/x509/ca \
+                                             --for w.x.y.z.tld)            ; exitok $? 1
+  
+    now issuing a weak 1024-bit certificate
+    (run; ./safe x509 issue secret/x509/weak --bits 1024 -n weak.tld)      ; exitok $? 0
+    now checking that our 1024-bit certificate is actually 1024-bits
+    (run; ./safe x509 check secret/x509/weak --bits 1024)                  ; exitok $? 0
+    (run; ./safe x509 check secret/x509/weak --bits 2048)                  ; exitok $? 1
+    (run; ./safe x509 check secret/x509/weak --bits 4096)                  ; exitok $? 1
+    (run; ./safe x509 check secret/x509/weak --bits 1024 \
+                                             --bits 2048 \
+                                             --bits 4096)                  ; exitok $? 0
+  
+    now issuing a moderately strong 2048-bit certificate
+    (run; ./safe x509 issue secret/x509/meh --bits 2048 -n meh.tld)        ; exitok $? 0
+    now checking that our 2048-bit certificate is actually 2048-bits
+    (run; ./safe x509 check secret/x509/meh --bits 1024)                   ; exitok $? 1
+    (run; ./safe x509 check secret/x509/meh --bits 2048)                   ; exitok $? 0
+    (run; ./safe x509 check secret/x509/meh --bits 4096)                   ; exitok $? 1
+    (run; ./safe x509 check secret/x509/meh --bits 1024 \
+                                            --bits 2048 \
+                                            --bits 4096)                   ; exitok $? 0
+  
+    now issuing a strong 4096-bit certificate
+    (run; ./safe x509 issue secret/x509/strong --bits 4096 -n strong.tld)  ; exitok $? 0
+    now checking that our 4096-bit certificate is actually 4096-bits
+    (run; ./safe x509 check secret/x509/strong --bits 1024)                ; exitok $? 1
+    (run; ./safe x509 check secret/x509/strong --bits 2048)                ; exitok $? 1
+    (run; ./safe x509 check secret/x509/strong --bits 4096)                ; exitok $? 0
+    (run; ./safe x509 check secret/x509/strong --bits 1024 \
+                                               --bits 2048 \
+                                               --bits 4096)                ; exitok $? 0
+  
+    now issuing a certificate with an invalid strength
+    (run; ./safe x509 issue secret/x509/bad --bits 1000000000 -n one.mil)  ; exitok $? 1
+  
+    now checking the validity of multiple certificates
+    (run; ./safe x509 check secret/x509/{weak,meh,strong})                 ; exitok $? 0
+    (run; ./safe x509 check secret/x509/{weak,ENOENT,strong})              ; exitok $? 1
+  
+    now issuing a CA certificate
+    (run; ./safe x509 issue secret/x509/imposter --name x.y.z --ca)        ; exitok $? 0
+    now checking that we got a CA certificate
+    (run; ./safe x509 check secret/x509/imposter --ca)                     ; exitok $? 0
+    now overwrite our CA certificate with a non-CA certificate
+    (run; ./safe x509 issue secret/x509/imposter --name a.b.c)             ; exitok $? 0
+    now checking that we no longer have a CA certificate
+    (run; ./safe x509 check secret/x509/imposter --ca)                     ; exitok $? 1
+  fi
 
-	./safe x509 issue secret/fail-without-name                       ; exitok $? 1
-	./safe exists secret/fail-without-name:certificate               ; exitok $? 1
-	./safe exists secret/fail-without-name:key                       ; exitok $? 1
-	./safe exists secret/fail-without-name:combined                  ; exitok $? 1
-	./safe exists secret/fail-without-name:serial                    ; exitok $? 1
-	./safe exists secret/fail-without-name:crl                       ; exitok $? 1
-
-	./safe x509 issue secret/x509/ca --name ca.example.com --ca      ; exitok $? 0
-	./safe exists secret/x509/ca:certificate                         ; exitok $? 0
-	./safe exists secret/x509/ca:key                                 ; exitok $? 0
-	./safe exists secret/x509/ca:combined                            ; exitok $? 0
-	./safe exists secret/x509/ca:serial                              ; exitok $? 0 # is a CA
-	./safe exists secret/x509/ca:crl                                 ; exitok $? 0 # is a CA
-	./safe x509 validate secret/x509/ca --ca                         ; exitok $? 0
-	./safe x509 validate secret/x509/ca --not-expired                ; exitok $? 0
-	./safe x509 validate secret/x509/ca --for ca.example.com         ; exitok $? 0
-	./safe x509 validate secret/x509/ca --for www.example.com        ; exitok $? 1
-	./safe x509 validate secret/x509/ca --signed-by secret/x509/ca \
-	                                    --not-revoked                ; exitok $? 0
-
-	./safe x509 check                                                ; exitok $? 1 # need a path
-	./safe x509 check --signed-by secret/enoent                      ; exitok $? 1 # still need a name...
-	./safe x509 check --signed-by secret/enoent secret/cert          ; exitok $? 1 # ca must exist
-	./safe x509 check --signed-by secret/x509/ca secret/enoent       ; exitok $? 1 # cert must exist
-
-	./safe x509 issue secret/x509/signed --signed-by secret/x509/ca --name mail.example.com
-	./safe x509 validate secret/x509/signed --signed-by secret/x509/ca \
-	                                        --not-expired \
-	                                        --not-revoked \
-	                                        --for mail.example.com   ; exitok $? 0
-
-	./safe x509 revoke                                               ; exitok $? 1 # need a path
-	./safe x509 revoke --signed-by secret/x509/ca                    ; exitok $? 1 # still need a path...
-	./safe x509 revoke --signed-by secret/x509/ca secret/enoent      ; exitok $? 1 # path must exist
-	./safe x509 revoke --signed-by secret/enoent secret/x509/signed  ; exitok $? 1 # ca must exist
-
-	./safe x509 crl --renew                                          ; exitok $? 1 # need a path
-	./safe x509 crl secret/x509/ca                                   ; exitok $? 1 # need --renew
-	./safe x509 crl --renew secret/enoent                            ; exitok $? 1 # path must exist
-	./safe x509 crl --renew secret/x509/signed                       ; exitok $? 1 # need a ca
-	./safe x509 crl --renew secret/x509/ca                           ; exitok $? 0
-
-	./safe x509 revoke secret/x509/signed --signed-by secret/x509/ca ; exitok $? 0
-	./safe x509 validate secret/x509/signed --signed-by secret/x509/ca \
-	                                        --not-expired \
-	                                        --revoked \
-	                                        --for mail.example.com   ; exitok $? 0
-
-	./safe x509 issue secret/x509/multi --signed-by secret/x509/ca \
-	                                    --name dns.example.com \
-	                                    --name *.dns.example.com \
-	                                    --name 10.255.6.7 \
-	                                    --name 10.255.6.8 \
-	                                    --name admin@example.com \
-	                                    --name safe.vault@example.com ; exitok $? 0
-	./safe x509 check secret/x509/multi --signed-by secret/x509/ca \
-	                                    --not-expired \
-	                                    --not-revoked \
-	                                    --for dns.example.com \
-	                                    --for 10.255.6.7 \
-	                                    --for 10.255.6.8 \
-	                                    --for admin@example.com \
-	                                    --for safe.vault@example.com ; exitok $? 0
-	./safe x509 check secret/x509/multi --for whatever.dns.example.com \
-	                                    --for anything.dns.example.com \
-	                                    --for x.dns.example.com      ; exitok $? 0
-	./safe x509 check secret/x509/multi --for x.y.dns.example.com    ; exitok $? 1
-	./safe x509 check secret/x509/multi --for x.com                  ; exitok $? 1
-
-	./safe x509 issue secret/x509/wild --signed-by secret/x509/ca \
-	                                   --name cn.tld \
-	                                   --name '*.tld' \
-	                                   --name '*.*.tld' \
-	                                   --name '*.*.*.tld'            ; exitok $? 0
-	./safe x509 check secret/x509/wild --signed-by secret/x509/ca \
-	                                   --for cn.tld \
-	                                   --for x.tld \
-	                                   --for x.y.tld \
-	                                   --for x.y.z.tld               ; exitok $? 0
-	./safe x509 check secret/x509/wild --signed-by secret/x509/ca \
-	                                   --for tld                     ; exitok $? 1
-	./safe x509 check secret/x509/wild --signed-by secret/x509/ca \
-	                                   --for w.x.y.z.tld             ; exitok $? 1
-
-	./safe x509 issue secret/x509/weak --bits 1024 -n weak.tld       ; exitok $? 0
-	./safe x509 check secret/x509/weak --bits 1024                   ; exitok $? 0
-	./safe x509 check secret/x509/weak --bits 2048                   ; exitok $? 1
-	./safe x509 check secret/x509/weak --bits 4096                   ; exitok $? 1
-	./safe x509 check secret/x509/weak --bits 1024 \
-	                                   --bits 2048 \
-	                                   --bits 4096                   ; exitok $? 0
-
-	./safe x509 issue secret/x509/meh --bits 2048 -n meh.tld         ; exitok $? 0
-	./safe x509 check secret/x509/meh --bits 1024                    ; exitok $? 1
-	./safe x509 check secret/x509/meh --bits 2048                    ; exitok $? 0
-	./safe x509 check secret/x509/meh --bits 4096                    ; exitok $? 1
-	./safe x509 check secret/x509/meh --bits 1024 \
-	                                  --bits 2048 \
-	                                  --bits 4096                    ; exitok $? 0
-
-	./safe x509 issue secret/x509/strong --bits 4096 -n strong.tld   ; exitok $? 0
-	./safe x509 check secret/x509/strong --bits 1024                 ; exitok $? 1
-	./safe x509 check secret/x509/strong --bits 2048                 ; exitok $? 1
-	./safe x509 check secret/x509/strong --bits 4096                 ; exitok $? 0
-	./safe x509 check secret/x509/strong --bits 1024 \
-	                                     --bits 2048 \
-	                                     --bits 4096                 ; exitok $? 0
-
-	./safe x509 issue secret/x509/bad --bits 1000000000 -n one.mil   ; exitok $? 1
-
-	./safe x509 check secret/x509/weak \
-	                  secret/x509/meh \
-	                  secret/x509/strong                             ; exitok $? 0
-
-	./safe x509 check secret/x509/weak \
-	                  secret/x509/ENOENT \
-	                  secret/x509/strong                             ; exitok $? 1
-
-	./safe x509 issue secret/x509/imposter --name x.y.z --ca         ; exitok $? 0
-	./safe x509 check secret/x509/imposter --ca                      ; exitok $? 0
-	./safe x509 issue secret/x509/imposter --name a.b.c              ; exitok $? 0 # not a CA, now
-	./safe x509 check secret/x509/imposter --ca                      ; exitok $? 1 # not a CA
-
-	dump_log
+  dump_log
 done
 
+done_testing=1

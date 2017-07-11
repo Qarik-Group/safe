@@ -1218,7 +1218,7 @@ NBITS defaults to 2048.
 		exists := (err == nil)
 		if opt.SkipIfExists && exists && s.Has("dhparam-pem") {
 			if !opt.Quiet {
-				ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to generate a Diffie-Hellman key exchange parameters in} @C{%s} @R{as it is already present in Vault}\n", path)
+				ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to generate a Diffie-Hellman key exchange parameter set at} @C{%s} @R{as it is already present in Vault}\n", path)
 			}
 			return nil
 		}
