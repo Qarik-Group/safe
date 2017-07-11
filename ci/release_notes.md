@@ -5,6 +5,10 @@
   for legacy systems that need MD5 hashes, and `crypt-sha256` for
   a middle-ground between MD5 and SHA-512.
 
+- `safe x509 show` will now print out a human-readable summary of
+  a given certificate, to assist operators in exploring the Vault
+  and verifying certificates stored therein.
+
 ## Improvements
 
 - The pki-backend commands in safe have now been officially

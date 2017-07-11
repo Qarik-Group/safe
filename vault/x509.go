@@ -90,6 +90,38 @@ func (s Secret) X509() (*X509, error) {
 	return o, nil
 }
 
+func formatSubject(name pkix.Name) string {
+	ss := []string{}
+	if name.CommonName != "" {
+		ss = append(ss, fmt.Sprintf("cn=%s", name.CommonName))
+	}
+	for _, s := range name.Country {
+		ss = append(ss, fmt.Sprintf("c=%s", s))
+	}
+	for _, s := range name.Province {
+		ss = append(ss, fmt.Sprintf("st=%s", s))
+	}
+	for _, s := range name.Locality {
+		ss = append(ss, fmt.Sprintf("l=%s", s))
+	}
+	for _, s := range name.Organization {
+		ss = append(ss, fmt.Sprintf("o=%s", s))
+	}
+	for _, s := range name.OrganizationalUnit {
+		ss = append(ss, fmt.Sprintf("ou=%s", s))
+	}
+
+	return strings.Join(ss, ",")
+}
+
+func (x *X509) Subject() string {
+	return formatSubject(x.Certificate.Subject)
+}
+
+func (x *X509) Issuer() string {
+	return formatSubject(x.Certificate.Issuer)
+}
+
 func parseSubject(subj string) (pkix.Name, error) {
 	/* parse subject names that look like this:
 	    /cn=foo.bl/c=us/st=ny/l=buffalo/o=stark & wayne/ou=r&d

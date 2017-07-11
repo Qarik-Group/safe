@@ -151,6 +151,9 @@ type Options struct {
 			SignedBy string `cli:"-i, --signed-by"`
 		} `cli:"revoke"`
 
+		Show struct {
+		} `cli:"show"`
+
 		CRL struct {
 			Renew bool `cli:"--renew"`
 		} `cli:"crl"`
@@ -1381,6 +1384,13 @@ Here are the supported commands:
     Validate a certificate in the Vault, checking to make sure that
     its private and public keys match, checking CA signatories,
     expiration, name applicability, etc.
+
+  @G{x509 show} path/to/cert [path/to/other/cert ...]
+
+    Print out a human-readable description of the certificate,
+    including its subject name, issuer (CA), expiration and lifetime,
+    and what domains, email addresses, and IP addresses it represents.
+
 `,
 	}, func(command string, args ...string) error {
 		r.Help(os.Stdout, "x509")
@@ -1690,6 +1700,95 @@ The following options are recognized:
 		err = v.Write(opt.X509.Revoke.SignedBy, s)
 		if err != nil {
 			return err
+		}
+
+		return nil
+	})
+
+	r.Dispatch("x509 show", &Help{
+		Summary: "Show the details of an X.509 Certificate",
+		Usage:   "safe x509 show path [path ...]",
+		Description: `
+When dealing with lots of different X.509 Certificates, it is important
+to be able to identify what lives at each path in the vault.  This command
+prints out information about a certificate, including:
+
+  - Who issued it?
+  - Is it a Certificate Authority?
+  - What names / IPs is it valid for?
+  - When does it expire?
+
+`,
+	}, func (command string, args ...string) error {
+		if (len(args) == 0) {
+			r.ExitWithUsage("x509 show")
+		}
+
+		rc.Apply()
+		v := connect()
+
+		for _, path := range args {
+			s, err := v.Read(args[0])
+			if err != nil {
+				return err
+			}
+
+			fmt.Printf("%s:\n", path)
+			cert, err := s.X509()
+			if err != nil {
+				fmt.Printf("  !! %s\n\n", err)
+				continue
+			}
+
+			ansi.Printf("  @G{%s}\n", cert.Subject())
+			if cert.Subject() != cert.Issuer() {
+				fmt.Printf("  issued by: @C{%s}\n\n", cert.Issuer())
+			}
+
+			toStart := time.Until(cert.Certificate.NotBefore)
+			toEnd := time.Until(cert.Certificate.NotAfter)
+
+			days := int(toStart.Hours() / 24)
+			if days == 1 {
+				ansi.Printf("  @Y{not valid for another day}\n")
+			} else if days > 1 {
+				ansi.Printf("  @Y{not valid for another %d days}\n", days)
+			}
+
+			days = int(toEnd.Hours() / 24)
+			if days < -1 {
+				ansi.Printf("  @R{EXPIRED %d days ago}\n", -1 * days)
+			} else if days < 0 {
+				ansi.Printf("  @R{EXPIRED a day ago}\n")
+			} else if days < 1 {
+				ansi.Printf("  @R{EXPIRED}\n")
+			} else if days == 1 {
+				ansi.Printf("  @Y{expires in a day}\n")
+			} else if days < 30 {
+				ansi.Printf("  @Y{expires in %d days}\n", days)
+			} else {
+				ansi.Printf("  expires in a @G{%d days}\n", days)
+			}
+			ansi.Printf("  valid from @C{%s} - @C{%s}", cert.Certificate.NotBefore.Format("Jan 2 2006"), cert.Certificate.NotAfter.Format("Jan 2 2006"))
+
+			life := int(cert.Certificate.NotAfter.Sub(cert.Certificate.NotBefore).Hours())
+			if life < 360 * 24 {
+				ansi.Printf(" (@M{~%d days})\n", life / 24)
+			} else {
+				ansi.Printf(" (@M{~%d years})\n", life / 365 / 24)
+			}
+
+			fmt.Printf("  for the following names:\n")
+			for _, s := range cert.Certificate.DNSNames {
+				ansi.Printf("    - @G{%s} (DNS)\n", s)
+			}
+			for _, s := range cert.Certificate.EmailAddresses {
+				ansi.Printf("    - @G{%s} (email)\n", s)
+			}
+			for _, s := range cert.Certificate.IPAddresses {
+				ansi.Printf("    - @G{%s} (IP)\n", s)
+			}
+			fmt.Printf("\n")
 		}
 
 		return nil
