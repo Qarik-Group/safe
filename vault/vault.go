@@ -289,7 +289,7 @@ func (v *Vault) walktree(path string, options TreeOptions) (tree.Node, int, erro
 	}
 	options.InSubbranch = true
 	for _, p := range l {
-		if p[len(p)-1:len(p)] == "/" {
+		if strings.HasSuffix(p, "/") {
 			kid, n, err := v.walktree(path+"/"+p[0:len(p)-1], options)
 			if err != nil {
 				return t, 0, err
