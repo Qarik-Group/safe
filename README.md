@@ -170,7 +170,7 @@ Setting key to context of a file
 Example:
 
 ```
-safe set secret/root ssl_key:@ssl_key_file
+safe set secret/root ssl_key@ssl_key_file
 ```
 
 ### get path \[path ...\]
