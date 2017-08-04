@@ -41,6 +41,7 @@ func connect() *vault.Vault {
 		ansi.Fprintf(os.Stderr, "Try @C{safe auth ldap}\n")
 		ansi.Fprintf(os.Stderr, " or @C{safe auth github}\n")
 		ansi.Fprintf(os.Stderr, " or @C{safe auth token}\n")
+		ansi.Fprintf(os.Stderr, " or @C{safe auth userpass}\n")
 		os.Exit(1)
 	}
 
@@ -260,7 +261,7 @@ func main() {
 					ansi.Fprintf(os.Stderr, "You will need to target a Vault manually first.\n\n")
 					ansi.Fprintf(os.Stderr, "Try something like this:\n")
 					ansi.Fprintf(os.Stderr, "     @C{safe target ops https://address.of.your.vault}\n")
-					ansi.Fprintf(os.Stderr, "     @C{safe auth (github|token|ldap)}\n")
+					ansi.Fprintf(os.Stderr, "     @C{safe auth (github|token|ldap|userpass)}\n")
 					ansi.Fprintf(os.Stderr, "\n")
 					os.Exit(1)
 				}
@@ -460,7 +461,7 @@ func main() {
 
 	r.Dispatch("auth", &Help{
 		Summary: "Authenticate to the current target",
-		Usage:   "safe auth (token|github|ldap)",
+		Usage:   "safe auth (token|github|ldap|userpass)",
 		Type:    AdministrativeCommand,
 	}, func(command string, args ...string) error {
 		cfg := rc.Apply()
@@ -492,6 +493,13 @@ func main() {
 
 		case "github":
 			token, err = auth.Github(os.Getenv("VAULT_ADDR"))
+			if err != nil {
+				return err
+			}
+			break
+
+		case "userpass":
+			token, err = auth.UserPass(os.Getenv("VAULT_ADDR"))
 			if err != nil {
 				return err
 			}
