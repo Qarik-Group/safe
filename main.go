@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -76,6 +77,12 @@ type Options struct {
 	Set     struct{} `cli:"set, write"`
 	Paste   struct{} `cli:"paste"`
 	Exists  struct{} `cli:"exists, check"`
+
+	Rekey struct {
+		UnsealCount  int      `cli:"--num-unseal-keys"`
+		KeysToUnseal int      `cli:"--keys-to-unseal"`
+		GPG          []string `cli:"--gpg"`
+	} `cli:"rekey"`
 
 	Get struct {
 		KeysOnly bool `cli:"--keys"`
@@ -1275,6 +1282,70 @@ NBITS defaults to 2048.
 		return nil
 	})
 
+	r.Dispatch("rekey", &Help{
+		Summary: "Re-key your Vault with new unseal keys",
+		Usage:   "safe rekey [OPTIONS]",
+		Type:    DestructiveCommand,
+	}, func(command string, args ...string) error {
+		rc.Apply()
+
+		unsealKeys := 5 // default to 5
+		var gpgKeys []string
+		if len(opt.Rekey.GPG) > 0 {
+			unsealKeys = len(opt.Rekey.GPG)
+			for _, email := range opt.Rekey.GPG {
+				output, err := exec.Command("gpg", "--export", email).Output()
+				if err != nil {
+					return ansi.Errorf("Failed to retrieve GPG key for %s from local keyring: %s", email, err.Error())
+				}
+
+				// gpg --export returns 0, with no stdout if the key wasn't found, so handle that
+				if output == nil || len(output) == 0 {
+					return ansi.Errorf("No GPG key found for %s in the local keyring", email)
+				}
+				gpgKeys = append(gpgKeys, base64.StdEncoding.EncodeToString(output))
+			}
+		}
+
+		// if specified, --unseal-keys takes priority, then the number of --gpg-keys, and a default of 5
+		if opt.Rekey.UnsealCount != 0 {
+			unsealKeys = opt.Rekey.UnsealCount
+		}
+		if len(opt.Rekey.GPG) > 0 && unsealKeys != len(opt.Rekey.GPG) {
+			return ansi.Errorf("Both @C{--gpg} and @C{--num-unseal-keys} were specified, and their counts did not match.")
+		}
+
+		// if --keys-to-unseal isn't specified, use a default (unless default is > the num-unseal-keys
+		if opt.Rekey.KeysToUnseal == 0 {
+			opt.Rekey.KeysToUnseal = 3
+			if opt.Rekey.KeysToUnseal > unsealKeys {
+				opt.Rekey.KeysToUnseal = unsealKeys
+			}
+		}
+		if opt.Rekey.KeysToUnseal > unsealKeys {
+			return ansi.Errorf("You specified only %d unseal keys, but are requiring %d keys to unseal vault. This is bad.", unsealKeys, opt.Rekey.KeysToUnseal)
+		}
+		if opt.Rekey.KeysToUnseal < 2 && unsealKeys > 1 {
+			return ansi.Errorf("When specifying more than 1 unseal key, you must also have more than one key required to unseal.")
+		}
+
+		v := connect()
+		keys, err := v.ReKey(unsealKeys, opt.Rekey.KeysToUnseal, gpgKeys)
+		if err != nil {
+			return err
+		}
+		ansi.Printf("@G{Your Vault has been re-keyed.} Please take note of your new unseal keys and @R{store them safely!}\n")
+		for i, key := range keys {
+			if len(opt.Rekey.GPG) == len(keys) {
+				ansi.Printf("Unseal key for @c{%s}:\n@y{%s}\n", opt.Rekey.GPG[i], key)
+			} else {
+				ansi.Printf("Unseal key %d: @y{%s}\n", i+1, key)
+			}
+		}
+
+		return nil
+	})
+
 	r.Dispatch("fmt", &Help{
 		Summary: "Reformat an existing name/value pair, into a new name",
 		Usage:   "safe fmt FORMAT PATH OLD-NAME NEW-NAME",
@@ -1727,8 +1798,8 @@ prints out information about a certificate, including:
   - When does it expire?
 
 `,
-	}, func (command string, args ...string) error {
-		if (len(args) == 0) {
+	}, func(command string, args ...string) error {
+		if len(args) == 0 {
 			r.ExitWithUsage("x509 show")
 		}
 
@@ -1765,7 +1836,7 @@ prints out information about a certificate, including:
 
 			days = int(toEnd.Hours() / 24)
 			if days < -1 {
-				ansi.Printf("  @R{EXPIRED %d days ago}\n", -1 * days)
+				ansi.Printf("  @R{EXPIRED %d days ago}\n", -1*days)
 			} else if days < 0 {
 				ansi.Printf("  @R{EXPIRED a day ago}\n")
 			} else if days < 1 {
@@ -1780,10 +1851,10 @@ prints out information about a certificate, including:
 			ansi.Printf("  valid from @C{%s} - @C{%s}", cert.Certificate.NotBefore.Format("Jan 2 2006"), cert.Certificate.NotAfter.Format("Jan 2 2006"))
 
 			life := int(cert.Certificate.NotAfter.Sub(cert.Certificate.NotBefore).Hours())
-			if life < 360 * 24 {
-				ansi.Printf(" (@M{~%d days})\n", life / 24)
+			if life < 360*24 {
+				ansi.Printf(" (@M{~%d days})\n", life/24)
 			} else {
-				ansi.Printf(" (@M{~%d years})\n", life / 365 / 24)
+				ansi.Printf(" (@M{~%d years})\n", life/365/24)
 			}
 
 			fmt.Printf("  for the following names:\n")
