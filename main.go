@@ -1284,8 +1284,27 @@ NBITS defaults to 2048.
 
 	r.Dispatch("rekey", &Help{
 		Summary: "Re-key your Vault with new unseal keys",
-		Usage:   "safe rekey [OPTIONS]",
+		Usage:   "safe rekey [--gpg email@address ...] [--num-unseal-keys <int>] [--keys-to-unseal <int>]",
 		Type:    DestructiveCommand,
+		Description: `
+Rekeys Vault with new unseal keys. This will require a quorum
+of existing unseal keys to accomplish. This command can be used
+to change the nubmer of unseal keys being generated via
+--num-unseal-keys, as well as the number of keys required to
+unseal the Vault via --keys-to-unseal.
+
+If --gpg flags are provided, they will be used to look up in the
+local GPG keyring public keys to give Vault for encrypting the new
+unseal keys (one pubkey per unseal key). Output will have the
+encrypted unseal keys, matched up with the email address associated
+with the public key that it was encrypted with. Additionally, a
+backup of the encrypted unseal keys is located at sys/rekey/backup
+in Vault.
+
+If no --gpg flags are provided, the output will include the raw
+unseal keys, and should be treated accordingly.
+
+`,
 	}, func(command string, args ...string) error {
 		rc.Apply()
 

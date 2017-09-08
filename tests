@@ -2019,6 +2019,7 @@ EOF
   # corrected, so we need to account for both error messages coming through
   sed -i '' 's/must specified/must be specified/' t/home/got
   cat <<'EOF' > t/home/want ; diffok
+Vault rekey canceled successfully
 !! Error processing unseal key:
 ["'key' must be specified in request body as JSON"]
 EOF
