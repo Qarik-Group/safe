@@ -1818,37 +1818,37 @@ EOF
     #######
     clearvault
     testing ${version} x509 commands
-  
+
     now running safe x509 issue without a path
     (run; ./safe x509 issue)                                                ; exitok $? 1
     now running safe x509 issue without a name
     (run; ./safe x509 issue --signed-by secret/enoent)                      ; exitok $? 1
     now running safe x509 issue with a non-existent ca
     (run; ./safe x509 issue --signed-by secret/enoent secret/cert)          ; exitok $? 1
-  
+
     now generating a new self-signed certificate
     (run; ./safe x509 issue secret/x509/self-signed --name www.example.com) ; exitok $? 0
     now validating our self-signed certificate
     (run; ./safe x509 validate secret/x509/self-signed)                     ; exitok $? 0
-  
+
     ok_key secret/x509/self-signed:{certificate,key,combined}
     no_key secret/x509/self-signed:{serial,crl}
-  
+
     now validating the certificate applicability
     (run; ./safe x509 check secret/x509/self-signed)                        ; exitok $? 0
     (run; ./safe x509 check secret/x509/self-signed --for www.example.com)  ; exitok $? 0
     (run; ./safe x509 check secret/x509/self-signed --for mail.example.com) ; exitok $? 1
     (run; ./safe x509 check secret/x509/self-signed --for test@example.com) ; exitok $? 1
     (run; ./safe x509 check secret/x509/self-signed --for 10.40.5.6)        ; exitok $? 1
-  
+
     now running safe x509 issue without a name
     (run; ./safe x509 issue secret/fail-without-name)                       ; exitok $? 1
     no_key secret/fail-without-name:{certificate,key,combined,serial,crl}
-  
+
     now generate a CA certificate
     (run; ./safe x509 issue secret/x509/ca --name ca.example.com --ca)      ; exitok $? 0
     ok_key secret/x509/ca:{certificate,key,combined,serial,crl}
-  
+
     now validating our new CA certificate
     (run; ./safe x509 validate secret/x509/ca --ca)                         ; exitok $? 0
     (run; ./safe x509 validate secret/x509/ca --not-expired)                ; exitok $? 0
@@ -1856,7 +1856,7 @@ EOF
     (run; ./safe x509 validate secret/x509/ca --for www.example.com)        ; exitok $? 1
     (run; ./safe x509 validate secret/x509/ca --signed-by secret/x509/ca \
                                               --not-revoked)                ; exitok $? 0
-  
+
     now running safe x509 check without a path
     (run; ./safe x509 check)                                                ; exitok $? 1
     now running safe x509 check with --signed-by but no path
@@ -1865,7 +1865,7 @@ EOF
     (run; ./safe x509 check --signed-by secret/enoent secret/cert)          ; exitok $? 1
     now running safe x509 check with a bad certificate path
     (run; ./safe x509 check --signed-by secret/x509/ca secret/enoent)       ; exitok $? 1
-  
+
     now issuing a CA-signed certificate
     (run; ./safe x509 issue secret/x509/signed --signed-by secret/x509/ca \
                                                --name mail.example.com)     ; exitok $? 0
@@ -1874,7 +1874,7 @@ EOF
                                                   --not-expired \
                                                   --not-revoked \
                                                   --for mail.example.com)   ; exitok $? 0
-  
+
     now running safe x509 revoke without a path
     (run; ./safe x509 revoke)                                               ; exitok $? 1
     (run; ./safe x509 revoke --signed-by secret/x509/ca)                    ; exitok $? 1
@@ -1882,7 +1882,7 @@ EOF
     (run; ./safe x509 revoke --signed-by secret/x509/ca secret/enoent)      ; exitok $? 1
     now running safe x509 revoke with a bad CA
     (run; ./safe x509 revoke --signed-by secret/enoent secret/x509/signed)  ; exitok $? 1
-  
+
     now running safe x509 crl --renew without a path
     (run; ./safe x509 crl --renew)                                          ; exitok $? 1
     now running safe x509 crl with a CA path but no --renew
@@ -1893,7 +1893,7 @@ EOF
     (run; ./safe x509 crl --renew secret/x509/signed)                       ; exitok $? 1
     now running safe x509 crl --renew
     (run; ./safe x509 crl --renew secret/x509/ca)                           ; exitok $? 0
-  
+
     now revoke our signed certificate
     (run; ./safe x509 revoke secret/x509/signed --signed-by secret/x509/ca) ; exitok $? 0
     now validating that our signed certificate is only revoked
@@ -1901,7 +1901,7 @@ EOF
                                                   --not-expired \
                                                   --revoked \
                                                   --for mail.example.com)   ; exitok $? 0
-  
+
     now issuing a certificate with lots of subjectAltNames
     (run; ./safe x509 issue secret/x509/multi --signed-by secret/x509/ca \
                                               --name dns.example.com \
@@ -1925,7 +1925,7 @@ EOF
                                               --for x.dns.example.com)     ; exitok $? 0
     (run; ./safe x509 check secret/x509/multi --for x.y.dns.example.com)   ; exitok $? 1
     (run; ./safe x509 check secret/x509/multi --for x.com)                 ; exitok $? 1
-  
+
     now issuing a wildcard SAN certificate
     (run; ./safe x509 issue secret/x509/wild --signed-by secret/x509/ca \
                                              --name cn.tld \
@@ -1942,7 +1942,7 @@ EOF
                                              --for tld)                    ; exitok $? 1
     (run; ./safe x509 check secret/x509/wild --signed-by secret/x509/ca \
                                              --for w.x.y.z.tld)            ; exitok $? 1
-  
+
     now issuing a weak 1024-bit certificate
     (run; ./safe x509 issue secret/x509/weak --bits 1024 -n weak.tld)      ; exitok $? 0
     now checking that our 1024-bit certificate is actually 1024-bits
@@ -1952,7 +1952,7 @@ EOF
     (run; ./safe x509 check secret/x509/weak --bits 1024 \
                                              --bits 2048 \
                                              --bits 4096)                  ; exitok $? 0
-  
+
     now issuing a moderately strong 2048-bit certificate
     (run; ./safe x509 issue secret/x509/meh --bits 2048 -n meh.tld)        ; exitok $? 0
     now checking that our 2048-bit certificate is actually 2048-bits
@@ -1962,7 +1962,7 @@ EOF
     (run; ./safe x509 check secret/x509/meh --bits 1024 \
                                             --bits 2048 \
                                             --bits 4096)                   ; exitok $? 0
-  
+
     now issuing a strong 4096-bit certificate
     (run; ./safe x509 issue secret/x509/strong --bits 4096 -n strong.tld)  ; exitok $? 0
     now checking that our 4096-bit certificate is actually 4096-bits
@@ -1972,14 +1972,14 @@ EOF
     (run; ./safe x509 check secret/x509/strong --bits 1024 \
                                                --bits 2048 \
                                                --bits 4096)                ; exitok $? 0
-  
+
     now issuing a certificate with an invalid strength
     (run; ./safe x509 issue secret/x509/bad --bits 1000000000 -n one.mil)  ; exitok $? 1
-  
+
     now checking the validity of multiple certificates
     (run; ./safe x509 check secret/x509/{weak,meh,strong})                 ; exitok $? 0
     (run; ./safe x509 check secret/x509/{weak,ENOENT,strong})              ; exitok $? 1
-  
+
     now issuing a CA certificate
     (run; ./safe x509 issue secret/x509/imposter --name x.y.z --ca)        ; exitok $? 0
     now checking that we got a CA certificate
@@ -1991,6 +1991,7 @@ EOF
   fi
 
   # REKEY TESTS
+  testing ${version} safe rekey
   now trying to rekey with a lower num-unseal-keys than keys-to-unseal should error
   (run; ./safe rekey --num-unseal-keys 3 --keys-to-unseal 5 >t/home/got 2>&1); exitok $? 1
   cat <<'EOF' > t/home/want ; diffok
@@ -2017,7 +2018,7 @@ EOF
   (run; ./safe rekey </dev/null >t/home/got 2>&1); exitok $? 1
   # the below sed is used, as earlier versions of vault had a bad error message, that later versions
   # corrected, so we need to account for both error messages coming through
-  sed -i '' 's/must specified/must be specified/' t/home/got
+  sed -i 's/must specified/must be specified/' t/home/got
   cat <<'EOF' > t/home/want ; diffok
 Vault rekey canceled successfully
 !! Error processing unseal key:
@@ -2027,20 +2028,6 @@ EOF
   now after failures to rekey, the cancel command was sent to reset the rekey
   (./safe curl GET sys/rekey/init | grep '"started":false'); exitok $? 0
 
-  if [[ -z $SAFE_DISABLE_GPG_TESTS ]]; then
-    now trying to rekey with the num-unseal-keys otherthan the number of gpg keys should error
-    gpg --import assets/gpg.pubkey
-    (run; ./safe rekey --num-unseal-keys 3 --gpg safe-testing@safe.com >t/home/got 2>&1); exitok $? 1
-    cat <<'EOF' > t/home/want ; diffok
-!! Both --gpg and --num-unseal-keys were specified, and their counts did not match.
-EOF
-
-    now trying to rekey with a gpg key that is not in the keyring fails
-    (run; ./safe rekey --gpg not-there@missing.com > t/home/got 2>&1); exitok $? 1
-    cat <<'EOF' >t/home/want ; diffok
-!! No GPG key found for not-there@missing.com in the local keyring
-EOF
-  fi
 
   now trying to rekey with no gpg usage
   restart_vault_server
@@ -2064,6 +2051,20 @@ EOF
   rm t/home/original
 
   if [[ -z $SAFE_DISABLE_GPG_TESTS ]]; then
+    testing ${version} safe rekey --gpg
+    now trying to rekey with the num-unseal-keys otherthan the number of gpg keys should error
+    gpg --import assets/gpg.pubkey
+    (run; ./safe rekey --num-unseal-keys 3 --gpg safe-testing@safe.com >t/home/got 2>&1); exitok $? 1
+    cat <<'EOF' > t/home/want ; diffok
+!! Both --gpg and --num-unseal-keys were specified, and their counts did not match.
+EOF
+
+    now trying to rekey with a gpg key that is not in the keyring fails
+    (run; ./safe rekey --gpg not-there@missing.com > t/home/got 2>&1); exitok $? 1
+    cat <<'EOF' >t/home/want ; diffok
+!! No GPG key found for not-there@missing.com in the local keyring
+EOF
+
     now trying to rekey with gpg keys matching the num-unseal-keys
     restart_vault_server
     (./safe set secret/handshake knock=knock); exitok $? 0

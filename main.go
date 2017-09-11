@@ -417,7 +417,7 @@ func main() {
 		v := connect()
 		st, err := v.Strongbox()
 		if err != nil {
-			return fmt.Errorf("%s; are you targeting a `safe' installation?")
+			return fmt.Errorf("%s; are you targeting a `safe' installation?", err)
 		}
 
 		n := 0
@@ -673,9 +673,9 @@ path:key will be output in string format.  To force the use of the fully qualifi
 {path: {key: value}} output in YAML format, use --yaml option.
 
 If a single path is specified along with --keys, the list of keys for that given
-path will be returned.  If that path does not contain any secrets (ie its not a 
+path will be returned.  If that path does not contain any secrets (ie its not a
 leaf node or does not exist), it will output nothing, but will not error.  If a
-specific key is specified, it will output only that key if it exists, otherwise 
+specific key is specified, it will output only that key if it exists, otherwise
 nothing. You can specify --yaml to force YAML output.
 
 If you specify more than one path, output is forced to be YAML, with the primary
