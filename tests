@@ -227,6 +227,7 @@ cleanup() {
 
 restart_vault_server() {
   kill_running_vault
+  rm t/home/log
   ./vaults/vault-${platform}-${version} server -dev -dev-listen-address 127.0.0.1:8199 >t/home/log 2>&1 &
   vault_pid=$!
   waitfor=600
