@@ -2018,7 +2018,7 @@ EOF
   (run; ./safe rekey </dev/null >t/home/got 2>&1); exitok $? 1
   # the below sed is used, as earlier versions of vault had a bad error message, that later versions
   # corrected, so we need to account for both error messages coming through
-  sed -i 's/must specified/must be specified/' t/home/got
+  sed -i -e 's/must specified/must be specified/' t/home/got
   cat <<'EOF' > t/home/want ; diffok
 Vault rekey canceled successfully
 !! Error processing unseal key:
