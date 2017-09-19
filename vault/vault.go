@@ -3,6 +3,7 @@ package vault
 import (
 	"bytes"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -39,6 +40,11 @@ func NewVault(url, token string) (*Vault, error) {
 		return nil, fmt.Errorf("no vault token specified; are you authenticated?")
 	}
 
+	rootCAs, err := x509.SystemCertPool()
+	if err != nil {
+		return nil, fmt.Errorf("could not get root CAs: %s", err)
+	}
+
 	return &Vault{
 		URL:   url,
 		Token: token,
@@ -46,7 +52,9 @@ func NewVault(url, token string) (*Vault, error) {
 			Transport: &http.Transport{
 				Proxy: http.ProxyFromEnvironment,
 				TLSClientConfig: &tls.Config{
+
 					InsecureSkipVerify: os.Getenv("VAULT_SKIP_VERIFY") != "",
+					RootCAs:            rootCAs,
 				},
 			},
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
