@@ -3,6 +3,7 @@ package vault
 import (
 	"bytes"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -39,6 +40,11 @@ func NewVault(url, token string) (*Vault, error) {
 		return nil, fmt.Errorf("no vault token specified; are you authenticated?")
 	}
 
+	roots, err := x509.SystemCertPool()
+	if err != nil {
+		return nil, fmt.Errorf("unable to retrieve system root certificate authorities: %s", err)
+	}
+
 	return &Vault{
 		URL:   url,
 		Token: token,
@@ -46,6 +52,7 @@ func NewVault(url, token string) (*Vault, error) {
 			Transport: &http.Transport{
 				Proxy: http.ProxyFromEnvironment,
 				TLSClientConfig: &tls.Config{
+					RootCAs: roots,
 					InsecureSkipVerify: os.Getenv("VAULT_SKIP_VERIFY") != "",
 				},
 			},
