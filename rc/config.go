@@ -10,10 +10,10 @@ import (
 )
 
 type Config struct {
-	Current string                 `yaml:"current"`
-	Targets map[string]interface{} `yaml:"targets"`
-	Aliases map[string]string      `yaml:"aliases"`
-	SkipVerify map[string]bool `yaml:"skip_verify"`
+	Current    string                 `yaml:"current"`
+	Targets    map[string]interface{} `yaml:"targets"`
+	Aliases    map[string]string      `yaml:"aliases"`
+	SkipVerify map[string]bool        `yaml:"skip_verify"`
 }
 
 func saferc() string {
@@ -82,9 +82,9 @@ func (c *Config) Write() error {
 
 	b, err = yaml.Marshal(
 		struct {
-			URL   string `json:"vault"`
-			Token string `json:"token"`
-			SkipVerify bool `json:"skip_verify"`
+			URL        string `json:"vault"`
+			Token      string `json:"token"`
+			SkipVerify bool   `json:"skip_verify"`
 		}{url, token, skipverify})
 	if err != nil {
 		return err

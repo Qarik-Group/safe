@@ -1,12 +1,12 @@
 package vault
 
 import (
-	"strings"
-	"regexp"
-	"net/http"
 	"encoding/json"
-	"io/ioutil"
 	"fmt"
+	"io/ioutil"
+	"net/http"
+	"regexp"
+	"strings"
 )
 
 func (v *Vault) SealKeys() (int, error) {
@@ -91,4 +91,3 @@ func (v *Vault) Unseal(keys []string) error {
 	}
 	return nil
 }
-

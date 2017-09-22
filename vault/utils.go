@@ -1,8 +1,8 @@
 package vault
 
 import (
-	"strings"
 	"regexp"
+	"strings"
 )
 
 // ParsePath splits the given path string into its respective secret path

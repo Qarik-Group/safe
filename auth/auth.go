@@ -8,9 +8,9 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httputil"
-	"strings"
 	"net/url"
 	"os"
+	"strings"
 )
 
 func shouldDebug() bool {
@@ -83,7 +83,7 @@ func authenticate(req *http.Request) (string, error) {
 		if err = json.Unmarshal(b, &e); err == nil && len(e.Errors) > 0 {
 			/* did our Github auth token fail? */
 			if strings.Contains(e.Errors[0], "401 Bad credentials") {
-				return "", fmt.Errorf("authentication failed.");
+				return "", fmt.Errorf("authentication failed.")
 			}
 			return "", fmt.Errorf("Vault API errored: %s", e.Errors[0])
 		}

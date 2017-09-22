@@ -1,16 +1,16 @@
 package vault
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"encoding/json"
-	"net/url"
 	"net/http"
+	"net/url"
 	"regexp"
 )
 
-func (v *Vault) Strongbox() (map[string] string, error) {
-	m := make(map[string] string)
+func (v *Vault) Strongbox() (map[string]string, error) {
+	m := make(map[string]string)
 
 	u, err := url.Parse(v.URL)
 	if err != nil {

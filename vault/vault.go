@@ -52,7 +52,7 @@ func NewVault(url, token string) (*Vault, error) {
 			Transport: &http.Transport{
 				Proxy: http.ProxyFromEnvironment,
 				TLSClientConfig: &tls.Config{
-					RootCAs: roots,
+					RootCAs:            roots,
 					InsecureSkipVerify: os.Getenv("VAULT_SKIP_VERIFY") != "",
 				},
 			},

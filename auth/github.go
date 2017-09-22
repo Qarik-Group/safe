@@ -1,12 +1,12 @@
 package auth
 
 import (
-	"fmt"
-	"net/http/httputil"
 	"encoding/json"
+	"fmt"
 	"net/http"
-	"strings"
+	"net/http/httputil"
 	"os"
+	"strings"
 
 	"github.com/starkandwayne/safe/prompt"
 )
