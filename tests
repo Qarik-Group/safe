@@ -324,6 +324,32 @@ knock: knock
 whos: there
 EOF
 
+  for p in /secret/handshake    \
+            secret///handshake  \
+       /////secret//////handshake; do
+    now retrieving non-canonical $p path
+    (run; ./safe get $p >t/home/got) ; exitok $? 0
+
+    now checking that we got the expected secrets in the output
+    cat >t/home/want <<EOF ; yamlok
+--- # secret/handshake
+knock: knock
+whos: there
+EOF
+  done
+
+  now checking that we can set non-canonical paths
+  (run; ./safe set /secret///non/canonical key=value)  ; exitok $? 0
+
+  now retrieving the secret from its canonical path
+  (run; ./safe get secret/non/canonical >t/home/got) ; exitok $? 0
+
+  now checking that the response is what we wrote
+  cat >t/home/want <<EOF ; yamlok
+--- # secret/non/canonical
+key: value
+EOF
+
 
   #######
   #clearvault

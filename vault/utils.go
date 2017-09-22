@@ -1,6 +1,9 @@
 package vault
 
-import "strings"
+import (
+	"strings"
+	"regexp"
+)
 
 // ParsePath splits the given path string into its respective secret path
 //   and contained key parts
@@ -10,6 +13,7 @@ func ParsePath(path string) (secret, key string) {
 		secret = path[:idx]
 		key = path[idx+1:]
 	}
+	secret = Canonicalize(secret)
 	return
 }
 
@@ -18,4 +22,14 @@ func ParsePath(path string) (secret, key string) {
 func PathHasKey(path string) bool {
 	_, key := ParsePath(path)
 	return key != ""
+}
+
+func Canonicalize(p string) string {
+	p = strings.TrimSuffix(p, "/")
+	p = strings.TrimPrefix(p, "/")
+
+	re := regexp.MustCompile("//+")
+	p = re.ReplaceAllString(p, "/")
+
+	return p
 }

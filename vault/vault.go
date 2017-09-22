@@ -218,6 +218,8 @@ func (v *Vault) Read(path string) (secret *Secret, err error) {
 // the given path.  Intermediate path nodes are suffixed with a single "/",
 // whereas leaf nodes (the secrets themselves) are not.
 func (v *Vault) List(path string) (paths []string, err error) {
+	path = Canonicalize(path)
+
 	req, err := http.NewRequest("GET", v.url("/v1/%s?list=1", path), nil)
 	if err != nil {
 		return
@@ -343,6 +345,8 @@ func (v *Vault) walktree(path string, options TreeOptions) (tree.Node, int, erro
 // Tree returns a tree that represents the hierarchy of paths contained
 // below the given path, inside of the Vault.
 func (v *Vault) Tree(path string, options TreeOptions) (tree.Node, error) {
+	path = Canonicalize(path)
+
 	t, _, err := v.walktree(path, options)
 	if err != nil {
 		return t, err
@@ -357,6 +361,8 @@ func (v *Vault) Tree(path string, options TreeOptions) (tree.Node, error) {
 
 // Write takes a Secret and writes it to the Vault at the specified path.
 func (v *Vault) Write(path string, s *Secret) error {
+	path = Canonicalize(path)
+
 	//If our secret has become empty (through key deletion, most likely)
 	// make sure to clean up the secret
 	if s.Empty() {
@@ -391,6 +397,8 @@ func (v *Vault) Write(path string, s *Secret) error {
 // Can also throw an error if contacting the backend failed, in which case that error
 // is returned.
 func (v *Vault) errIfFolder(path, message string, args ...interface{}) error {
+	path = Canonicalize(path)
+
 	//need to check if length of list is 0 because prior to vault 0.6.0, no 404 is
 	//given for attempting to list a path which does not exist.
 	if paths, err := v.List(path); err == nil && len(paths) != 0 { //...see if it is a subtree "folder"
@@ -406,6 +414,8 @@ func (v *Vault) errIfFolder(path, message string, args ...interface{}) error {
 }
 
 func (v *Vault) verifySecretExists(path string) error {
+	path = Canonicalize(path)
+
 	_, err := v.Read(path)
 	if err != nil && IsNotFound(err) { //if this was not a leaf node (secret)...
 		if folderErr := v.errIfFolder(path, "`%s` points to a folder, not a secret", path); folderErr != nil {
@@ -418,6 +428,8 @@ func (v *Vault) verifySecretExists(path string) error {
 //DeleteTree recursively deletes the leaf nodes beneath the given root until
 // the root has no children, and then deletes that.
 func (v *Vault) DeleteTree(root string) error {
+	root = Canonicalize(root)
+
 	tree, err := v.Tree(root, TreeOptions{})
 	if err != nil {
 		return err
@@ -433,6 +445,8 @@ func (v *Vault) DeleteTree(root string) error {
 
 // Delete removes the secret or key stored at the specified path.
 func (v *Vault) Delete(path string) error {
+	path = Canonicalize(path)
+
 	if err := v.verifySecretExists(path); err != nil {
 		return err
 	}
@@ -504,6 +518,9 @@ func (v *Vault) deleteIfPresent(path string) error {
 // no-key -> key is bad. That makes no sense and the user should feel bad.
 // Returns KeyNotFoundError if there is no such specified key in the secret at oldpath
 func (v *Vault) Copy(oldpath, newpath string, skipIfExists bool, quiet bool) error {
+	oldpath = Canonicalize(oldpath)
+	newpath = Canonicalize(newpath)
+
 	if err := v.verifySecretExists(oldpath); err != nil {
 		return err
 	}
@@ -577,6 +594,9 @@ func (v *Vault) copyKey(oldpath, newpath string, src *Secret, skipIfExists bool)
 // This function will get confused about 'secret:key' syntax, so don't let those
 // get routed here - they don't make sense for a recursion anyway.
 func (v *Vault) MoveCopyTree(oldRoot, newRoot string, f func(string, string, bool, bool) error, skipIfExists bool, quiet bool) error {
+	oldRoot = Canonicalize(oldRoot)
+	newRoot = Canonicalize(newRoot)
+
 	tree, err := v.Tree(oldRoot, TreeOptions{})
 	if err != nil {
 		return err
@@ -625,6 +645,9 @@ func (v *Vault) MoveCopyTree(oldRoot, newRoot string, f func(string, string, boo
 // A move is semantically a copy and then a deletion of the original item. For
 // more information on the behavior of Move pertaining to keys, look at Copy.
 func (v *Vault) Move(oldpath, newpath string, skipIfExists bool, quiet bool) error {
+	oldpath = Canonicalize(oldpath)
+	newpath = Canonicalize(newpath)
+
 	if err := v.verifySecretExists(oldpath); err != nil {
 		return err
 	}
