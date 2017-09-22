@@ -1,9 +1,12 @@
 package auth
 
 import (
+	"fmt"
+	"net/http/httputil"
 	"encoding/json"
 	"net/http"
 	"strings"
+	"os"
 
 	"github.com/starkandwayne/safe/prompt"
 )
@@ -25,5 +28,9 @@ func Github(addr string) (string, error) {
 		return "", err
 	}
 
+	if shouldDebug() {
+		r, _ := httputil.DumpRequest(req, true)
+		fmt.Fprintf(os.Stderr, "Request:\n%s\n----------------\n", r)
+	}
 	return authenticate(req)
 }

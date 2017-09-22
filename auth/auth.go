@@ -7,9 +7,16 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/http/httputil"
+	"strings"
 	"net/url"
 	"os"
 )
+
+func shouldDebug() bool {
+	d := strings.ToLower(os.Getenv("DEBUG"))
+	return d != "" && d != "false" && d != "0" && d != "no" && d != "off"
+}
 
 func authurl(base, f string, args ...interface{}) string {
 	return base + fmt.Sprintf(f, args...)
@@ -46,6 +53,10 @@ func authenticate(req *http.Request) (string, error) {
 			return "", err
 		}
 
+		if shouldDebug() {
+			r, _ := httputil.DumpResponse(res, true)
+			fmt.Fprintf(os.Stderr, "Response:\n%s\n----------------\n", r)
+		}
 		// Vault returns a 307 to redirect during HA / Auth
 		if res.StatusCode == 307 {
 			// Note: this does not handle relative Location headers
@@ -61,6 +72,22 @@ func authenticate(req *http.Request) (string, error) {
 	}
 
 	if res.StatusCode != 200 {
+		b, err := ioutil.ReadAll(res.Body)
+		if err != nil {
+			return "", err
+		}
+
+		var e struct {
+			Errors []string `json:"errors"`
+		}
+		if err = json.Unmarshal(b, &e); err == nil && len(e.Errors) > 0 {
+			/* did our Github auth token fail? */
+			if strings.Contains(e.Errors[0], "401 Bad credentials") {
+				return "", fmt.Errorf("authentication failed.");
+			}
+			return "", fmt.Errorf("Vault API errored: %s", e.Errors[0])
+		}
+
 		return "", fmt.Errorf("API %s", res.Status)
 	}
 
