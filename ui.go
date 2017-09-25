@@ -36,15 +36,27 @@ func parseKeyVal(key string, quiet bool) (string, string, bool, error) {
 		if l[1] == "" {
 			return l[0], "", true, fmt.Errorf("No file specified: expecting %s@<filename>", l[0])
 		}
-		// TODO: Add support for - to read from STDIN
-		b, err := ioutil.ReadFile(l[1])
-		if err != nil {
-			return l[0], "", true, fmt.Errorf("Failed to read contents of %s: %s", l[1], err)
+
+		if l[1] == "-" {
+			b, err := ioutil.ReadAll(os.Stdin)
+			if err != nil {
+				return l[0], "", true, fmt.Errorf("Failed to read from standard input: %s", err)
+			}
+			if !quiet {
+				ansi.Fprintf(os.Stderr, "%s: <@M{$stdin}\n", l[0])
+			}
+			return l[0], string(b), false, nil
+
+		} else {
+			b, err := ioutil.ReadFile(l[1])
+			if err != nil {
+				return l[0], "", true, fmt.Errorf("Failed to read contents of %s: %s", l[1], err)
+			}
+			if !quiet {
+				ansi.Fprintf(os.Stderr, "%s: <@C{%s}\n", l[0], l[1])
+			}
+			return l[0], string(b), false, nil
 		}
-		if !quiet {
-			ansi.Fprintf(os.Stderr, "%s: <@C{%s}\n", l[0], l[1])
-		}
-		return l[0], string(b), false, nil
 	}
 	return key, "", true, nil
 }
