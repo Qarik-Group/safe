@@ -1840,9 +1840,10 @@ prints out information about a certificate, including:
 
 			ansi.Printf("  @G{%s}\n", cert.Subject())
 			if cert.Subject() != cert.Issuer() {
-				ansi.Printf("  issued by: @C{%s}\n\n", cert.Issuer())
+				ansi.Printf("  issued by: @C{%s}\n", cert.Issuer())
 			}
 
+			ansi.Printf("\n")
 			toStart := cert.Certificate.NotBefore.Sub(time.Now())
 			toEnd := cert.Certificate.NotAfter.Sub(time.Now())
 
