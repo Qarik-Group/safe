@@ -65,8 +65,6 @@ type Options struct {
 	HelpCommand    struct{} `cli:"help"`
 	VersionCommand struct{} `cli:"version"`
 
-	/* need option-less commands as well (FIXME) */
-
 	Targets struct{} `cli:"targets"`
 	Status  struct{} `cli:"status"`
 	Unseal  struct{} `cli:"unseal"`
@@ -88,6 +86,10 @@ type Options struct {
 		KeysOnly bool `cli:"--keys"`
 		Yaml     bool `cli:"--yaml"`
 	} `cli:"get, read, cat"`
+
+	List struct {
+		Single bool `cli:"-1"`
+	} `cli:"ls"`
 
 	Paths struct {
 		ShowKeys bool `cli:"--keys"`
@@ -799,6 +801,74 @@ paths/keys.
 		} else {
 			yml, _ := yaml.Marshal(results)
 			fmt.Printf("%s\n", string(yml))
+		}
+		return nil
+	})
+
+	r.Dispatch("ls", &Help{
+		Summary: "Print the keys and sub-directories at one or more paths",
+		Usage:   "safe ls [-1] [PATH ...]",
+		Type:    NonDestructiveCommand,
+		Description: `
+`,
+	}, func(command string, args ...string) error {
+		rc.Apply()
+		v := connect()
+		if len(args) == 0 {
+			secrets, err := v.Mounts("secret")
+			if err != nil {
+				return err
+			}
+			kvs, err := v.Mounts("kv")
+			if err != nil {
+				return err
+			}
+
+			secrets = append(secrets, kvs...)
+			sort.Strings(secrets)
+
+			if opt.List.Single {
+				for _, path := range secrets {
+					ansi.Printf("@B{%s/}\n", path)
+				}
+			} else {
+				for _, path := range secrets {
+					ansi.Printf("@B{%s/}  ", path)
+				}
+				ansi.Printf("\n")
+			}
+			return nil
+		}
+		for _, path := range args {
+			paths, err := v.List(path)
+			if err != nil {
+				return err
+			}
+
+			if len(args) != 1 {
+				ansi.Printf("@C{%s}:\n", path)
+			}
+			if opt.List.Single {
+				for _, s := range paths {
+					if strings.HasSuffix(s, "/") {
+						ansi.Printf("@B{%s}\n", s)
+					} else {
+						ansi.Printf("@G{%s}\n", s)
+					}
+				}
+			} else {
+				for _, s := range paths {
+					if strings.HasSuffix(s, "/") {
+						ansi.Printf("@B{%s}  ", s)
+					} else {
+						ansi.Printf("@G{%s}  ", s)
+					}
+				}
+				ansi.Printf("\n")
+			}
+			if len(args) != 1 {
+				ansi.Printf("\n")
+			}
 		}
 		return nil
 	})

@@ -692,32 +692,47 @@ func convertMountpoint(o interface{}) (mountpoint, bool) {
 	return mount, false
 }
 
-func (v *Vault) IsMounted(typ, path string) (bool, error) {
+func (v *Vault) Mounts(typ string) ([]string, error) {
 	res, err := v.Curl("GET", "sys/mounts", nil)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 
 	body, err := ioutil.ReadAll(res.Body)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 
 	if res.StatusCode != 200 {
-		return false, DecodeErrorResponse(body)
+		return nil, DecodeErrorResponse(body)
 	}
 
 	mm := make(map[string]interface{})
 	if err := json.Unmarshal(body, &mm); err != nil {
-		return false, fmt.Errorf("Received invalid JSON '%s' from Vault: %s\n",
+		return nil, fmt.Errorf("Received invalid JSON '%s' from Vault: %s\n",
 			body, err)
 	}
 
+	l := make([]string, 0)
 	for k, m := range mm {
 		if mount, ok := convertMountpoint(m); ok {
-			if (k == path || k == path+"/") && mount.Type == typ {
-				return true, nil
+			if (typ == "" || mount.Type == typ) {
+				l = append(l, strings.TrimSuffix(k, "/") + "/")
 			}
+		}
+	}
+	return l, nil
+}
+
+func (v *Vault) IsMounted(typ, path string) (bool, error) {
+	mounts, err := v.Mounts(typ)
+	if err != nil {
+		return false, err
+	}
+
+	for _, at := range mounts {
+		if at == path || at == path+"/" {
+			return true, nil
 		}
 	}
 	return false, nil

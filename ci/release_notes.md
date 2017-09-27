@@ -1,3 +1,9 @@
+## New Features
+
+- New `safe ls` command lets you list individual levels of the
+  directory hierarchy.  Could be useful for some shell
+  auto-completion.  Just sayin'
+
 ## Improvements
 
 - Fix a formatting issue with the output of `safe x509 show`
