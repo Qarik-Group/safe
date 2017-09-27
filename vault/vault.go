@@ -46,7 +46,7 @@ func NewVault(url, token string) (*Vault, error) {
 	}
 
 	return &Vault{
-		URL:   url,
+		URL:   strings.TrimSuffix(url, "/"),
 		Token: token,
 		Client: &http.Client{
 			Transport: &http.Transport{
