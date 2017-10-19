@@ -1936,7 +1936,7 @@ prints out information about a certificate, including:
 			} else if days < 30 {
 				ansi.Printf("  @Y{expires in %d days}\n", days)
 			} else {
-				ansi.Printf("  expires in a @G{%d days}\n", days)
+				ansi.Printf("  expires in @G{%d days}\n", days)
 			}
 			ansi.Printf("  valid from @C{%s} - @C{%s}", cert.Certificate.NotBefore.Format("Jan 2 2006"), cert.Certificate.NotAfter.Format("Jan 2 2006"))
 
