@@ -362,6 +362,9 @@ func (v *Vault) Tree(path string, options TreeOptions) (tree.Node, error) {
 // Write takes a Secret and writes it to the Vault at the specified path.
 func (v *Vault) Write(path string, s *Secret) error {
 	path = Canonicalize(path)
+	if strings.Contains(path, ":") {
+		return fmt.Errorf("cannot write to paths in /path:key notation")
+	}
 
 	//If our secret has become empty (through key deletion, most likely)
 	// make sure to clean up the secret

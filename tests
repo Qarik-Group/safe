@@ -338,6 +338,9 @@ whos: there
 EOF
   done
 
+  now checking that we cannot set sub-keys on keyed path
+  (run; ./safe set secret/inner:secret key=value) ; exitok $? 1
+
   now checking that we can set non-canonical paths
   (run; ./safe set /secret///non/canonical key=value)  ; exitok $? 0
 
