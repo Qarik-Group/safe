@@ -8,10 +8,10 @@
 			"revision": "73d445a93680fa1a78ae23a5839bad48f32ba1ee"
 		},
 		{
-			"checksumSHA1": "hZuQ/JSbE5sk08X6fbM4Yu7tOgM=",
+			"checksumSHA1": "DE6jvAzC7h6Mczf8Tr0X5SkzeNI=",
 			"path": "github.com/jhunt/go-ansi",
-			"revision": "49c23e19da3097d09545c7704e2b8dbf67bcf488",
-			"revisionTime": "2017-11-20T21:26:09Z"
+			"revision": "52b391f2c38fac4d0693caffcf1c01f4cabced89",
+			"revisionTime": "2017-11-20T21:45:13Z"
 		},
 		{
 			"checksumSHA1": "cMK2e7uclcXbkpLtyuV+6yRh0Bw=",

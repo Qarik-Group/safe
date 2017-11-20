@@ -4,7 +4,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io/ioutil"
 	"net/http/httputil"
 	"os"
@@ -16,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jhunt/go-ansi"
+	fmt "github.com/jhunt/go-ansi"
 	"github.com/jhunt/go-cli"
 	"gopkg.in/yaml.v2"
 
@@ -31,24 +30,24 @@ var Version string
 func connect() *vault.Vault {
 	addr := os.Getenv("VAULT_ADDR")
 	if addr == "" {
-		ansi.Fprintf(os.Stderr, "@R{You are not targeting a Vault.}\n")
-		ansi.Fprintf(os.Stderr, "Try @C{safe target http://your-vault alias}\n")
-		ansi.Fprintf(os.Stderr, " or @C{safe target alias}\n")
+		fmt.Fprintf(os.Stderr, "@R{You are not targeting a Vault.}\n")
+		fmt.Fprintf(os.Stderr, "Try @C{safe target http://your-vault alias}\n")
+		fmt.Fprintf(os.Stderr, " or @C{safe target alias}\n")
 		os.Exit(1)
 	}
 
 	if os.Getenv("VAULT_TOKEN") == "" {
-		ansi.Fprintf(os.Stderr, "@R{You are not authenticated to a Vault.}\n")
-		ansi.Fprintf(os.Stderr, "Try @C{safe auth ldap}\n")
-		ansi.Fprintf(os.Stderr, " or @C{safe auth github}\n")
-		ansi.Fprintf(os.Stderr, " or @C{safe auth token}\n")
-		ansi.Fprintf(os.Stderr, " or @C{safe auth userpass}\n")
+		fmt.Fprintf(os.Stderr, "@R{You are not authenticated to a Vault.}\n")
+		fmt.Fprintf(os.Stderr, "Try @C{safe auth ldap}\n")
+		fmt.Fprintf(os.Stderr, " or @C{safe auth github}\n")
+		fmt.Fprintf(os.Stderr, " or @C{safe auth token}\n")
+		fmt.Fprintf(os.Stderr, " or @C{safe auth userpass}\n")
 		os.Exit(1)
 	}
 
 	v, err := vault.NewVault(addr, os.Getenv("VAULT_TOKEN"))
 	if err != nil {
-		ansi.Fprintf(os.Stderr, "@R{!! %s}\n", err)
+		fmt.Fprintf(os.Stderr, "@R{!! %s}\n", err)
 		os.Exit(1)
 	}
 	return v
@@ -253,7 +252,7 @@ func main() {
 			if name == cfg.Current {
 				format = current_fmt
 			}
-			ansi.Fprintf(os.Stderr, format, name, skip, t.URL)
+			fmt.Fprintf(os.Stderr, format, name, skip, t.URL)
 		}
 		fmt.Fprintf(os.Stderr, "\n")
 		return nil
@@ -277,21 +276,21 @@ func main() {
 		if opt.Target.Interactive {
 			for {
 				if len(cfg.Vaults) == 0 {
-					ansi.Fprintf(os.Stderr, "@R{No Vaults have been targeted yet.}\n\n")
-					ansi.Fprintf(os.Stderr, "You will need to target a Vault manually first.\n\n")
-					ansi.Fprintf(os.Stderr, "Try something like this:\n")
-					ansi.Fprintf(os.Stderr, "     @C{safe target ops https://address.of.your.vault}\n")
-					ansi.Fprintf(os.Stderr, "     @C{safe auth (github|token|ldap|userpass)}\n")
-					ansi.Fprintf(os.Stderr, "\n")
+					fmt.Fprintf(os.Stderr, "@R{No Vaults have been targeted yet.}\n\n")
+					fmt.Fprintf(os.Stderr, "You will need to target a Vault manually first.\n\n")
+					fmt.Fprintf(os.Stderr, "Try something like this:\n")
+					fmt.Fprintf(os.Stderr, "     @C{safe target ops https://address.of.your.vault}\n")
+					fmt.Fprintf(os.Stderr, "     @C{safe auth (github|token|ldap|userpass)}\n")
+					fmt.Fprintf(os.Stderr, "\n")
 					os.Exit(1)
 				}
 				r.Execute("targets")
 
-				ansi.Fprintf(os.Stderr, "Which Vault would you like to target?\n")
+				fmt.Fprintf(os.Stderr, "Which Vault would you like to target?\n")
 				t := prompt.Normal("@G{> }")
 				err := cfg.SetCurrent(t, skipverify)
 				if err != nil {
-					ansi.Fprintf(os.Stderr, "@R{%s}\n", err)
+					fmt.Fprintf(os.Stderr, "@R{%s}\n", err)
 					continue
 				}
 				err = cfg.Write()
@@ -302,19 +301,19 @@ func main() {
 				if !cfg.Verified() {
 					skip = " (skipping TLS certificate verification)"
 				}
-				ansi.Fprintf(os.Stderr, "Now targeting @C{%s} at @C{%s}@R{%s}\n\n", cfg.Current, cfg.URL(), skip)
+				fmt.Fprintf(os.Stderr, "Now targeting @C{%s} at @C{%s}@R{%s}\n\n", cfg.Current, cfg.URL(), skip)
 				return nil
 			}
 		}
 		if len(args) == 0 {
 			if cfg.Current == "" {
-				ansi.Fprintf(os.Stderr, "@R{No Vault currently targeted}\n")
+				fmt.Fprintf(os.Stderr, "@R{No Vault currently targeted}\n")
 			} else {
 				skip := ""
 				if !cfg.Verified() {
 					skip = " (skipping TLS certificate verification)"
 				}
-				ansi.Fprintf(os.Stderr, "Currently targeting @C{%s} at @C{%s}@R{%s}\n\n", cfg.Current, cfg.URL(), skip)
+				fmt.Fprintf(os.Stderr, "Currently targeting @C{%s} at @C{%s}@R{%s}\n\n", cfg.Current, cfg.URL(), skip)
 			}
 			return nil
 		}
@@ -327,7 +326,7 @@ func main() {
 			if !cfg.Verified() {
 				skip = " (skipping TLS certificate verification)"
 			}
-			ansi.Fprintf(os.Stderr, "Now targeting @C{%s} at @C{%s}@R{%s}\n\n", cfg.Current, cfg.URL(), skip)
+			fmt.Fprintf(os.Stderr, "Now targeting @C{%s} at @C{%s}@R{%s}\n\n", cfg.Current, cfg.URL(), skip)
 			return cfg.Write()
 		}
 
@@ -341,7 +340,7 @@ func main() {
 			if err != nil {
 				return err
 			}
-			ansi.Fprintf(os.Stderr, "Now targeting @C{%s} at @C{%s}\n\n", cfg.Current, cfg.URL())
+			fmt.Fprintf(os.Stderr, "Now targeting @C{%s} at @C{%s}\n\n", cfg.Current, cfg.URL())
 			return cfg.Write()
 		}
 
@@ -364,9 +363,9 @@ func main() {
 
 		for addr, state := range st {
 			if state == "sealed" {
-				ansi.Printf("@R{%s is sealed}\n", addr)
+				fmt.Printf("@R{%s is sealed}\n", addr)
 			} else {
-				ansi.Printf("@G{%s is unsealed}\n", addr)
+				fmt.Printf("@G{%s is unsealed}\n", addr)
 			}
 		}
 		return nil
@@ -398,9 +397,9 @@ func main() {
 		}
 
 		if n == 0 {
-			ansi.Printf("@C{all vaults are already unsealed!}\n")
+			fmt.Printf("@C{all vaults are already unsealed!}\n")
 		} else {
-			ansi.Printf("You need %d key(s) to unseal the vaults.\n\n", nkeys)
+			fmt.Printf("You need %d key(s) to unseal the vaults.\n\n", nkeys)
 			keys := make([]string, nkeys)
 
 			for i := 0; i < nkeys; i++ {
@@ -409,7 +408,7 @@ func main() {
 
 			for addr, state := range st {
 				if state == "sealed" {
-					ansi.Printf("unsealing @G{%s}...\n", addr)
+					fmt.Printf("unsealing @G{%s}...\n", addr)
 					v.URL = addr
 					if err = v.Unseal(keys); err != nil {
 						return err
@@ -441,7 +440,7 @@ func main() {
 		}
 
 		if n == 0 {
-			ansi.Printf("@C{all vaults are already sealed!}\n")
+			fmt.Printf("@C{all vaults are already sealed!}\n")
 		}
 
 		for n > 0 {
@@ -454,7 +453,7 @@ func main() {
 						return err
 					}
 					if sealed {
-						ansi.Printf("sealed @G{%s}...\n", addr)
+						fmt.Printf("sealed @G{%s}...\n", addr)
 						st[addr] = "sealed"
 						n--
 					}
@@ -474,8 +473,8 @@ func main() {
 		Type:    AdministrativeCommand,
 	}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
-		ansi.Fprintf(os.Stderr, "  @B{VAULT_ADDR}  @G{%s}\n", os.Getenv("VAULT_ADDR"))
-		ansi.Fprintf(os.Stderr, "  @B{VAULT_TOKEN} @G{%s}\n", os.Getenv("VAULT_TOKEN"))
+		fmt.Fprintf(os.Stderr, "  @B{VAULT_ADDR}  @G{%s}\n", os.Getenv("VAULT_ADDR"))
+		fmt.Fprintf(os.Stderr, "  @B{VAULT_TOKEN} @G{%s}\n", os.Getenv("VAULT_TOKEN"))
 		return nil
 	})
 
@@ -495,7 +494,7 @@ func main() {
 		var token string
 		var err error
 
-		ansi.Fprintf(os.Stderr, "Authenticating against @C{%s} at @C{%s}\n", cfg.Current, cfg.URL())
+		fmt.Fprintf(os.Stderr, "Authenticating against @C{%s} at @C{%s}\n", cfg.Current, cfg.URL())
 		switch method {
 		case "token":
 			token, err = auth.Token(os.Getenv("VAULT_ADDR"))
@@ -573,7 +572,7 @@ func main() {
 		}
 		if len(clobberKeys) > 0 {
 			if !opt.Quiet {
-				ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to update} @C{%s}@R{, as the following keys would be clobbered:} @C{%s}\n",
+				fmt.Fprintf(os.Stderr, "@R{Cowardly refusing to update} @C{%s}@R{, as the following keys would be clobbered:} @C{%s}\n",
 					path, strings.Join(clobberKeys, ", "))
 			}
 			return nil
@@ -778,7 +777,7 @@ paths/keys.
 		}
 		if num_errs > 0 {
 			if opt.Get.KeysOnly {
-				ansi.Fprintf(os.Stderr, "@y{WARNING:} %s\n", err)
+				fmt.Fprintf(os.Stderr, "@y{WARNING:} %s\n", err)
 			} else {
 				return err
 			}
@@ -840,13 +839,13 @@ paths/keys.
 
 			if opt.List.Single {
 				for _, path := range secrets {
-					ansi.Printf("@B{%s/}\n", path)
+					fmt.Printf("@B{%s/}\n", path)
 				}
 			} else {
 				for _, path := range secrets {
-					ansi.Printf("@B{%s/}  ", path)
+					fmt.Printf("@B{%s/}  ", path)
 				}
-				ansi.Printf("\n")
+				fmt.Printf("\n")
 			}
 			return nil
 		}
@@ -857,28 +856,28 @@ paths/keys.
 			}
 
 			if len(args) != 1 {
-				ansi.Printf("@C{%s}:\n", path)
+				fmt.Printf("@C{%s}:\n", path)
 			}
 			if opt.List.Single {
 				for _, s := range paths {
 					if strings.HasSuffix(s, "/") {
-						ansi.Printf("@B{%s}\n", s)
+						fmt.Printf("@B{%s}\n", s)
 					} else {
-						ansi.Printf("@G{%s}\n", s)
+						fmt.Printf("@G{%s}\n", s)
 					}
 				}
 			} else {
 				for _, s := range paths {
 					if strings.HasSuffix(s, "/") {
-						ansi.Printf("@B{%s}  ", s)
+						fmt.Printf("@B{%s}  ", s)
 					} else {
-						ansi.Printf("@G{%s}  ", s)
+						fmt.Printf("@G{%s}  ", s)
 					}
 				}
-				ansi.Printf("\n")
+				fmt.Printf("\n")
 			}
 			if len(args) != 1 {
-				ansi.Printf("\n")
+				fmt.Printf("\n")
 			}
 		}
 		return nil
@@ -897,7 +896,7 @@ to get your bearings.
 	}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
 		opts := vault.TreeOptions{
-			UseANSI:    ansi.ShouldColorize(os.Stdout),
+			UseANSI:    true,
 			HideLeaves: opt.Tree.HideLeaves,
 			ShowKeys:   opt.Tree.ShowKeys,
 		}
@@ -926,7 +925,7 @@ to get your bearings.
 				if i < len(args)-1 {
 					line = r1.ReplaceAllString(r2.ReplaceAllString(line, "├"), "│")
 				}
-				fmt.Println(line)
+				fmt.Printf("%s\n", line)
 			}
 		}
 		return nil
@@ -1052,7 +1051,7 @@ to get your bearings.
 		}
 
 		if opt.SkipIfExists {
-			ansi.Fprintf(os.Stderr, "@R{!!} @C{--no-clobber} @R{is incompatible with} @C{safe import}\n")
+			fmt.Fprintf(os.Stderr, "@R{!!} @C{--no-clobber} @R{is incompatible with} @C{safe import}\n")
 			r.ExitWithUsage("import")
 		}
 
@@ -1179,7 +1178,7 @@ The following options are recognized:
 			exists := (err == nil)
 			if opt.SkipIfExists && exists && s.Has(key) {
 				if !opt.Quiet {
-					ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to update} @C{%s:%s} @R{as it is already present in Vault}\n", path, key)
+					fmt.Fprintf(os.Stderr, "@R{Cowardly refusing to update} @C{%s:%s} @R{as it is already present in Vault}\n", path, key)
 				}
 				continue
 			}
@@ -1228,7 +1227,7 @@ public key, formatted for use in an SSH authorized_keys file, under 'public'.
 			exists := (err == nil)
 			if opt.SkipIfExists && exists && (s.Has("private") || s.Has("public") || s.Has("fingerprint")) {
 				if !opt.Quiet {
-					ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to generate an SSH key at} @C{%s} @R{as it is already present in Vault}\n", path)
+					fmt.Fprintf(os.Stderr, "@R{Cowardly refusing to generate an SSH key at} @C{%s} @R{as it is already present in Vault}\n", path)
 				}
 				continue
 			}
@@ -1275,7 +1274,7 @@ be PEM-encoded.
 			exists := (err == nil)
 			if opt.SkipIfExists && exists && (s.Has("private") || s.Has("public")) {
 				if !opt.Quiet {
-					ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to generate an RSA key at} @C{%s} @R{as it is already present in Vault}\n", path)
+					fmt.Fprintf(os.Stderr, "@R{Cowardly refusing to generate an RSA key at} @C{%s} @R{as it is already present in Vault}\n", path)
 				}
 				continue
 			}
@@ -1320,7 +1319,7 @@ NBITS defaults to 2048.
 		exists := (err == nil)
 		if opt.SkipIfExists && exists && s.Has("dhparam-pem") {
 			if !opt.Quiet {
-				ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to generate a Diffie-Hellman key exchange parameter set at} @C{%s} @R{as it is already present in Vault}\n", path)
+				fmt.Fprintf(os.Stderr, "@R{Cowardly refusing to generate a Diffie-Hellman key exchange parameter set at} @C{%s} @R{as it is already present in Vault}\n", path)
 			}
 			return nil
 		}
@@ -1351,7 +1350,7 @@ NBITS defaults to 2048.
 		rc.Apply(opt.UseTarget)
 
 		if opt.SkipIfExists {
-			ansi.Fprintf(os.Stderr, "@C{--no-clobber} @Y{specified, but is ignored for} @C{safe vault}\n")
+			fmt.Fprintf(os.Stderr, "@C{--no-clobber} @Y{specified, but is ignored for} @C{safe vault}\n")
 		}
 
 		cmd := exec.Command("vault", args...)
@@ -1399,12 +1398,12 @@ unseal keys, and should be treated accordingly.
 			for _, email := range opt.Rekey.GPG {
 				output, err := exec.Command("gpg", "--export", email).Output()
 				if err != nil {
-					return ansi.Errorf("Failed to retrieve GPG key for %s from local keyring: %s", email, err.Error())
+					return fmt.Errorf("Failed to retrieve GPG key for %s from local keyring: %s", email, err.Error())
 				}
 
 				// gpg --export returns 0, with no stdout if the key wasn't found, so handle that
 				if output == nil || len(output) == 0 {
-					return ansi.Errorf("No GPG key found for %s in the local keyring", email)
+					return fmt.Errorf("No GPG key found for %s in the local keyring", email)
 				}
 				gpgKeys = append(gpgKeys, base64.StdEncoding.EncodeToString(output))
 			}
@@ -1415,7 +1414,7 @@ unseal keys, and should be treated accordingly.
 			unsealKeys = opt.Rekey.UnsealCount
 		}
 		if len(opt.Rekey.GPG) > 0 && unsealKeys != len(opt.Rekey.GPG) {
-			return ansi.Errorf("Both --gpg and --num-unseal-keys were specified, and their counts did not match.")
+			return fmt.Errorf("Both --gpg and --num-unseal-keys were specified, and their counts did not match.")
 		}
 
 		// if --keys-to-unseal isn't specified, use a default (unless default is > the num-unseal-keys
@@ -1426,10 +1425,10 @@ unseal keys, and should be treated accordingly.
 			}
 		}
 		if opt.Rekey.KeysToUnseal > unsealKeys {
-			return ansi.Errorf("You specified only %d unseal keys, but are requiring %d keys to unseal vault. This is bad.", unsealKeys, opt.Rekey.KeysToUnseal)
+			return fmt.Errorf("You specified only %d unseal keys, but are requiring %d keys to unseal vault. This is bad.", unsealKeys, opt.Rekey.KeysToUnseal)
 		}
 		if opt.Rekey.KeysToUnseal < 2 && unsealKeys > 1 {
-			return ansi.Errorf("When specifying more than 1 unseal key, you must also have more than one key required to unseal.")
+			return fmt.Errorf("When specifying more than 1 unseal key, you must also have more than one key required to unseal.")
 		}
 
 		v := connect()
@@ -1437,12 +1436,12 @@ unseal keys, and should be treated accordingly.
 		if err != nil {
 			return err
 		}
-		ansi.Printf("@G{Your Vault has been re-keyed.} Please take note of your new unseal keys and @R{store them safely!}\n")
+		fmt.Printf("@G{Your Vault has been re-keyed.} Please take note of your new unseal keys and @R{store them safely!}\n")
 		for i, key := range keys {
 			if len(opt.Rekey.GPG) == len(keys) {
-				ansi.Printf("Unseal key for @c{%s}:\n@y{%s}\n", opt.Rekey.GPG[i], key)
+				fmt.Printf("Unseal key for @c{%s}:\n@y{%s}\n", opt.Rekey.GPG[i], key)
 			} else {
-				ansi.Printf("Unseal key %d: @y{%s}\n", i+1, key)
+				fmt.Printf("Unseal key %d: @y{%s}\n", i+1, key)
 			}
 		}
 
@@ -1487,7 +1486,7 @@ Supported formats:
 		}
 		if opt.SkipIfExists && s.Has(newKey) {
 			if !opt.Quiet {
-				ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to reformat} @C{%s:%s} @R{to} @C{%s} @R{as it is already present in Vault}\n", path, oldKey, newKey)
+				fmt.Fprintf(os.Stderr, "@R{Cowardly refusing to reformat} @C{%s:%s} @R{to} @C{%s} @R{as it is already present in Vault}\n", path, oldKey, newKey)
 			}
 			return nil
 		}
@@ -1708,7 +1707,7 @@ The following options are recognized:
 				return err
 			}
 
-			ansi.Printf("@G{%s} checks out.\n", path)
+			fmt.Printf("@G{%s} checks out.\n", path)
 		}
 
 		return nil
@@ -1768,7 +1767,7 @@ The following options are recognized:
 		if opt.SkipIfExists {
 			if _, err := v.Read(args[0]); err == nil {
 				if !opt.Quiet {
-					ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to create a new certificate in} @C{%s} @R{as it is already present in Vault}\n", args[0])
+					fmt.Fprintf(os.Stderr, "@R{Cowardly refusing to create a new certificate in} @C{%s} @R{as it is already present in Vault}\n", args[0])
 				}
 				return nil
 			} else if err != nil && !vault.IsNotFound(err) {
@@ -1922,54 +1921,54 @@ prints out information about a certificate, including:
 				continue
 			}
 
-			ansi.Printf("  @G{%s}\n", cert.Subject())
+			fmt.Printf("  @G{%s}\n", cert.Subject())
 			if cert.Subject() != cert.Issuer() {
-				ansi.Printf("  issued by: @C{%s}\n", cert.Issuer())
+				fmt.Printf("  issued by: @C{%s}\n", cert.Issuer())
 			}
 
-			ansi.Printf("\n")
+			fmt.Printf("\n")
 			toStart := cert.Certificate.NotBefore.Sub(time.Now())
 			toEnd := cert.Certificate.NotAfter.Sub(time.Now())
 
 			days := int(toStart.Hours() / 24)
 			if days == 1 {
-				ansi.Printf("  @Y{not valid for another day}\n")
+				fmt.Printf("  @Y{not valid for another day}\n")
 			} else if days > 1 {
-				ansi.Printf("  @Y{not valid for another %d days}\n", days)
+				fmt.Printf("  @Y{not valid for another %d days}\n", days)
 			}
 
 			days = int(toEnd.Hours() / 24)
 			if days < -1 {
-				ansi.Printf("  @R{EXPIRED %d days ago}\n", -1*days)
+				fmt.Printf("  @R{EXPIRED %d days ago}\n", -1*days)
 			} else if days < 0 {
-				ansi.Printf("  @R{EXPIRED a day ago}\n")
+				fmt.Printf("  @R{EXPIRED a day ago}\n")
 			} else if days < 1 {
-				ansi.Printf("  @R{EXPIRED}\n")
+				fmt.Printf("  @R{EXPIRED}\n")
 			} else if days == 1 {
-				ansi.Printf("  @Y{expires in a day}\n")
+				fmt.Printf("  @Y{expires in a day}\n")
 			} else if days < 30 {
-				ansi.Printf("  @Y{expires in %d days}\n", days)
+				fmt.Printf("  @Y{expires in %d days}\n", days)
 			} else {
-				ansi.Printf("  expires in @G{%d days}\n", days)
+				fmt.Printf("  expires in @G{%d days}\n", days)
 			}
-			ansi.Printf("  valid from @C{%s} - @C{%s}", cert.Certificate.NotBefore.Format("Jan 2 2006"), cert.Certificate.NotAfter.Format("Jan 2 2006"))
+			fmt.Printf("  valid from @C{%s} - @C{%s}", cert.Certificate.NotBefore.Format("Jan 2 2006"), cert.Certificate.NotAfter.Format("Jan 2 2006"))
 
 			life := int(cert.Certificate.NotAfter.Sub(cert.Certificate.NotBefore).Hours())
 			if life < 360*24 {
-				ansi.Printf(" (@M{~%d days})\n", life/24)
+				fmt.Printf(" (@M{~%d days})\n", life/24)
 			} else {
-				ansi.Printf(" (@M{~%d years})\n", life/365/24)
+				fmt.Printf(" (@M{~%d years})\n", life/365/24)
 			}
 
 			fmt.Printf("  for the following names:\n")
 			for _, s := range cert.Certificate.DNSNames {
-				ansi.Printf("    - @G{%s} (DNS)\n", s)
+				fmt.Printf("    - @G{%s} (DNS)\n", s)
 			}
 			for _, s := range cert.Certificate.EmailAddresses {
-				ansi.Printf("    - @G{%s} (email)\n", s)
+				fmt.Printf("    - @G{%s} (email)\n", s)
 			}
 			for _, s := range cert.Certificate.IPAddresses {
-				ansi.Printf("    - @G{%s} (IP)\n", s)
+				fmt.Printf("    - @G{%s} (IP)\n", s)
 			}
 			fmt.Printf("\n")
 		}
@@ -2026,7 +2025,7 @@ Currently, only the --renew option is supported, and it is required:
 
 	p, err := cli.NewParser(&opt, os.Args[1:])
 	if err != nil {
-		ansi.Fprintf(os.Stderr, "@R{!! %s}\n", err)
+		fmt.Fprintf(os.Stderr, "@R{!! %s}\n", err)
 		os.Exit(1)
 	}
 
@@ -2066,9 +2065,9 @@ Currently, only the --renew option is supported, and it is required:
 		err = r.Execute(p.Command, p.Args...)
 		if err != nil {
 			if strings.HasPrefix(err.Error(), "USAGE") {
-				ansi.Fprintf(os.Stderr, "@Y{%s}\n", err)
+				fmt.Fprintf(os.Stderr, "@Y{%s}\n", err)
 			} else {
-				ansi.Fprintf(os.Stderr, "@R{!! %s}\n", err)
+				fmt.Fprintf(os.Stderr, "@R{!! %s}\n", err)
 			}
 			os.Exit(1)
 		}
@@ -2081,7 +2080,7 @@ Currently, only the --renew option is supported, and it is required:
 	}
 
 	if err = p.Error(); err != nil {
-		ansi.Fprintf(os.Stderr, "@R{!! %s}\n", err)
+		fmt.Fprintf(os.Stderr, "@R{!! %s}\n", err)
 		os.Exit(1)
 	}
 }
