@@ -269,10 +269,11 @@ func (v *Vault) List(path string) (paths []string, err error) {
 }
 
 type TreeOptions struct {
-	UseANSI     bool /* Use ANSI colorizing sequences */
-	HideLeaves  bool /* Hide leaf nodes of the tree (actual secrets) */
-	ShowKeys    bool /* Include keys in the output */
-	InSubbranch bool /* If true, suppresses key output on branches */
+	UseANSI      bool /* Use ANSI colorizing sequences */
+	HideLeaves   bool /* Hide leaf nodes of the tree (actual secrets) */
+	ShowKeys     bool /* Include keys in the output */
+	InSubbranch  bool /* If true, suppresses key output on branches */
+	StripSlashes bool /* If true, strip the trailing slashes from interior nodes */
 }
 
 func (v *Vault) walktree(path string, options TreeOptions) (tree.Node, int, error) {
@@ -307,10 +308,13 @@ func (v *Vault) walktree(path string, options TreeOptions) (tree.Node, int, erro
 				fmt.Fprintf(os.Stderr, "%s\n", kid.Name)
 				continue
 			}
+			if options.StripSlashes {
+				p = p[0 : len(p)-1]
+			}
 			if options.UseANSI {
 				kid.Name = ansi.Sprintf("@B{%s}", p)
 			} else {
-				kid.Name = p[0 : len(p)-1]
+				kid.Name = p
 			}
 			t.Append(kid)
 

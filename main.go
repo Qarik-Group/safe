@@ -934,8 +934,9 @@ to get your bearings.
 		v := connect()
 		for _, path := range args {
 			tree, err := v.Tree(path, vault.TreeOptions{
-				UseANSI:  false,
-				ShowKeys: opt.Paths.ShowKeys,
+				UseANSI:      false,
+				ShowKeys:     opt.Paths.ShowKeys,
+				StripSlashes: true,
 			})
 			if err != nil {
 				return err
@@ -1000,7 +1001,9 @@ to get your bearings.
 		v := connect()
 		data := make(map[string]*vault.Secret)
 		for _, path := range args {
-			tree, err := v.Tree(path, vault.TreeOptions{})
+			tree, err := v.Tree(path, vault.TreeOptions{
+				StripSlashes: true,
+			})
 			if err != nil {
 				return err
 			}
@@ -1402,7 +1405,7 @@ unseal keys, and should be treated accordingly.
 			unsealKeys = opt.Rekey.UnsealCount
 		}
 		if len(opt.Rekey.GPG) > 0 && unsealKeys != len(opt.Rekey.GPG) {
-			return ansi.Errorf("Both @C{--gpg} and @C{--num-unseal-keys} were specified, and their counts did not match.")
+			return ansi.Errorf("Both --gpg and --num-unseal-keys were specified, and their counts did not match.")
 		}
 
 		// if --keys-to-unseal isn't specified, use a default (unless default is > the num-unseal-keys
