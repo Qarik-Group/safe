@@ -1,7 +1,5 @@
 #!/bin/bash
 # vim:et:ts=2:sts=2:sw=2
-FAIL_FAST="${FAIL_FAST:-}"
-SAFE_DISABLE_GPG_TESTS="${SAFE_DISABLE_GPG_TESTS:-}"
 set -u
 
 done_testing=0
@@ -74,7 +72,7 @@ tests_failed() {
 }
 test=""
 testing() {
-  if [[ $rc -ne 0 && -n $FAIL_FAST ]] ; then
+  if [[ $rc -ne 0 && -n "${FAIL_FAST:-}" ]] ; then
     dump_log 1
     echo "Failure encountered, stopping tests!"
     exit 4
@@ -2084,7 +2082,7 @@ knock: knock
 EOF
   rm t/home/original
 
-  if [[ -z $SAFE_DISABLE_GPG_TESTS ]]; then
+  if [[ -z "${SAFE_DISABLE_GPG_TESTS:-}" ]]; then
     testing ${version} safe rekey --gpg
     now trying to rekey with the num-unseal-keys otherthan the number of gpg keys should error
     gpg --import assets/gpg.pubkey
