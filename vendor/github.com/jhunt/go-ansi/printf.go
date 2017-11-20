@@ -79,7 +79,7 @@ func colorize(s string) string {
 
 func CanColorize(out io.Writer) bool {
 	f, ok := out.(*os.File)
-	return ok && !isatty.IsTerminal(f.Fd())
+	return ok && isatty.IsTerminal(f.Fd())
 }
 
 func ShouldColorize(out io.Writer) bool {
