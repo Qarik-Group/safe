@@ -62,6 +62,8 @@ type Options struct {
 	SkipIfExists bool
 	Quiet        bool `cli:"--quiet"`
 
+	UseTarget string `cli:"-T, --target"`
+
 	HelpCommand    struct{} `cli:"help"`
 	VersionCommand struct{} `cli:"version"`
 
@@ -215,7 +217,11 @@ func main() {
 			r.ExitWithUsage("targets")
 		}
 
-		cfg := rc.Apply()
+		if opt.UseTarget != "" {
+			fmt.Fprintf(os.Stderr, "@Y{Specifying --target to the targets command makes no sense; ignoring...}\n")
+		}
+
+		cfg := rc.Apply(opt.UseTarget)
 		wide := 0
 		keys := make([]string, 0)
 		fmt.Printf("%v\n", cfg)
@@ -258,10 +264,14 @@ func main() {
 		Usage:   "safe [-k] target [URL] [ALIAS] | safe target -i",
 		Type:    AdministrativeCommand,
 	}, func(command string, args ...string) error {
-		cfg := rc.Apply()
+		cfg := rc.Apply(opt.UseTarget)
 		skipverify := false
 		if os.Getenv("SAFE_SKIP_VERIFY") == "1" {
 			skipverify = true
+		}
+
+		if opt.UseTarget != "" {
+			fmt.Fprintf(os.Stderr, "@Y{Specifying --target to the target command makes no sense; ignoring...}\n")
 		}
 
 		if opt.Target.Interactive {
@@ -344,7 +354,7 @@ func main() {
 		Usage:   "safe status",
 		Type:    AdministrativeCommand,
 	}, func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(opt.UseTarget)
 		v := connect()
 		st, err := v.Strongbox()
 		if err != nil {
@@ -367,7 +377,7 @@ func main() {
 		Usage:   "safe unseal",
 		Type:    AdministrativeCommand,
 	}, func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(opt.UseTarget)
 		v := connect()
 		st, err := v.Strongbox()
 		if err != nil {
@@ -416,7 +426,7 @@ func main() {
 		Usage:   "safe seal",
 		Type:    AdministrativeCommand,
 	}, func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(opt.UseTarget)
 		v := connect()
 		st, err := v.Strongbox()
 		if err != nil {
@@ -463,7 +473,7 @@ func main() {
 		Usage:   "safe env",
 		Type:    AdministrativeCommand,
 	}, func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(opt.UseTarget)
 		ansi.Fprintf(os.Stderr, "  @B{VAULT_ADDR}  @G{%s}\n", os.Getenv("VAULT_ADDR"))
 		ansi.Fprintf(os.Stderr, "  @B{VAULT_TOKEN} @G{%s}\n", os.Getenv("VAULT_TOKEN"))
 		return nil
@@ -474,7 +484,7 @@ func main() {
 		Usage:   "safe auth (token|github|ldap|userpass)",
 		Type:    AdministrativeCommand,
 	}, func(command string, args ...string) error {
-		cfg := rc.Apply()
+		cfg := rc.Apply(opt.UseTarget)
 
 		method := "token"
 		if len(args) > 0 {
@@ -525,7 +535,7 @@ func main() {
 	})
 
 	writeHelper := func(prompt bool, insecure bool, command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(opt.UseTarget)
 		if len(args) < 2 {
 			r.ExitWithUsage(command)
 		}
@@ -642,7 +652,7 @@ Otherwise, it will exit 1 (one).  If unrelated errors, like network timeouts,
 certificate validation failure, etc. occur, they will be printed as well.
 `,
 	}, func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(opt.UseTarget)
 		if len(args) != 1 {
 			r.ExitWithUsage("exists")
 		}
@@ -695,7 +705,7 @@ paths/keys.
 `,
 		Type: NonDestructiveCommand,
 	}, func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(opt.UseTarget)
 		if len(args) < 1 {
 			r.ExitWithUsage("get")
 		}
@@ -813,7 +823,7 @@ paths/keys.
 		Description: `
 `,
 	}, func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(opt.UseTarget)
 		v := connect()
 		if len(args) == 0 {
 			secrets, err := v.Mounts("secret")
@@ -885,7 +895,7 @@ will be printed; this more concise output can be useful when you're trying
 to get your bearings.
 `,
 	}, func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(opt.UseTarget)
 		opts := vault.TreeOptions{
 			UseANSI:    ansi.ShouldColorize(os.Stdout),
 			HideLeaves: opt.Tree.HideLeaves,
@@ -927,7 +937,7 @@ to get your bearings.
 		Usage:   "safe paths [--keys] PATH [PATH ...]",
 		Type:    NonDestructiveCommand,
 	}, func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(opt.UseTarget)
 		if len(args) < 1 {
 			args = append(args, "secret")
 		}
@@ -964,7 +974,7 @@ to get your bearings.
 		Usage:   "safe delete [-R] PATH [PATH ...]",
 		Type:    DestructiveCommand,
 	}, func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(opt.UseTarget)
 
 		if len(args) < 1 {
 			r.ExitWithUsage("delete")
@@ -994,7 +1004,7 @@ to get your bearings.
 		Usage:   "safe export PATH [PATH ...]",
 		Type:    NonDestructiveCommand,
 	}, func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(opt.UseTarget)
 		if len(args) < 1 {
 			args = append(args, "secret")
 		}
@@ -1030,7 +1040,7 @@ to get your bearings.
 		Usage:   "safe import <backup/file.json",
 		Type:    DestructiveCommand,
 	}, func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(opt.UseTarget)
 		b, err := ioutil.ReadAll(os.Stdin)
 		if err != nil {
 			return err
@@ -1062,7 +1072,7 @@ to get your bearings.
 		Usage:   "safe move [-R] OLD-PATH NEW-PATH",
 		Type:    DestructiveCommand,
 	}, func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(opt.UseTarget)
 		if len(args) != 2 {
 			r.ExitWithUsage("move")
 		}
@@ -1091,7 +1101,7 @@ to get your bearings.
 		Usage:   "safe copy [-R] OLD-PATH NEW-PATH",
 		Type:    DestructiveCommand,
 	}, func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(opt.UseTarget)
 
 		if len(args) != 2 {
 			r.ExitWithUsage("copy")
@@ -1128,7 +1138,7 @@ The following options are recognized:
                 characters used to generate the password (e.g --policy a-z0-9)
 `,
 	}, func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(opt.UseTarget)
 
 		if len(args) == 0 {
 			r.ExitWithUsage("gen")
@@ -1196,7 +1206,7 @@ be stored under the 'private' name, as a PEM-encoded RSA private key, and the
 public key, formatted for use in an SSH authorized_keys file, under 'public'.
 `,
 	}, func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(opt.UseTarget)
 		bits := 2048
 		if len(args) > 0 {
 			if u, err := strconv.ParseUint(args[0], 10, 16); err == nil {
@@ -1243,7 +1253,7 @@ under the 'private' name, and the public key under the 'public' name.  Both will
 be PEM-encoded.
 `,
 	}, func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(opt.UseTarget)
 		bits := 2048
 		if len(args) > 0 {
 			if u, err := strconv.ParseUint(args[0], 10, 16); err == nil {
@@ -1287,7 +1297,7 @@ be PEM-encoded.
 NBITS defaults to 2048.
 `,
 	}, func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(opt.UseTarget)
 		bits := 2048
 
 		if len(args) > 0 {
@@ -1338,7 +1348,7 @@ NBITS defaults to 2048.
 		Usage:   "safe vault ...",
 		Type:    DestructiveCommand,
 	}, func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(opt.UseTarget)
 
 		if opt.SkipIfExists {
 			ansi.Fprintf(os.Stderr, "@C{--no-clobber} @Y{specified, but is ignored for} @C{safe vault}\n")
@@ -1380,7 +1390,7 @@ unseal keys, and should be treated accordingly.
 
 `,
 	}, func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(opt.UseTarget)
 
 		unsealKeys := 5 // default to 5
 		var gpgKeys []string
@@ -1459,7 +1469,7 @@ Supported formats:
 
 `,
 	}, func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(opt.UseTarget)
 
 		if len(args) != 4 {
 			r.ExitWithUsage("fmt")
@@ -1510,7 +1520,7 @@ Query string parameters should be appended to REL-URI, instead of being
 sent as DATA.
 `,
 	}, func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(opt.UseTarget)
 
 		if len(args) < 2 {
 			r.ExitWithUsage("curl")
@@ -1641,7 +1651,7 @@ The following options are recognized:
 			r.ExitWithUsage("x509 validate")
 		}
 
-		rc.Apply()
+		rc.Apply(opt.UseTarget)
 		v := connect()
 
 		var ca *vault.X509
@@ -1742,7 +1752,7 @@ The following options are recognized:
                     Defaults to 10y
 	`,
 	}, func(command string, args ...string) error {
-		rc.Apply()
+		rc.Apply(opt.UseTarget)
 
 		var ca *vault.X509
 
@@ -1838,7 +1848,7 @@ The following options are recognized:
 			r.ExitWithUsage("x509 revoke")
 		}
 
-		rc.Apply()
+		rc.Apply(opt.UseTarget)
 		v := connect()
 
 		/* find the CA */
@@ -1896,7 +1906,7 @@ prints out information about a certificate, including:
 			r.ExitWithUsage("x509 show")
 		}
 
-		rc.Apply()
+		rc.Apply(opt.UseTarget)
 		v := connect()
 
 		for _, path := range args {
@@ -1985,7 +1995,7 @@ Currently, only the --renew option is supported, and it is required:
 			r.ExitWithUsage("x509 crl")
 		}
 
-		rc.Apply()
+		rc.Apply(opt.UseTarget)
 		v := connect()
 
 		s, err := v.Read(args[0])

@@ -16,9 +16,9 @@ type Config struct {
 }
 
 type Vault struct {
-	URL        string `yaml:"url"`
-	Token      string `yaml:"token"`
-	SkipVerify bool   `yaml:"skip_verify"`
+	URL        string `yaml:"url"         json:"vault"`
+	Token      string `yaml:"token"       json:"token"`
+	SkipVerify bool   `yaml:"skip_verify" json:"skip_verify"`
 }
 
 type oldConfig struct {
@@ -72,7 +72,7 @@ func (c *Config) credentials() (string, string, bool, error) {
 	return v.URL, v.Token, v.SkipVerify, nil
 }
 
-func Apply() Config {
+func Apply(use string) Config {
 	var c Config
 
 	b, err := ioutil.ReadFile(saferc())
@@ -91,7 +91,7 @@ func Apply() Config {
 		c = legacy.convert()
 	}
 
-	c.Apply()
+	c.Apply(use)
 	return c
 }
 
@@ -106,17 +106,12 @@ func (c *Config) Write() error {
 		return err
 	}
 
-	url, token, skipverify, err := c.credentials()
+	v, err := c.Vault("")
 	if err != nil {
 		return err
 	}
 
-	b, err = yaml.Marshal(
-		struct {
-			URL        string `json:"vault"`
-			Token      string `json:"token"`
-			SkipVerify bool   `json:"skip_verify"`
-		}{url, token, skipverify})
+	b, err = yaml.Marshal(v)
 	if err != nil {
 		return err
 	}
@@ -124,16 +119,16 @@ func (c *Config) Write() error {
 	return ioutil.WriteFile(svtoken(), b, 0600)
 }
 
-func (c *Config) Apply() error {
-	url, token, skipverify, err := c.credentials()
+func (c *Config) Apply(use string) error {
+	v, err := c.Vault(use)
 	if err != nil {
 		return err
 	}
 
-	if url != "" {
-		os.Setenv("VAULT_ADDR", url)
-		os.Setenv("VAULT_TOKEN", token)
-		if skipverify {
+	if v != nil {
+		os.Setenv("VAULT_ADDR", v.URL)
+		os.Setenv("VAULT_TOKEN", v.Token)
+		if v.SkipVerify {
 			os.Setenv("VAULT_SKIP_VERIFY", "1")
 		}
 	} else {
@@ -197,4 +192,19 @@ func (c *Config) Verified() bool {
 		return !v.SkipVerify
 	}
 	return false
+}
+
+func (c *Config) Vault(which string) (*Vault, error) {
+	if which == "" {
+		which = c.Current
+	}
+
+	if which == "" {
+		return nil, nil /* not an error */
+	}
+
+	if v, ok := c.Vaults[which]; ok {
+		return v, nil
+	}
+	return nil, fmt.Errorf("Current target vault '%s' not found in ~/.saferc", which)
 }

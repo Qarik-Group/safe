@@ -383,8 +383,8 @@ Import and export can be combined in a pipeline to facilitate
 movement of credentials from one Vault to another, like so:
 
 ```
-VAULT_ADDR=$OLD_VAULT safe export secret/sub/tree | \
-  VAULT_ADDR=$NEW_VAULT safe import
+safe -t old-vault export secret/sub/tree | \
+  safe -t new-vault import
 ```
 
 [vault]:  https://vaultproject.io
