@@ -16,9 +16,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ghodss/yaml"
 	"github.com/jhunt/go-ansi"
 	"github.com/jhunt/go-cli"
+	"gopkg.in/yaml.v2"
 
 	"github.com/starkandwayne/safe/auth"
 	"github.com/starkandwayne/safe/prompt"
@@ -217,19 +217,17 @@ func main() {
 
 		cfg := rc.Apply()
 		wide := 0
-		for name := range cfg.Aliases {
+		keys := make([]string, 0)
+		fmt.Printf("%v\n", cfg)
+		for name := range cfg.Vaults {
+			keys = append(keys, name)
 			if len(name) > wide {
 				wide = len(name)
 			}
 		}
 
-		var keys []string
-		for name := range cfg.Aliases {
-			keys = append(keys, name)
-		}
-
-		current_fmt := fmt.Sprintf("(*) @G{%%-%ds}\t@Y{%%s}@R{%%s}\n", wide)
-		other_fmt := fmt.Sprintf("    %%-%ds\t%%s@R{%%s}\n", wide)
+		current_fmt := fmt.Sprintf("(*) @G{%%-%ds}\t@R{%%s} @Y{%%s}\n", wide)
+		other_fmt := fmt.Sprintf("    %%-%ds\t@R{%%s} %%s\n", wide)
 		has_current := ""
 		if cfg.Current != "" {
 			has_current = " - current target indicated with a (*)"
@@ -238,15 +236,18 @@ func main() {
 		fmt.Fprintf(os.Stderr, "\nKnown Vault targets%s:\n", has_current)
 		sort.Strings(keys)
 		for _, name := range keys {
-			skip := ""
-			if skipverify, ok := cfg.SkipVerify[cfg.Aliases[name]]; ok && skipverify {
+			t := cfg.Vaults[name]
+			skip := "           "
+			if t.SkipVerify {
+				skip = " (noverify)"
+			} else if strings.HasPrefix(t.URL, "http:") {
 				skip = " (insecure)"
 			}
 			format := other_fmt
 			if name == cfg.Current {
 				format = current_fmt
 			}
-			ansi.Fprintf(os.Stderr, format, name, cfg.Aliases[name], skip)
+			ansi.Fprintf(os.Stderr, format, name, skip, t.URL)
 		}
 		fmt.Fprintf(os.Stderr, "\n")
 		return nil
@@ -265,7 +266,7 @@ func main() {
 
 		if opt.Target.Interactive {
 			for {
-				if len(cfg.Targets) == 0 {
+				if len(cfg.Vaults) == 0 {
 					ansi.Fprintf(os.Stderr, "@R{No Vaults have been targeted yet.}\n\n")
 					ansi.Fprintf(os.Stderr, "You will need to target a Vault manually first.\n\n")
 					ansi.Fprintf(os.Stderr, "Try something like this:\n")
@@ -886,7 +887,7 @@ to get your bearings.
 	}, func(command string, args ...string) error {
 		rc.Apply()
 		opts := vault.TreeOptions{
-			UseANSI:    true,
+			UseANSI:    ansi.ShouldColorize(os.Stdout),
 			HideLeaves: opt.Tree.HideLeaves,
 			ShowKeys:   opt.Tree.ShowKeys,
 		}

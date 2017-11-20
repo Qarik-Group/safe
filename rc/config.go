@@ -1,19 +1,31 @@
 package rc
 
 import (
-	"fmt"
 	"io/ioutil"
 	"os"
 	"strings"
 
-	"github.com/ghodss/yaml"
+	fmt "github.com/jhunt/go-ansi"
+	"gopkg.in/yaml.v2"
 )
 
 type Config struct {
-	Current    string                 `yaml:"current"`
-	Targets    map[string]interface{} `yaml:"targets"`
-	Aliases    map[string]string      `yaml:"aliases"`
-	SkipVerify map[string]bool        `yaml:"skip_verify"`
+	Version int               `yaml:"version"`
+	Current string            `yaml:"current"`
+	Vaults  map[string]*Vault `yaml:"vaults"`
+}
+
+type Vault struct {
+	URL        string `yaml:"url"`
+	Token      string `yaml:"token"`
+	SkipVerify bool   `yaml:"skip_verify"`
+}
+
+type oldConfig struct {
+	Current    string                 `yaml:"Current"`
+	Targets    map[string]interface{} `yaml:"Targets"`
+	Aliases    map[string]string      `yaml:"Aliases"`
+	SkipVerify map[string]bool        `yaml:"SkipVerify"`
 }
 
 func saferc() string {
@@ -24,40 +36,59 @@ func svtoken() string {
 	return fmt.Sprintf("%s/.svtoken", os.Getenv("HOME"))
 }
 
+func (legacy *oldConfig) convert() Config {
+	c := Config{
+		Version: 1,
+		Current: legacy.Current,
+		Vaults:  make(map[string]*Vault),
+	}
+
+	for alias, url := range legacy.Aliases {
+		v := &Vault{
+			URL: url,
+		}
+		if skip, ok := legacy.SkipVerify[url]; ok {
+			v.SkipVerify = skip
+		}
+		if token, ok := legacy.Targets[url]; ok && token != nil {
+			v.Token = token.(string)
+		}
+		c.Vaults[alias] = v
+	}
+
+	return c
+}
+
 func (c *Config) credentials() (string, string, bool, error) {
 	if c.Current == "" {
 		return "", "", false, nil
 	}
 
-	url, ok := c.Aliases[c.Current]
+	v, ok := c.Vaults[c.Current]
 	if !ok {
 		return "", "", false, fmt.Errorf("Current target vault '%s' not found in ~/.saferc", c.Current)
 	}
 
-	t, ok := c.Targets[url]
-	if !ok {
-		return "", "", false, fmt.Errorf("Current target vault '%s' not found in ~/.saferc", c.Current)
-	}
-
-	token := ""
-	if t != nil {
-		token = t.(string)
-	}
-
-	skipverify, ok := c.SkipVerify[url]
-	if !ok {
-		skipverify = false
-	}
-
-	return url, token, skipverify, nil
+	return v.URL, v.Token, v.SkipVerify, nil
 }
 
 func Apply() Config {
 	var c Config
 
 	b, err := ioutil.ReadFile(saferc())
-	if err == nil {
-		yaml.Unmarshal(b, &c)
+	if err != nil {
+		return Config{Version: 1}
+	}
+
+	if err = yaml.Unmarshal(b, &c); err != nil {
+		return Config{Version: 1}
+	}
+	if c.Version == 0 {
+		var legacy oldConfig
+		if err = yaml.Unmarshal(b, &legacy); err != nil {
+			return c
+		}
+		c = legacy.convert()
 	}
 
 	c.Apply()
@@ -118,10 +149,10 @@ func (c *Config) Apply() error {
 }
 
 func (c *Config) SetCurrent(alias string, reskip bool) error {
-	if url, ok := c.Aliases[alias]; ok {
+	if v, ok := c.Vaults[alias]; ok {
 		c.Current = alias
 		if reskip {
-			c.SkipVerify[url] = true
+			v.SkipVerify = true
 		}
 		return nil
 	}
@@ -129,22 +160,16 @@ func (c *Config) SetCurrent(alias string, reskip bool) error {
 }
 
 func (c *Config) SetTarget(alias, url string, skipverify bool) error {
-	if c.Aliases == nil {
-		c.Aliases = make(map[string]string)
+	if c.Vaults == nil {
+		c.Vaults = make(map[string]*Vault)
 	}
-	if c.Targets == nil {
-		c.Targets = make(map[string]interface{})
-	}
-	if c.SkipVerify == nil {
-		c.SkipVerify = make(map[string]bool)
-	}
-	c.Aliases[alias] = url
-	c.Current = alias
 
-	c.SkipVerify[url] = skipverify
-	if _, ok := c.Targets[url]; !ok {
-		c.Targets[url] = nil // no token yet...
+	c.Current = alias
+	c.Vaults[alias] = &Vault{
+		URL:        url,
+		SkipVerify: skipverify,
 	}
+
 	return nil
 }
 
@@ -152,27 +177,24 @@ func (c *Config) SetToken(token string) error {
 	if c.Current == "" {
 		return fmt.Errorf("No target selected")
 	}
-	url, ok := c.Aliases[c.Current]
+	v, ok := c.Vaults[c.Current]
 	if !ok {
 		return fmt.Errorf("Unknown target '%s'", c.Current)
 	}
-	c.Targets[url] = token
+	v.Token = token
 	return nil
 }
 
 func (c *Config) URL() string {
-	if url, ok := c.Aliases[c.Current]; ok {
-		return url
+	if v, ok := c.Vaults[c.Current]; ok {
+		return v.URL
 	}
 	return ""
 }
 
 func (c *Config) Verified() bool {
-	if url, ok := c.Aliases[c.Current]; ok {
-		if skip, ok := c.SkipVerify[url]; ok && skip {
-			return false
-		}
-		return true
+	if v, ok := c.Vaults[c.Current]; ok {
+		return !v.SkipVerify
 	}
 	return false
 }

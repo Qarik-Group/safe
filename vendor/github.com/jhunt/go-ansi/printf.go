@@ -77,9 +77,18 @@ func colorize(s string) string {
 	})
 }
 
+func CanColorize(out io.Writer) bool {
+	f, ok := out.(*os.File)
+	return ok && !isatty.IsTerminal(f.Fd())
+}
+
+func ShouldColorize(out io.Writer) bool {
+	return force || CanColorize(out)
+}
+
 func Printf(format string, a ...interface{}) (int, error) {
 	s := colorize(format)
-	if !force && !isatty.IsTerminal(os.Stdout.Fd()) {
+	if ShouldColorize(os.Stdout) {
 		s = strip(s)
 	}
 	return fmt.Printf(s, a...)
@@ -87,7 +96,7 @@ func Printf(format string, a ...interface{}) (int, error) {
 
 func Fprintf(out io.Writer, format string, a ...interface{}) (int, error) {
 	s := colorize(format)
-	if f, ok := out.(*os.File); ok && !force && !isatty.IsTerminal(f.Fd()) {
+	if ShouldColorize(out) {
 		s = strip(s)
 	}
 	return fmt.Fprintf(out, s, a...)
