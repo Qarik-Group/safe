@@ -719,8 +719,8 @@ func (v *Vault) Mounts(typ string) ([]string, error) {
 	l := make([]string, 0)
 	for k, m := range mm {
 		if mount, ok := convertMountpoint(m); ok {
-			if (typ == "" || mount.Type == typ) {
-				l = append(l, strings.TrimSuffix(k, "/") + "/")
+			if typ == "" || mount.Type == typ {
+				l = append(l, strings.TrimSuffix(k, "/")+"/")
 			}
 		}
 	}
