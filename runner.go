@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/starkandwayne/goutils/ansi"
+	"github.com/jhunt/go-ansi"
 )
 
 const (

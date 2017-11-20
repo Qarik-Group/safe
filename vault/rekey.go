@@ -7,7 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/starkandwayne/goutils/ansi"
+	"github.com/jhunt/go-ansi"
 	"github.com/starkandwayne/safe/prompt"
 	"golang.org/x/crypto/ssh/terminal"
 )

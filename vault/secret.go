@@ -8,7 +8,7 @@ import (
 	"sort"
 
 	"github.com/ghodss/yaml"
-	"github.com/starkandwayne/goutils/ansi"
+	"github.com/jhunt/go-ansi"
 	"github.com/tredoe/osutil/user/crypt/md5_crypt"
 	"github.com/tredoe/osutil/user/crypt/sha256_crypt"
 	"github.com/tredoe/osutil/user/crypt/sha512_crypt"

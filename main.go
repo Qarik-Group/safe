@@ -17,8 +17,8 @@ import (
 	"time"
 
 	"github.com/ghodss/yaml"
+	"github.com/jhunt/go-ansi"
 	"github.com/jhunt/go-cli"
-	"github.com/starkandwayne/goutils/ansi"
 
 	"github.com/starkandwayne/safe/auth"
 	"github.com/starkandwayne/safe/prompt"
