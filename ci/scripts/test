@@ -6,7 +6,8 @@ export GOPATH=${PWD}/gopath
 export PATH=${PATH}:${GOPATH}/bin
 cd ${GOPATH}/src/${MODULE}
 
+# safe uses the Makefile, and doesn't run
+# any `go test` / `go vet` stuff...
 
 go version; echo; echo
-go vet $(go list ./... | grep -v vendor)
-go test -v ./...
+make test
