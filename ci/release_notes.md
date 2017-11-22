@@ -1,3 +1,11 @@
+# Bug Fixes
+
+- Fixes a regression introduced in 0.5.0 with the Spruce
+  integration via `~/.svtoken`.  Safe was writing the wrong key
+  value for the Vault address, because I tried to be more
+  effficient and didn't notice that it was coming out "url".
+  Oops.
+
 # Improvements
 
 - `safe` is now built against Go 1.9, which should properly plumb

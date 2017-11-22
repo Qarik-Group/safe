@@ -16,9 +16,9 @@ type Config struct {
 }
 
 type Vault struct {
-	URL        string `yaml:"url"         json:"vault"`
-	Token      string `yaml:"token"       json:"token"`
-	SkipVerify bool   `yaml:"skip_verify" json:"skip_verify"`
+	URL        string `yaml:"url"`
+	Token      string `yaml:"token"`
+	SkipVerify bool   `yaml:"skip_verify"`
 }
 
 type oldConfig struct {
@@ -111,7 +111,12 @@ func (c *Config) Write() error {
 		return err
 	}
 
-	b, err = yaml.Marshal(v)
+	sv := struct {
+		Vault      string `yaml:"vault"` /* this is different than Vault.URL */
+		Token      string `yaml:"token"`
+		SkipVerify bool   `yaml:"skip_verify"`
+	}{v.URL, v.Token, v.SkipVerify}
+	b, err = yaml.Marshal(sv)
 	if err != nil {
 		return err
 	}
