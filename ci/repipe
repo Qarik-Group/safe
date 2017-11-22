@@ -21,6 +21,42 @@ need_command() {
 	fi
 }
 
+NO_FLY=
+SAVE_MANIFEST=
+VALIDATE_PIPELINE=
+NON_INTERACTIVE=
+
+cleanup() {
+    rm -f save-manifest.yml
+    if [[ -n ${SAVE_MANIFEST} && -e .deploy.yml ]]; then
+        mv .deploy.yml save-manifest.yml
+    fi
+    rm -f .deploy.yml
+}
+
+usage() {
+    echo Command line arguments:
+    echo "no-fly            Do not execute any fly commands"
+    echo "save-manifest     Save manifest to file save-manifest"
+    echo "validate          Validatei pipeline instead of set pipeline"
+    echo "validate-strict   Validate pipeline with strict mode"
+    echo "non-interactive   Run set-pipeline in non-interactive mode"
+}
+
+for arg do
+    case "${arg}" in
+        no-fly|no_fly)  NO_FLY="yes" ;;
+        save-manifest|save_manifest) SAVE_MANIFEST="yes" ;;
+        validate) VALIDATE_PIPELINE="normal" ;;
+        validate-strict|validate_strict) VALIDATE_PIPELINE="strict" ;;
+        non-interactive|non_interactive) NON_INTERACTIVE="--non-interactive" ;;
+        help|-h|--help) usage; exit 0 ;;
+        *) echo Invalid argument
+            usage
+            exit 1
+    esac
+done
+
 cd $(dirname $BASH_SOURCE[0])
 echo "Working in $(pwd)"
 need_command spruce
@@ -36,7 +72,7 @@ fi
 echo >&2 "Using settings found in ${settings_file}"
 
 set -e
-trap "rm -f .deploy.yml" QUIT TERM EXIT INT
+trap "cleanup" QUIT TERM EXIT INT
 spruce merge pipeline.yml ${settings_file} > .deploy.yml
 PIPELINE=$(spruce json .deploy.yml | jq -r '.meta.pipeline // ""')
 if [[ -z ${PIPELINE} ]]; then
@@ -64,6 +100,15 @@ fi
 
 fly_cmd="${FLY_CMD:-fly}"
 
+[[ -n ${NO_FLY} ]] && { echo no fly execution requested ; exit 0; }
+
+case "${VALIDATE_PIPELINE}" in
+    normal) fly_opts="validate-pipeline" ;;
+    strict) fly_opts="validate-pipeline --strict" ;;
+    *) fly_opts="set-pipeline ${NON_INTERACTIVE} --pipeline ${PIPELINE}" ;;
+esac
+
 set +x
-$fly_cmd --target ${TARGET} set-pipeline     --pipeline ${PIPELINE} --config .deploy.yml
+$fly_cmd --target ${TARGET} ${fly_opts} --config .deploy.yml
+[[ -n ${VALIDATE_PIPELINE} ]] && exit 0
 $fly_cmd --target ${TARGET} unpause-pipeline --pipeline ${PIPELINE}

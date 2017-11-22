@@ -8,8 +8,12 @@
 #
 # author:  James Hunt <james@niftylogic.com>
 # created: 2016-03-30
+#
 
 set -eu
+
+: ${GIT_EMAIL:?required}
+: ${GIT_NAME:?required}
 
 if [[ -z ${VERSION_FROM} ]]; then
   echo >&2 "VERSION_FROM environment variable not set, or empty.  Did you misconfigure Concourse?"
@@ -32,6 +36,7 @@ fi
 
 ###############################################################
 
+go version; echo; echo
 #?#ORIGIN=$(pwd)
 TARGETS=${TARGETS:-linux/amd64 darwin/amd64}
 ROOT=$( cd "$( dirname "${BASH_SOURCE[0]}" )/../.." && pwd )
@@ -73,10 +78,10 @@ EOF
 
 # GIT!
 if [[ -z $(git config --global user.email) ]]; then
-  git config --global user.email "ci@starkandwayne.com"
+  git config --global user.email "${GIT_EMAIL}"
 fi
 if [[ -z $(git config --global user.name) ]]; then
-  git config --global user.name "CI Bot"
+  git config --global user.name "${GIT_NAME}"
 fi
 
 (cd ${REPO_ROOT}
