@@ -923,15 +923,14 @@ func (v *Vault) CreateSignedCertificate(backend, role, path string, params CertO
 				}
 				return v.Write(path, secret)
 			} else {
-				fmt.Errorf("Invalid response datatype requesting certificate %s:\n%v\n", params.CN, d)
+				return fmt.Errorf("Invalid response datatype requesting certificate %s:\n%v\n", params.CN, d)
 			}
 		} else {
-			fmt.Errorf("No data found when requesting certificate %s:\n%v\n", params.CN, d)
+			return fmt.Errorf("No data found when requesting certificate %s:\n%v\n", params.CN, d)
 		}
 	} else {
 		return fmt.Errorf("Unparseable json creating certificate %s:\n%s\n", params.CN, body)
 	}
-	return nil
 }
 
 func (v *Vault) RevokeCertificate(backend, serial string) error {

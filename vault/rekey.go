@@ -52,7 +52,7 @@ func (v *Vault) cancelRekey() {
 				ansi.Fprintf(os.Stderr, "Unable to read body from rekey cancelation response (you may need to manually cancel to rekey next time): %s\n", err)
 				return
 			}
-			ansi.Fprintf(os.Stderr, "Failed to cancel rekey process (you may need to manually cancel to rekey next time):\n", body)
+			ansi.Fprintf(os.Stderr, "Failed to cancel rekey process (you may need to manually cancel to rekey next time): %s\n", body)
 			return
 		}
 		ansi.Fprintf(os.Stderr, "@y{Vault rekey canceled successfully}\n")

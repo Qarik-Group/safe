@@ -5,6 +5,9 @@
   value for the Vault address, because I tried to be more
   effficient and didn't notice that it was coming out "url".
   Oops.
+- Fix some silly issues with null-context fmt.Errorf calls and
+  missing printf format specs, brought to light by the more
+  invasive validator of go1.9.
 
 # Improvements
 
