@@ -27,7 +27,7 @@ import (
 
 var Version string
 
-func connect() *vault.Vault {
+func connect(auth bool) *vault.Vault {
 	addr := os.Getenv("VAULT_ADDR")
 	if addr == "" {
 		fmt.Fprintf(os.Stderr, "@R{You are not targeting a Vault.}\n")
@@ -36,7 +36,7 @@ func connect() *vault.Vault {
 		os.Exit(1)
 	}
 
-	if os.Getenv("VAULT_TOKEN") == "" {
+	if auth && os.Getenv("VAULT_TOKEN") == "" {
 		fmt.Fprintf(os.Stderr, "@R{You are not authenticated to a Vault.}\n")
 		fmt.Fprintf(os.Stderr, "Try @C{safe auth ldap}\n")
 		fmt.Fprintf(os.Stderr, " or @C{safe auth github}\n")
@@ -353,10 +353,9 @@ func main() {
 		Type:    AdministrativeCommand,
 	}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
-		v := connect()
+		v := connect(false)
 		st, err := v.Strongbox()
 		if err != nil {
-
 			return fmt.Errorf("%s; are you targeting a `safe' installation?", err)
 		}
 
@@ -376,7 +375,7 @@ func main() {
 		Type:    AdministrativeCommand,
 	}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
-		v := connect()
+		v := connect(false)
 		st, err := v.Strongbox()
 		if err != nil {
 			return fmt.Errorf("%s; are you targeting a `safe' installation?", err)
@@ -425,7 +424,7 @@ func main() {
 		Type:    AdministrativeCommand,
 	}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
-		v := connect()
+		v := connect(true)
 		st, err := v.Strongbox()
 		if err != nil {
 			return fmt.Errorf("%s; are you targeting a `safe' installation?", err)
@@ -537,7 +536,7 @@ func main() {
 		if len(args) < 2 {
 			r.ExitWithUsage(command)
 		}
-		v := connect()
+		v := connect(true)
 		path, args := args[0], args[1:]
 		s, err := v.Read(path)
 		if err != nil && !vault.IsNotFound(err) {
@@ -654,7 +653,7 @@ certificate validation failure, etc. occur, they will be printed as well.
 		if len(args) != 1 {
 			r.ExitWithUsage("exists")
 		}
-		v := connect()
+		v := connect(true)
 		_, err := v.Read(args[0])
 		if err != nil {
 			if vault.IsNotFound(err) {
@@ -708,7 +707,7 @@ paths/keys.
 			r.ExitWithUsage("get")
 		}
 
-		v := connect()
+		v := connect(true)
 
 		// Recessive case of one path
 		if len(args) == 1 && !opt.Get.Yaml {
@@ -822,7 +821,7 @@ paths/keys.
 `,
 	}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
-		v := connect()
+		v := connect(true)
 		if len(args) == 0 {
 			secrets, err := v.Mounts("secret")
 			if err != nil {
@@ -907,7 +906,7 @@ to get your bearings.
 		}
 		r1, _ := regexp.Compile("^ ")
 		r2, _ := regexp.Compile("^└")
-		v := connect()
+		v := connect(true)
 		for i, path := range args {
 			tree, err := v.Tree(path, opts)
 			if err != nil {
@@ -939,7 +938,7 @@ to get your bearings.
 		if len(args) < 1 {
 			args = append(args, "secret")
 		}
-		v := connect()
+		v := connect(true)
 		for _, path := range args {
 			tree, err := v.Tree(path, vault.TreeOptions{
 				UseANSI:      false,
@@ -977,7 +976,7 @@ to get your bearings.
 		if len(args) < 1 {
 			r.ExitWithUsage("delete")
 		}
-		v := connect()
+		v := connect(true)
 		for _, path := range args {
 			_, key := vault.ParsePath(path)
 			//Ignore -R if path has a key because that makes no sense
@@ -1006,7 +1005,7 @@ to get your bearings.
 		if len(args) < 1 {
 			args = append(args, "secret")
 		}
-		v := connect()
+		v := connect(true)
 		data := make(map[string]*vault.Secret)
 		for _, path := range args {
 			tree, err := v.Tree(path, vault.TreeOptions{
@@ -1054,7 +1053,7 @@ to get your bearings.
 			r.ExitWithUsage("import")
 		}
 
-		v := connect()
+		v := connect(true)
 		for path, s := range data {
 			err = v.Write(path, s)
 			if err != nil {
@@ -1075,7 +1074,7 @@ to get your bearings.
 			r.ExitWithUsage("move")
 		}
 
-		v := connect()
+		v := connect(true)
 
 		//Don't try to recurse if operating on a key
 		// args[0] is the source path. args[1] is the destination path.
@@ -1104,7 +1103,7 @@ to get your bearings.
 		if len(args) != 2 {
 			r.ExitWithUsage("copy")
 		}
-		v := connect()
+		v := connect(true)
 
 		//Don't try to recurse if operating on a key
 		// args[0] is the source path. args[1] is the destination path.
@@ -1151,7 +1150,7 @@ The following options are recognized:
 			args = args[1:]
 		}
 
-		v := connect()
+		v := connect(true)
 
 		for len(args) > 0 {
 			var path, key string
@@ -1217,7 +1216,7 @@ public key, formatted for use in an SSH authorized_keys file, under 'public'.
 			r.ExitWithUsage("ssh")
 		}
 
-		v := connect()
+		v := connect(true)
 		for _, path := range args {
 			s, err := v.Read(path)
 			if err != nil && !vault.IsNotFound(err) {
@@ -1264,7 +1263,7 @@ be PEM-encoded.
 			r.ExitWithUsage("rsa")
 		}
 
-		v := connect()
+		v := connect(true)
 		for _, path := range args {
 			s, err := v.Read(path)
 			if err != nil && !vault.IsNotFound(err) {
@@ -1310,7 +1309,7 @@ NBITS defaults to 2048.
 		}
 
 		path := args[0]
-		v := connect()
+		v := connect(true)
 		s, err := v.Read(path)
 		if err != nil && !vault.IsNotFound(err) {
 			return err
@@ -1430,7 +1429,7 @@ unseal keys, and should be treated accordingly.
 			return fmt.Errorf("When specifying more than 1 unseal key, you must also have more than one key required to unseal.")
 		}
 
-		v := connect()
+		v := connect(true)
 		keys, err := v.ReKey(unsealKeys, opt.Rekey.KeysToUnseal, gpgKeys)
 		if err != nil {
 			return err
@@ -1478,7 +1477,7 @@ Supported formats:
 		oldKey := args[2]
 		newKey := args[3]
 
-		v := connect()
+		v := connect(true)
 		s, err := v.Read(path)
 		if err != nil {
 			return err
@@ -1524,7 +1523,7 @@ sent as DATA.
 			r.ExitWithUsage("curl")
 		}
 
-		v := connect()
+		v := connect(true)
 		res, err := v.Curl(strings.ToUpper(args[0]), args[1], []byte(strings.Join(args[2:], " ")))
 		if err != nil {
 			return err
@@ -1650,7 +1649,7 @@ The following options are recognized:
 		}
 
 		rc.Apply(opt.UseTarget)
-		v := connect()
+		v := connect(true)
 
 		var ca *vault.X509
 		if opt.X509.Validate.SignedBy != "" {
@@ -1762,7 +1761,7 @@ The following options are recognized:
 			opt.X509.Issue.Subject = fmt.Sprintf("CN=%s", opt.X509.Issue.Name[0])
 		}
 
-		v := connect()
+		v := connect(true)
 		if opt.SkipIfExists {
 			if _, err := v.Read(args[0]); err == nil {
 				if !opt.Quiet {
@@ -1847,7 +1846,7 @@ The following options are recognized:
 		}
 
 		rc.Apply(opt.UseTarget)
-		v := connect()
+		v := connect(true)
 
 		/* find the CA */
 		s, err := v.Read(opt.X509.Revoke.SignedBy)
@@ -1905,7 +1904,7 @@ prints out information about a certificate, including:
 		}
 
 		rc.Apply(opt.UseTarget)
-		v := connect()
+		v := connect(true)
 
 		for _, path := range args {
 			s, err := v.Read(args[0])
@@ -1994,7 +1993,7 @@ Currently, only the --renew option is supported, and it is required:
 		}
 
 		rc.Apply(opt.UseTarget)
-		v := connect()
+		v := connect(true)
 
 		s, err := v.Read(args[0])
 		if err != nil {
