@@ -295,6 +295,7 @@ for version in ${versions[@]}; do
   restart_vault_server
   clearvault
 
+
    ######   ######## ########       ##  ######  ######## ########
   ##    ##  ##          ##         ##  ##    ## ##          ##
   ##        ##          ##        ##   ##       ##          ##
@@ -2022,15 +2023,23 @@ EOF
     (run; ./safe x509 check secret/x509/imposter --ca)                     ; exitok $? 1
   fi
 
-  # REKEY TESTS
+
+  ########  ######## ##    ## ######## ##    ##
+  ##     ## ##       ##   ##  ##        ##  ##
+  ##     ## ##       ##  ##   ##         ####
+  ########  ######   #####    ######      ##
+  ##   ##   ##       ##  ##   ##          ##
+  ##    ##  ##       ##   ##  ##          ##
+  ##     ## ######## ##    ## ########    ##
+
   testing ${version} safe rekey
-  now trying to rekey with a lower num-unseal-keys than keys-to-unseal should error
-  (run; ./safe rekey --num-unseal-keys 3 --keys-to-unseal 5 >t/home/got 2>&1); exitok $? 1
+  now trying to rekey to require 5/3 keys should error
+  (run; ./safe rekey --keys 3 --threshold 5 >t/home/got 2>&1); exitok $? 1
   cat <<'EOF' > t/home/want ; diffok
 !! You specified only 3 unseal keys, but are requiring 5 keys to unseal vault. This is bad.
 EOF
-  now trying to rekey with only one key-to-unseal but multiple num-unseal-keys should error
-  (run; ./safe rekey --keys-to-unseal 1 --num-unseal-keys 2 >t/home/got 2>&1); exitok $? 1
+  now trying to rekey to require 1/1+n keys should error
+  (run; ./safe rekey --threshold 1 --keys 2 >t/home/got 2>&1); exitok $? 1
   cat <<'EOF' > t/home/want ; diffok
 !! When specifying more than 1 unseal key, you must also have more than one key required to unseal.
 EOF
@@ -2061,10 +2070,12 @@ EOF
   (./safe curl GET sys/rekey/init | grep '"started":false'); exitok $? 0
 
 
-  now trying to rekey with no gpg usage
+  now restarting vault server to start over
   restart_vault_server
+  now validating that the restarted vault is unsealed
   (./safe set secret/handshake knock=knock); exitok $? 0
-  (run; echo "$unseal_key" | ./safe rekey --num-unseal-keys 1 > t/home/original); exitok $? 0
+  now trying to rekey without using gpg
+  (run; echo "$unseal_key" | ./safe rekey --keys 1 > t/home/original); exitok $? 0
   cat t/home/original | sed -E 's/Unseal key 1: .*/Unseal key 1: REPLACED/' > t/home/got
   cat <<'EOF' >t/home/want ; diffok
 Your Vault has been re-keyed. Please take note of your new unseal keys and store them safely!
@@ -2084,11 +2095,11 @@ EOF
 
   if [[ -z "${SAFE_DISABLE_GPG_TESTS:-}" ]]; then
     testing ${version} safe rekey --gpg
-    now trying to rekey with the num-unseal-keys otherthan the number of gpg keys should error
+    now trying to rekey with the threshold other than the number of gpg keys should error
     gpg --import assets/gpg.pubkey
-    (run; ./safe rekey --num-unseal-keys 3 --gpg safe-testing@safe.com >t/home/got 2>&1); exitok $? 1
+    (run; ./safe rekey --keys 3 --gpg safe-testing@safe.com >t/home/got 2>&1); exitok $? 1
     cat <<'EOF' > t/home/want ; diffok
-!! Both --gpg and --num-unseal-keys were specified, and their counts did not match.
+!! Both --gpg and --keys were specified, and their counts did not match.
 EOF
 
     now trying to rekey with a gpg key that is not in the keyring fails
@@ -2097,7 +2108,7 @@ EOF
 !! No GPG key found for not-there@missing.com in the local keyring
 EOF
 
-    now trying to rekey with gpg keys matching the num-unseal-keys
+    now trying to rekey with gpg keys matching the threshold
     restart_vault_server
     (./safe set secret/handshake knock=knock); exitok $? 0
     gpg --import assets/gpg.pubkey
