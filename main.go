@@ -86,9 +86,9 @@ type Options struct {
 	} `cli:"init"`
 
 	Rekey struct {
-		UnsealCount  int      `cli:"--num-unseal-keys"`
-		KeysToUnseal int      `cli:"--keys-to-unseal"`
-		GPG          []string `cli:"--gpg"`
+		NKeys     int      `cli:"--keys, --num-unseal-keys"`
+		Threshold int      `cli:"--threshold, --keys-to-unseal"`
+		GPG       []string `cli:"--gpg"`
 	} `cli:"rekey"`
 
 	Get struct {
@@ -1515,14 +1515,14 @@ NBITS defaults to 2048.
 
 	r.Dispatch("rekey", &Help{
 		Summary: "Re-key your Vault with new unseal keys",
-		Usage:   "safe rekey [--gpg email@address ...] [--num-unseal-keys <int>] [--keys-to-unseal <int>]",
+		Usage:   "safe rekey [--gpg email@address ...] [--keys #] [--threshold #]",
 		Type:    DestructiveCommand,
 		Description: `
 Rekeys Vault with new unseal keys. This will require a quorum
 of existing unseal keys to accomplish. This command can be used
-to change the nubmer of unseal keys being generated via
---num-unseal-keys, as well as the number of keys required to
-unseal the Vault via --keys-to-unseal.
+to change the nubmer of unseal keys being generated via --keys,
+as well as the number of keys required to unseal the Vault via
+--threshold.
 
 If --gpg flags are provided, they will be used to look up in the
 local GPG keyring public keys to give Vault for encrypting the new
@@ -1558,29 +1558,29 @@ unseal keys, and should be treated accordingly.
 		}
 
 		// if specified, --unseal-keys takes priority, then the number of --gpg-keys, and a default of 5
-		if opt.Rekey.UnsealCount != 0 {
-			unsealKeys = opt.Rekey.UnsealCount
+		if opt.Rekey.NKeys != 0 {
+			unsealKeys = opt.Rekey.NKeys
 		}
 		if len(opt.Rekey.GPG) > 0 && unsealKeys != len(opt.Rekey.GPG) {
-			return fmt.Errorf("Both --gpg and --num-unseal-keys were specified, and their counts did not match.")
+			return fmt.Errorf("Both --gpg and --keys were specified, and their counts did not match.")
 		}
 
-		// if --keys-to-unseal isn't specified, use a default (unless default is > the num-unseal-keys
-		if opt.Rekey.KeysToUnseal == 0 {
-			opt.Rekey.KeysToUnseal = 3
-			if opt.Rekey.KeysToUnseal > unsealKeys {
-				opt.Rekey.KeysToUnseal = unsealKeys
+		// if --threshold isn't specified, use a default (unless default is > the number of keys
+		if opt.Rekey.Threshold == 0 {
+			opt.Rekey.Threshold = 3
+			if opt.Rekey.Threshold > unsealKeys {
+				opt.Rekey.Threshold = unsealKeys
 			}
 		}
-		if opt.Rekey.KeysToUnseal > unsealKeys {
-			return fmt.Errorf("You specified only %d unseal keys, but are requiring %d keys to unseal vault. This is bad.", unsealKeys, opt.Rekey.KeysToUnseal)
+		if opt.Rekey.Threshold > unsealKeys {
+			return fmt.Errorf("You specified only %d unseal keys, but are requiring %d keys to unseal vault. This is bad.", unsealKeys, opt.Rekey.Threshold)
 		}
-		if opt.Rekey.KeysToUnseal < 2 && unsealKeys > 1 {
+		if opt.Rekey.Threshold < 2 && unsealKeys > 1 {
 			return fmt.Errorf("When specifying more than 1 unseal key, you must also have more than one key required to unseal.")
 		}
 
 		v := connect(true)
-		keys, err := v.ReKey(unsealKeys, opt.Rekey.KeysToUnseal, gpgKeys)
+		keys, err := v.ReKey(unsealKeys, opt.Rekey.Threshold, gpgKeys)
 		if err != nil {
 			return err
 		}
