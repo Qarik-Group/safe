@@ -77,6 +77,14 @@ type Options struct {
 	Paste   struct{} `cli:"paste"`
 	Exists  struct{} `cli:"exists, check"`
 
+	Init struct {
+		Single    bool `cli:"-s, --single"`
+		NKeys     int  `cli:"--keys"`
+		Threshold int  `cli:"--threshold"`
+		JSON      bool `cli:"--json"`
+		Sealed    bool `cli:"--sealed"`
+	} `cli:"init"`
+
 	Rekey struct {
 		UnsealCount  int      `cli:"--num-unseal-keys"`
 		KeysToUnseal int      `cli:"--keys-to-unseal"`
@@ -179,6 +187,9 @@ func main() {
 
 	opt.X509.Issue.Bits = 4096
 	opt.X509.Issue.TTL = "10y"
+
+	opt.Init.NKeys = 5
+	opt.Init.Threshold = 3
 
 	go Signals()
 
@@ -366,6 +377,145 @@ func main() {
 				fmt.Printf("@G{%s is unsealed}\n", addr)
 			}
 		}
+		return nil
+	})
+
+	r.Dispatch("init", &Help{
+		Summary: "Initialize a new vault",
+		Usage:   "safe init [--keys #] [--threshold #] [--single] [--json] [--sealed]",
+		Description: `
+Initializes a brand new Vault backend, generating new seal keys, and an
+initial root token.  This information will be printed out, so that you
+can save it somewhere secure (encrypted drive, password manager, etc.)
+
+By default, Vault is initialized with 5 unseal keys, 3 of which are
+required to unseal the Vault after a restart.  You can adjust this via
+the --keys and --threshold options.  The --single option is a shortcut
+for specifying a single key and a threshold of 1.
+
+Once the Vault is initialized, safe will unseal it automatically, using
+the newly minted seal keys, unless you pass it the --sealed option.
+The root token will also be stored in the ~/.saferc file, saving you the
+trouble of calling 'safe auth token' yourself.
+
+The --json flag causes 'safe init' to print out the seal keys and initial
+root token in a machine-friendly JSON format, that looks like this:
+
+    {
+      "root_token": "05f28556-db0a-f76f-3c26-40de20f28cee"
+      "seal_keys": [
+        "jDuvcXg7s4QnjHjwN9ydSaFtoMj8YZWrO8hRFWT2PoqT",
+        "XiE5cq0+AsUcK8EK8GomCsMdylixwWa8tM2L991OHcry",
+        "F9NbroyispQTCMHBWBD5+lYxMEms5hntwsrxcdZx1+3w",
+        "3scP3yIdfLv9mr0YbxZRClpPNSf5ohVpWmxrpRQ/a9JM",
+        "NosOaAjZzvcdHKBvtaqLDRwWSG6/XkLwgZHvnIvAhOC5"
+      ]
+    }
+
+This can be used to automate the setup of Vaults for test/dev purposes,
+which can be quite handy.
+`,
+		Type: AdministrativeCommand,
+	}, func(command string, args ...string) error {
+		cfg := rc.Apply(opt.UseTarget)
+		v := connect(false)
+
+		if opt.Init.Single {
+			opt.Init.NKeys = 1
+			opt.Init.Threshold = 1
+		}
+
+		/* initialize the vault */
+		keys, token, err := v.Init(opt.Init.NKeys, opt.Init.Threshold)
+		if err != nil {
+			return err
+		}
+
+		if token == "" {
+			panic("token was nil")
+		}
+
+		/* auth with the new root token, transparently */
+		cfg.SetToken(token)
+		if err := cfg.Write(); err != nil {
+			return err
+		}
+		os.Setenv("VAULT_TOKEN", token)
+		v = connect(true)
+
+		/* unseal if we weren't called with --sealed */
+		if !opt.Init.Sealed {
+			if err := v.Unseal(keys); err != nil {
+				fmt.Fprintf(os.Stderr, "!! unable to unseal newly-initialized vault: %s\n", err)
+			} else {
+				/* write secret/handshake, just for fun */
+				s := vault.NewSecret()
+				s.Set("knock", "knock", false)
+				v.Write("secret/handshake", s)
+			}
+		}
+
+		/* be nice to the machines and machine-like intelligences */
+		if opt.Init.JSON {
+			out := struct {
+				Keys  []string `json:"seal_keys"`
+				Token string   `json:"root_token"`
+			}{
+				Keys:  keys,
+				Token: token,
+			}
+
+			b, err := json.MarshalIndent(&out, "", "  ")
+			if err != nil {
+				return err
+			}
+			fmt.Printf("%s\n", string(b))
+			return nil
+		}
+
+		for i, key := range keys {
+			fmt.Printf("Unseal Key #%d: @G{%s}\n", i+1, key)
+		}
+		fmt.Printf("Initial Root Token: @M{%s}\n", token)
+		fmt.Printf("\n")
+		if opt.Init.NKeys == 1 {
+			fmt.Printf("Vault initialized with a single key. Please securely distribute it.\n")
+			fmt.Printf("When the Vault is re-sealed, restarted, or stopped, you must provide\n")
+			fmt.Printf("this key to unseal it again.\n")
+			fmt.Printf("\n")
+			fmt.Printf("Vault does not store the master key. Without the above unseal key,\n")
+			fmt.Printf("your Vault will remain permanently sealed.\n")
+
+		} else if opt.Init.NKeys == opt.Init.Threshold {
+			fmt.Printf("Vault initialized with %d keys. Please securely distribute the\n", opt.Init.NKeys)
+			fmt.Printf("above keys. When the Vault is re-sealed, restarted, or stopped,\n")
+			fmt.Printf("you must provide all of these keys to unseal it again.\n")
+			fmt.Printf("\n")
+			fmt.Printf("Vault does not store the master key. Without all %d of the keys,\n", opt.Init.Threshold)
+			fmt.Printf("your Vault will remain permanently sealed.\n")
+
+		} else {
+			fmt.Printf("Vault initialized with %d keys and a key threshold of %d. Please\n", opt.Init.NKeys, opt.Init.Threshold)
+			fmt.Printf("securely distribute the above keys. When the Vault is re-sealed,\n")
+			fmt.Printf("restarted, or stopped, you must provide at least %d of these keys\n", opt.Init.Threshold)
+			fmt.Printf("to unseal it again.\n")
+			fmt.Printf("\n")
+			fmt.Printf("Vault does not store the master key. Without at least %d keys,\n", opt.Init.Threshold)
+			fmt.Printf("your Vault will remain permanently sealed.\n")
+		}
+
+		fmt.Printf("\n")
+		if !opt.Init.Sealed {
+			fmt.Printf("safe has unsealed the Vault for you, and written a test value\n")
+			fmt.Printf("at @C{secret/handshake}.\n")
+		} else {
+			fmt.Printf("Your Vault has been left sealed.\n")
+		}
+		fmt.Printf("\n")
+		fmt.Printf("You have been automatically authenticated to the Vault with the\n")
+		fmt.Printf("initial root token.  Be safe out there!\n")
+		fmt.Printf("\n")
+
 		return nil
 	})
 
