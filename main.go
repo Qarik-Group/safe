@@ -223,7 +223,6 @@ func main() {
 		cfg := rc.Apply(opt.UseTarget)
 		wide := 0
 		keys := make([]string, 0)
-		fmt.Printf("%v\n", cfg)
 		for name := range cfg.Vaults {
 			keys = append(keys, name)
 			if len(name) > wide {
