@@ -72,6 +72,7 @@ type Options struct {
 	Seal    struct{} `cli:"seal"`
 	Env     struct{} `cli:"env"`
 	Auth    struct{} `cli:"auth, login"`
+	Renew   struct{} `cli:"renew"`
 	Ask     struct{} `cli:"ask"`
 	Set     struct{} `cli:"set, write"`
 	Paste   struct{} `cli:"paste"`
@@ -679,6 +680,37 @@ which can be quite handy.
 		cfg.SetToken(token)
 		return cfg.Write()
 
+	})
+
+	r.Dispatch("renew", &Help{
+		Summary: "Renew one or more authentication tokens",
+		Usage:   "safe renew [all]\n",
+		Type:    AdministrativeCommand,
+	}, func(command string, args ...string) error {
+		if len(args) > 0 {
+			if len(args) != 1 || args[0] != "all" {
+				r.ExitWithUsage("renew")
+			}
+			cfg := rc.Apply("")
+			for vault := range cfg.Vaults {
+				fmt.Printf("renewing token against @C{%s}...\n", vault)
+				rc.Apply(vault)
+				v := connect(true)
+				if err := v.RenewLease(); err != nil {
+					return err
+				}
+				fmt.Printf("  @G{ok} token was renewed successfully!\n")
+			}
+			return nil
+
+		} else {
+			rc.Apply(opt.UseTarget)
+			v := connect(true)
+			if err := v.RenewLease(); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 
 	writeHelper := func(prompt bool, insecure bool, command string, args ...string) error {

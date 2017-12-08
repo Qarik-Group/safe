@@ -7,6 +7,9 @@
 - `safe rekey` now features the same flags as `safe init` for
   consistency and uniformity.
 
+- `safe renew` is a new command that lets you renew the current
+  token (if it is renewable, which root tokens generally aren't)
+
 # Improvements
 
 - Remove silly debugging statement that escaped into the wild.
