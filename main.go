@@ -710,14 +710,22 @@ which can be quite handy.
 				r.ExitWithUsage("renew")
 			}
 			cfg := rc.Apply("")
+			failed := 0
 			for vault := range cfg.Vaults {
-				fmt.Printf("renewing token against @C{%s}...\n", vault)
 				rc.Apply(vault)
+				if os.Getenv("VAULT_TOKEN") == "" {
+					fmt.Printf("skipping @C{%s} - no token found.\n", vault)
+					continue
+				}
+				fmt.Printf("renewing token against @C{%s}...\n", vault)
 				v := connect(true)
 				if err := v.RenewLease(); err != nil {
-					return err
+					fmt.Fprintf(os.Stderr, "@R{failed to renew token against %s: %s}\n", vault, err)
+					failed++
 				}
-				fmt.Printf("  @G{ok} token was renewed successfully!\n")
+			}
+			if failed > 0 {
+				return fmt.Errorf("failed to renew %d token(s).", failed)
 			}
 			return nil
 
