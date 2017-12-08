@@ -10,7 +10,7 @@ import (
 
 func (v *Vault) Init(nkeys, threshold int) ([]string, string, error) {
 	if threshold > nkeys {
-		return nil, "", fmt.Errorf("cannot require %d/%d keys -- threshold is too high!")
+		return nil, "", fmt.Errorf("cannot require %d/%d keys -- threshold is too high!", threshold, nkeys)
 	}
 
 	in := struct {

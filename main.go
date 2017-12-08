@@ -189,9 +189,6 @@ func main() {
 	opt.X509.Issue.Bits = 4096
 	opt.X509.Issue.TTL = "10y"
 
-	opt.Init.NKeys = 5
-	opt.Init.Threshold = 3
-
 	go Signals()
 
 	r := NewRunner()
@@ -421,6 +418,17 @@ which can be quite handy.
 		cfg := rc.Apply(opt.UseTarget)
 		v := connect(false)
 
+		if opt.Init.NKeys == 0 {
+			opt.Init.NKeys = 5
+		}
+		if opt.Init.Threshold == 0 {
+			if opt.Init.NKeys > 3 {
+				opt.Init.Threshold = opt.Init.NKeys - 2
+			} else {
+				opt.Init.Threshold = opt.Init.NKeys
+			}
+		}
+
 		if opt.Init.Single {
 			opt.Init.NKeys = 1
 			opt.Init.Threshold = 1
@@ -446,14 +454,24 @@ which can be quite handy.
 
 		/* unseal if we weren't called with --sealed */
 		if !opt.Init.Sealed {
-			if err := v.Unseal(keys); err != nil {
-				fmt.Fprintf(os.Stderr, "!! unable to unseal newly-initialized vault: %s\n", err)
+			if st, err := v.Strongbox(); err == nil {
+				for addr := range st {
+					v.URL = addr
+					if err := v.Unseal(keys); err != nil {
+						fmt.Fprintf(os.Stderr, "!!! unable to unseal newly-initialized vault (at %s): %s\n", addr, err)
+					}
+				}
+
 			} else {
-				/* write secret/handshake, just for fun */
-				s := vault.NewSecret()
-				s.Set("knock", "knock", false)
-				v.Write("secret/handshake", s)
+				if err := v.Unseal(keys); err != nil {
+					fmt.Fprintf(os.Stderr, "!! unable to unseal newly-initialized vault: %s\n", err)
+				}
 			}
+
+			/* write secret/handshake, just for fun */
+			s := vault.NewSecret()
+			s.Set("knock", "knock", false)
+			v.Write("secret/handshake", s)
 		}
 
 		/* be nice to the machines and machine-like intelligences */
