@@ -1729,12 +1729,24 @@ sent as DATA.
 	}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
 
-		if len(args) < 2 {
+		var (
+			url, method string
+			data        []byte
+		)
+
+		method = "GET"
+		if len(args) < 1 {
 			r.ExitWithUsage("curl")
+		} else if len(args) == 1 {
+			url = args[0]
+		} else {
+			method = strings.ToUpper(args[0])
+			url = args[1]
+			data = []byte(strings.Join(args[2:], " "))
 		}
 
 		v := connect(true)
-		res, err := v.Curl(strings.ToUpper(args[0]), args[1], []byte(strings.Join(args[2:], " ")))
+		res, err := v.Curl(method, url, data)
 		if err != nil {
 			return err
 		}
