@@ -144,7 +144,9 @@ type Options struct {
 	Vault   struct{} `cli:"vault!"`
 	Fmt     struct{} `cli:"fmt"`
 
-	Curl struct{} `cli:"curl"`
+	Curl struct {
+		DataOnly bool `cli:"--data-only"`
+	} `cli:"curl"`
 
 	X509 struct {
 		Validate struct {
@@ -1737,8 +1739,17 @@ sent as DATA.
 			return err
 		}
 
-		r, _ := httputil.DumpResponse(res, true)
-		fmt.Fprintf(os.Stdout, "%s\n", r)
+		if opt.Curl.DataOnly {
+			b, err := ioutil.ReadAll(res.Body)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(os.Stdout, "%s\n", string(b))
+
+		} else {
+			r, _ := httputil.DumpResponse(res, true)
+			fmt.Fprintf(os.Stdout, "%s\n", r)
+		}
 		return nil
 	})
 
