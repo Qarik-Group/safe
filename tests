@@ -789,6 +789,23 @@ EOF
   (run; ./safe delete secret/delete) ; exitok $? 0
   no_key secret/delete
 
+  #######
+  clearvault
+  testing $version recursive secret deletion
+  no_key secret/a/b/c/d/e/f/delete
+  generate secret/a/b/c/d/e/f/delete hello=world
+  generate secret/a/b/c/1/2/3/delete goodbye=cruel-world
+  generate secret/a/a/a/a/a/a/a/h real=monsters
+  is_key secret/a/b/c/d/e/f/delete:hello world
+  is_key secret/a/b/c/1/2/3/delete:goodbye cruel-world
+  is_key secret/a/a/a/a/a/a/a/h:real monsters
+
+  now removing the secret
+  (run; ./safe delete -Rf secret/a/b) ; exitok $? 0
+  no_key secret/a/b/c/d/e/f/delete
+  no_key secret/a/b/c/1/2/3/delete
+  is_key secret/a/a/a/a/a/a/a/h:real monsters # still got it!
+
 
   #######
   clearvault

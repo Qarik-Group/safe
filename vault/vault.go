@@ -437,7 +437,9 @@ func (v *Vault) verifySecretExists(path string) error {
 func (v *Vault) DeleteTree(root string) error {
 	root = Canonicalize(root)
 
-	tree, err := v.Tree(root, TreeOptions{})
+	tree, err := v.Tree(root, TreeOptions{
+		StripSlashes: true,
+	})
 	if err != nil {
 		return err
 	}

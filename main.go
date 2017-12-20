@@ -1178,7 +1178,7 @@ to get your bearings.
 
 	r.Dispatch("delete", &Help{
 		Summary: "Remove one or more path from the Vault",
-		Usage:   "safe delete [-R] PATH [PATH ...]",
+		Usage:   "safe delete [-rf] PATH [PATH ...]",
 		Type:    DestructiveCommand,
 	}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
@@ -1189,7 +1189,7 @@ to get your bearings.
 		v := connect(true)
 		for _, path := range args {
 			_, key := vault.ParsePath(path)
-			//Ignore -R if path has a key because that makes no sense
+			//Ignore -r if path has a key because that makes no sense
 			if opt.Delete.Recurse && key == "" {
 				if !opt.Delete.Force && !recursively("delete", args...) {
 					return nil /* skip this command, process the next */
@@ -1276,7 +1276,7 @@ to get your bearings.
 
 	r.Dispatch("move", &Help{
 		Summary: "Move a secret from one path to another",
-		Usage:   "safe move [-R] OLD-PATH NEW-PATH",
+		Usage:   "safe move [-rf] OLD-PATH NEW-PATH",
 		Type:    DestructiveCommand,
 	}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
@@ -1305,7 +1305,7 @@ to get your bearings.
 
 	r.Dispatch("copy", &Help{
 		Summary: "Copy a secret from one path to another",
-		Usage:   "safe copy [-R] OLD-PATH NEW-PATH",
+		Usage:   "safe copy [-Rf] OLD-PATH NEW-PATH",
 		Type:    DestructiveCommand,
 	}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
