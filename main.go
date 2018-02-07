@@ -1191,8 +1191,8 @@ to get your bearings.
 			_, key := vault.ParsePath(path)
 			//Ignore -r if path has a key because that makes no sense
 			if opt.Delete.Recurse && key == "" {
-				if !opt.Delete.Force && !recursively("delete", args...) {
-					return nil /* skip this command, process the next */
+				if !opt.Delete.Force && !recursively("delete", path) {
+					continue /* skip this command, process the next */
 				}
 				if err := v.DeleteTree(path); err != nil && !(vault.IsNotFound(err) && opt.Delete.Force) {
 					return err
@@ -2315,7 +2315,7 @@ Currently, only the --renew option is supported, and it is required:
 }
 
 func recursively(cmd string, args ...string) bool {
-	y := prompt.Normal("Recursively %s %s (y/n) ", cmd, strings.Join(args, " "))
+	y := prompt.Normal("Recursively @R{%s} @C{%s} @Y{(y/n)} ", cmd, strings.Join(args, " "))
 	y = strings.TrimSpace(y)
 	return y == "y" || y == "yes"
 }
