@@ -1797,6 +1797,12 @@ Here are the supported commands:
     Revokes an X.509 certificate that was issues by one of our CAs.
 
 
+  @G{x509 crl} [OPTIONS] path/to/ca
+
+    Manages a certificate revocation list, primarily to renew it
+    (resigning it for freshness / liveness).
+
+
   @G{x509 validate} [OPTIONS] path/to/cert
 
     Validate a certificate in the Vault, checking to make sure that
