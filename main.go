@@ -45,7 +45,7 @@ func connect(auth bool) *vault.Vault {
 		os.Exit(1)
 	}
 
-	v, err := vault.NewVault(addr, os.Getenv("VAULT_TOKEN"))
+	v, err := vault.NewVault(addr, os.Getenv("VAULT_TOKEN"), auth)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "@R{!! %s}\n", err)
 		os.Exit(1)

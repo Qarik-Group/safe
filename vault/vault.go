@@ -27,17 +27,19 @@ type Vault struct {
 
 // NewVault creates a new Vault object.  If an empty token is specified,
 // the current user's token is read from ~/.vault-token.
-func NewVault(url, token string) (*Vault, error) {
-	if token == "" {
-		b, err := ioutil.ReadFile(fmt.Sprintf("%s/.vault-token", os.Getenv("HOME")))
-		if err != nil {
-			return nil, err
+func NewVault(url, token string, auth bool) (*Vault, error) {
+	if auth {
+		if token == "" {
+			b, err := ioutil.ReadFile(fmt.Sprintf("%s/.vault-token", os.Getenv("HOME")))
+			if err != nil {
+				return nil, err
+			}
+			token = string(b)
 		}
-		token = string(b)
-	}
 
-	if token == "" {
-		return nil, fmt.Errorf("no vault token specified; are you authenticated?")
+		if token == "" {
+			return nil, fmt.Errorf("no vault token specified; are you authenticated?")
+		}
 	}
 
 	roots, err := x509.SystemCertPool()
