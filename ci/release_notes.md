@@ -6,3 +6,5 @@
 
 - `safe rm -r` now properly prompts for each path, without
   short-circuiting on a 'no', and has pretty color-fied output!
+
+- `safe target` now honors the `--quiet` flag.

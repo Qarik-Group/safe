@@ -307,23 +307,27 @@ func main() {
 				if err != nil {
 					return err
 				}
-				skip := ""
-				if !cfg.Verified() {
-					skip = " (skipping TLS certificate verification)"
+				if !opt.Quiet {
+					skip := ""
+					if !cfg.Verified() {
+						skip = " (skipping TLS certificate verification)"
+					}
+					fmt.Fprintf(os.Stderr, "Now targeting @C{%s} at @C{%s}@R{%s}\n\n", cfg.Current, cfg.URL(), skip)
 				}
-				fmt.Fprintf(os.Stderr, "Now targeting @C{%s} at @C{%s}@R{%s}\n\n", cfg.Current, cfg.URL(), skip)
 				return nil
 			}
 		}
 		if len(args) == 0 {
-			if cfg.Current == "" {
-				fmt.Fprintf(os.Stderr, "@R{No Vault currently targeted}\n")
-			} else {
-				skip := ""
-				if !cfg.Verified() {
-					skip = " (skipping TLS certificate verification)"
+			if !opt.Quiet {
+				if cfg.Current == "" {
+					fmt.Fprintf(os.Stderr, "@R{No Vault currently targeted}\n")
+				} else {
+					skip := ""
+					if !cfg.Verified() {
+						skip = " (skipping TLS certificate verification)"
+					}
+					fmt.Fprintf(os.Stderr, "Currently targeting @C{%s} at @C{%s}@R{%s}\n\n", cfg.Current, cfg.URL(), skip)
 				}
-				fmt.Fprintf(os.Stderr, "Currently targeting @C{%s} at @C{%s}@R{%s}\n\n", cfg.Current, cfg.URL(), skip)
 			}
 			return nil
 		}
@@ -332,11 +336,13 @@ func main() {
 			if err != nil {
 				return err
 			}
-			skip := ""
-			if !cfg.Verified() {
-				skip = " (skipping TLS certificate verification)"
+			if !opt.Quiet {
+				skip := ""
+				if !cfg.Verified() {
+					skip = " (skipping TLS certificate verification)"
+				}
+				fmt.Fprintf(os.Stderr, "Now targeting @C{%s} at @C{%s}@R{%s}\n\n", cfg.Current, cfg.URL(), skip)
 			}
-			fmt.Fprintf(os.Stderr, "Now targeting @C{%s} at @C{%s}@R{%s}\n\n", cfg.Current, cfg.URL(), skip)
 			return cfg.Write()
 		}
 
@@ -350,7 +356,9 @@ func main() {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(os.Stderr, "Now targeting @C{%s} at @C{%s}\n\n", cfg.Current, cfg.URL())
+			if !opt.Quiet {
+				fmt.Fprintf(os.Stderr, "Now targeting @C{%s} at @C{%s}\n\n", cfg.Current, cfg.URL())
+			}
 			return cfg.Write()
 		}
 
