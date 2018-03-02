@@ -1724,7 +1724,7 @@ Supported formats:
 This is a debugging and diagnostics tool.  You should not need to use
 'safe curl' for normal operation or interaction with a Vault.
 
-METHOD must be one of GET, POST, or PUT.
+METHOD must be one of GET, LIST, POST, or PUT.
 
 REL-URI is the relative URI (the path component, starting with the first
 forward slash) of the resource you wish to access.
