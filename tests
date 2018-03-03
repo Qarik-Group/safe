@@ -295,6 +295,25 @@ for version in ${versions[@]}; do
   clearvault
 
 
+   ######  ##     ## ########  ##
+  ##    ## ##     ## ##     ## ##
+  ##       ##     ## ##     ## ##
+  ##       ##     ## ########  ##
+  ##       ##     ## ##   ##   ##
+  ##    ## ##     ## ##    ##  ##
+   ######   #######  ##     ## ########
+
+  #######
+  clearvault
+  testing $version safe curl plumbing
+  now trying to curl without a leading slash
+  (run; ./safe curl sys/seal-status)    ; exitok $? 0
+  now trying to curl with a leading slash
+  (run; ./safe curl /sys/seal-status)   ; exitok $? 0
+  now trying to curl with embedded duplicate slashes
+  (run; ./safe curl /sys///seal-status) ; exitok $? 0
+
+
    ######   ######## ########       ##  ######  ######## ########
   ##    ##  ##          ##         ##  ##    ## ##          ##
   ##        ##          ##        ##   ##       ##          ##

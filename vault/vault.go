@@ -127,6 +127,7 @@ func (v *Vault) request(req *http.Request) (*http.Response, error) {
 }
 
 func (v *Vault) Curl(method string, path string, body []byte) (*http.Response, error) {
+	path = Canonicalize(path)
 	req, err := http.NewRequest(method, v.url("/v1/%s", path), bytes.NewBuffer(body))
 	if err != nil {
 		return nil, err
