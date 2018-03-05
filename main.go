@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"crypto/x509"
 
 	fmt "github.com/jhunt/go-ansi"
 	"github.com/jhunt/go-cli"
@@ -2212,6 +2213,75 @@ prints out information about a certificate, including:
 			} else {
 				fmt.Printf(" (@M{~%d years})\n", life/365/24)
 			}
+			fmt.Printf("\n")
+
+			n := 0
+			fmt.Printf("  for the following purposes:\n")
+			if cert.KeyUsage&x509.KeyUsageDigitalSignature != 0 {
+				n++
+				fmt.Printf("    - @C{digital-signature}  can be used to verify digital signatures.\n")
+			}
+			if cert.KeyUsage&x509.KeyUsageContentCommitment != 0 {
+				n++
+				fmt.Printf("    - @C{non-repudiation}    can be used for non-repudiation / content commitment.\n")
+			}
+			if cert.KeyUsage&x509.KeyUsageKeyEncipherment != 0 {
+				n++
+				fmt.Printf("    - @C{key-encipherment}   can be used encrypt other keys, for transport.\n")
+			}
+			if cert.KeyUsage&x509.KeyUsageDataEncipherment != 0 {
+				n++
+				fmt.Printf("    - @C{data-encupherment}  can be used to encrypt user data directly.\n")
+			}
+			if cert.KeyUsage&x509.KeyUsageKeyAgreement != 0 {
+				n++
+				fmt.Printf("    - @C{key-agreement}      can be used in key exchange, a la Diffie-Hellman key exchange.\n")
+			}
+			if cert.KeyUsage&x509.KeyUsageCertSign != 0 {
+				n++
+				fmt.Printf("    - @C{key-cert-sign}      can be used to verify digital signatures on public key certificates.\n")
+			}
+			if cert.KeyUsage&x509.KeyUsageCRLSign != 0 {
+				n++
+				fmt.Printf("    - @C{crl-sign}           can be used to verify digital signatures on certificate revocation lists.\n")
+			}
+			if cert.KeyUsage&x509.KeyUsageEncipherOnly != 0 {
+				n++
+				if cert.KeyUsage&x509.KeyUsageKeyAgreement != 0 {
+					fmt.Printf("    - @C{encipher-only}      can only be used to encrypt data in a key exchange.\n")
+				} else {
+					fmt.Printf("    - @C{encipher-only}      this key-usage is undefined if key-agreement is not set (which it isn't).\n")
+				}
+			}
+			if cert.KeyUsage&x509.KeyUsageDecipherOnly != 0 {
+				n++
+				if cert.KeyUsage&x509.KeyUsageKeyAgreement != 0 {
+					fmt.Printf("    - @C{decipher-only}      can only be used to decrypt data in a key exchange.\n")
+				} else {
+					fmt.Printf("    - @C{decipher-only}      this key-usage is undefined if key-agreement is not set (which it isn't).\n")
+				}
+			}
+			for _, ku := range cert.ExtKeyUsage {
+				n++
+				switch ku {
+				default:
+					n--
+				case x509.ExtKeyUsageClientAuth:
+					fmt.Printf("    - @C{client-auth}*       can be used by a TLS client for authentication.\n")
+				case x509.ExtKeyUsageServerAuth:
+					fmt.Printf("    - @C{server-auth}*       can be used by a TLS server for authentication.\n")
+				case x509.ExtKeyUsageCodeSigning:
+					fmt.Printf("    - @C{code-signing}*      can be used to sign software packages to prove source.\n")
+				case x509.ExtKeyUsageEmailProtection:
+					fmt.Printf("    - @C{email-protection}*  can be used to protect email (signing, encryption, and key exchange).\n")
+				case x509.ExtKeyUsageTimeStamping:
+					fmt.Printf("    - @C{timestamping}*      can be used to generate trusted timestamps.\n")
+				}
+			}
+			if n == 0 {
+				fmt.Printf("    (no special key usage constraints present)\n")
+			}
+			fmt.Printf("\n")
 
 			fmt.Printf("  for the following names:\n")
 			for _, s := range cert.Certificate.DNSNames {

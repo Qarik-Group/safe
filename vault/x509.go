@@ -20,6 +20,9 @@ type X509 struct {
 	PrivateKey  *rsa.PrivateKey
 	Serial      *big.Int
 	CRL         *pkix.CertificateList
+
+	KeyUsage    x509.KeyUsage
+	ExtKeyUsage []x509.ExtKeyUsage
 }
 
 func (s Secret) X509() (*X509, error) {
@@ -67,6 +70,8 @@ func (s Secret) X509() (*X509, error) {
 	o := &X509{
 		Certificate: cert,
 		PrivateKey:  key,
+		KeyUsage: cert.KeyUsage,
+		ExtKeyUsage: cert.ExtKeyUsage,
 	}
 
 	if s.Has("serial") {
@@ -291,7 +296,6 @@ func NewCertificate(subj string, names, keyUsage []string, bits int) (*X509, err
 			IPAddresses:        ips,
 			KeyUsage:           translatedKeyUsage,
 			ExtKeyUsage:        translatedExtKeyUsage,
-			/* KeyUsage */
 			/* ExtraExtensions */
 		},
 	}, nil
