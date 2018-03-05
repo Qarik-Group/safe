@@ -191,7 +191,63 @@ func categorizeSANs(in []string) (ips []net.IP, domains, emails []string) {
 	return
 }
 
-func NewCertificate(subj string, names []string, bits int) (*X509, error) {
+var keyUsageLookup = map[string]x509.KeyUsage{
+	"digital_signature":  x509.KeyUsageDigitalSignature,
+	"non_repudiation":    x509.KeyUsageContentCommitment,
+	"content_commitment": x509.KeyUsageContentCommitment,
+	"key_encipherment":   x509.KeyUsageKeyEncipherment,
+	"data_encipherment":  x509.KeyUsageDataEncipherment,
+	"key_agreement":      x509.KeyUsageKeyAgreement,
+	"key_cert_sign":      x509.KeyUsageCertSign,
+	"crl_sign":           x509.KeyUsageCRLSign,
+	"encipher_only":      x509.KeyUsageEncipherOnly,
+	"decipher_only":      x509.KeyUsageDecipherOnly,
+}
+
+var extendedKeyUsageLookup = map[string]x509.ExtKeyUsage{
+	"client_auth":      x509.ExtKeyUsageClientAuth,
+	"server_auth":      x509.ExtKeyUsageServerAuth,
+	"code_signing":     x509.ExtKeyUsageCodeSigning,
+	"email_protection": x509.ExtKeyUsageEmailProtection,
+	"timestamping":     x509.ExtKeyUsageTimeStamping,
+}
+
+func translateKeyUsage(input []string) (keyUsage x509.KeyUsage, err error) {
+	var found bool
+
+	for i, usage := range input {
+		var thisKeyUsage x509.KeyUsage
+		if thisKeyUsage, found = keyUsageLookup[usage]; !found {
+			continue
+		}
+
+		input[i] = ""
+		keyUsage = keyUsage | thisKeyUsage
+	}
+
+	return
+}
+
+func translateExtendedKeyUsage(input []string) (extendedKeyUsage []x509.ExtKeyUsage, err error) {
+	var found bool
+
+	for _, extUsage := range input {
+		var thisExtKeyUsage x509.ExtKeyUsage
+		//Was interpreted as a normal key usage
+		if extUsage == "" {
+			continue
+		}
+
+		if thisExtKeyUsage, found = extendedKeyUsageLookup[extUsage]; !found {
+			err = fmt.Errorf("%s is not a valid x509 key usage", extUsage)
+			break
+		}
+		extendedKeyUsage = append(extendedKeyUsage, thisExtKeyUsage)
+	}
+	return
+}
+
+func NewCertificate(subj string, names, keyUsage []string, bits int) (*X509, error) {
 	if bits != 1024 && bits != 2048 && bits != 4096 {
 		return nil, fmt.Errorf("invalid RSA key strength '%d', must be one of: 1024, 2048, 4096", bits)
 	}
@@ -208,6 +264,22 @@ func NewCertificate(subj string, names []string, bits int) (*X509, error) {
 		return nil, err
 	}
 
+	//Hyphens, underscores, spaces, oh my!
+	for i, _ := range keyUsage {
+		keyUsage[i] = strings.Replace(keyUsage[i], "-", "_", -1)
+		keyUsage[i] = strings.Replace(keyUsage[i], " ", "_", -1)
+	}
+
+	translatedKeyUsage, err := translateKeyUsage(keyUsage)
+	if err != nil {
+		return nil, err
+	}
+
+	translatedExtKeyUsage, err := translateExtendedKeyUsage(keyUsage)
+	if err != nil {
+		return nil, err
+	}
+
 	return &X509{
 		PrivateKey: key,
 		Certificate: &x509.Certificate{
@@ -217,6 +289,8 @@ func NewCertificate(subj string, names []string, bits int) (*X509, error) {
 			DNSNames:           domains,
 			EmailAddresses:     emails,
 			IPAddresses:        ips,
+			KeyUsage:           translatedKeyUsage,
+			ExtKeyUsage:        translatedExtKeyUsage,
 			/* KeyUsage */
 			/* ExtraExtensions */
 		},

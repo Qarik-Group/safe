@@ -167,6 +167,7 @@ type Options struct {
 			SignedBy string   `cli:"-i, --signed-by"`
 			Name     []string `cli:"-n, --name"`
 			TTL      string   `cli:"-t, --ttl"`
+			KeyUsage []string `cli:"-u, --key-usage"`
 		} `cli:"issue"`
 
 		Revoke struct {
@@ -1789,7 +1790,7 @@ Here are the supported commands:
     Issues a new X.509 certificate, which can be either self-signed,
     or signed by another CA certificate, elsewhere in the Vault.
     You can control the subject name, alternate names (DNS, email and
-    IP addresses), and TTL/expiry.
+    IP addresses), Key Usage, Extended Key Usage, and TTL/expiry.
 
 
   @G{x509 revoke} [OPTIONS] path/to/cert
@@ -1992,6 +1993,14 @@ The following options are recognized:
                     for.  Specified in units h (hours), m (months)
                     d (days) or y (years).  1m = 30d and 1y = 365d
                     Defaults to 10y
+
+  -u, --key-usage   An x509 key usage or extended key usage. Can be specified
+                    once for each desired usage. Valid key usage values are:
+                    'digital_signature', 'non_repudiation', 'key_encipherment',
+                    'data_encipherment', 'key_agreement', 'key_cert_sign',
+                    'crl_sign', 'encipher_only', or 'decipher_only'. Valid
+                    extended key usages are 'client_auth', 'server_auth', 'code_signing',
+                    'email_protection', or 'timestamping'
 	`,
 	}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
@@ -2030,7 +2039,8 @@ The following options are recognized:
 			}
 		}
 
-		cert, err := vault.NewCertificate(opt.X509.Issue.Subject, opt.X509.Issue.Name, opt.X509.Issue.Bits)
+		cert, err := vault.NewCertificate(opt.X509.Issue.Subject,
+			opt.X509.Issue.Name, opt.X509.Issue.KeyUsage, opt.X509.Issue.Bits)
 		if err != nil {
 			return err
 		}
