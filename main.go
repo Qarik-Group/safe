@@ -67,17 +67,20 @@ type Options struct {
 	HelpCommand    struct{} `cli:"help"`
 	VersionCommand struct{} `cli:"version"`
 
-	Targets struct{} `cli:"targets"`
-	Status  struct{} `cli:"status"`
-	Unseal  struct{} `cli:"unseal"`
-	Seal    struct{} `cli:"seal"`
-	Env     struct{} `cli:"env"`
-	Auth    struct{} `cli:"auth, login"`
-	Renew   struct{} `cli:"renew"`
-	Ask     struct{} `cli:"ask"`
-	Set     struct{} `cli:"set, write"`
-	Paste   struct{} `cli:"paste"`
-	Exists  struct{} `cli:"exists, check"`
+	Targets struct {
+		JSON bool `cli:"--json"`
+	} `cli:"targets"`
+
+	Status struct{} `cli:"status"`
+	Unseal struct{} `cli:"unseal"`
+	Seal   struct{} `cli:"seal"`
+	Env    struct{} `cli:"env"`
+	Auth   struct{} `cli:"auth, login"`
+	Renew  struct{} `cli:"renew"`
+	Ask    struct{} `cli:"ask"`
+	Set    struct{} `cli:"set, write"`
+	Paste  struct{} `cli:"paste"`
+	Exists struct{} `cli:"exists, check"`
 
 	Init struct {
 		Single    bool `cli:"-s, --single"`
@@ -112,6 +115,7 @@ type Options struct {
 	} `cli:"tree"`
 
 	Target struct {
+		JSON        bool `cli:"--json"`
 		Interactive bool `cli:"-i, --interactive"`
 	} `cli:"target"`
 
@@ -234,6 +238,29 @@ func main() {
 		}
 
 		cfg := rc.Apply(opt.UseTarget)
+		if opt.Targets.JSON {
+			type vault struct {
+				Name   string `json:"name"`
+				URL    string `json:"url"`
+				Verify bool   `json:"verify"`
+			}
+			vaults := make([]vault, 0)
+
+			for name, details := range cfg.Vaults {
+				vaults = append(vaults, vault{
+					Name:   name,
+					URL:    details.URL,
+					Verify: details.SkipVerify,
+				})
+			}
+			b, err := json.Marshal(vaults)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("%s\n", string(b))
+			return nil
+		}
+
 		wide := 0
 		keys := make([]string, 0)
 		for name := range cfg.Vaults {
@@ -321,6 +348,25 @@ func main() {
 		}
 		if len(args) == 0 {
 			if !opt.Quiet {
+				if opt.Target.JSON {
+					var out struct {
+						Name   string `json:"name"`
+						URL    string `json:"url"`
+						Verify bool   `json:"verify"`
+					}
+					if cfg.Current != "" {
+						out.Name = cfg.Current
+						out.URL = cfg.URL()
+						out.Verify = cfg.Verified()
+					}
+					b, err := json.MarshalIndent(&out, "", "  ")
+					if err != nil {
+						return err
+					}
+					fmt.Printf("%s\n", string(b))
+					return nil
+				}
+
 				if cfg.Current == "" {
 					fmt.Fprintf(os.Stderr, "@R{No Vault currently targeted}\n")
 				} else {
