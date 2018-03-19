@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -14,7 +15,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"crypto/x509"
 
 	fmt "github.com/jhunt/go-ansi"
 	"github.com/jhunt/go-cli"

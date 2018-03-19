@@ -70,7 +70,7 @@ func (s Secret) X509() (*X509, error) {
 	o := &X509{
 		Certificate: cert,
 		PrivateKey:  key,
-		KeyUsage: cert.KeyUsage,
+		KeyUsage:    cert.KeyUsage,
 		ExtKeyUsage: cert.ExtKeyUsage,
 	}
 
