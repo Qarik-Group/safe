@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/starkandwayne/goutils/ansi"
+	"github.com/jhunt/go-ansi"
 	"github.com/starkandwayne/safe/prompt"
 )
 
