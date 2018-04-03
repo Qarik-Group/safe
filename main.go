@@ -592,10 +592,10 @@ listener "tcp" {
 		fmt.Fprintf(os.Stderr, "Vault terminated normally, cleaning up...\n")
 		cfg = rc.Apply("")
 		if cfg.Current == name {
+			cfg.Current = ""
 			if _, found, _ := cfg.Find(previous); found {
 				cfg.Current = previous
 			}
-			cfg.Current = ""
 		}
 		delete(cfg.Vaults, name)
 		cfg.Write()
