@@ -6,14 +6,17 @@ import (
 	"encoding/json"
 	"errors"
 	"io/ioutil"
+	"net"
 	"net/http/httputil"
 	"os"
 	"os/exec"
+	"os/signal"
 	"reflect"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	fmt "github.com/jhunt/go-ansi"
@@ -81,6 +84,12 @@ type Options struct {
 	Set    struct{} `cli:"set, write"`
 	Paste  struct{} `cli:"paste"`
 	Exists struct{} `cli:"exists, check"`
+
+	Local struct {
+		As     string `cli:"--as"`
+		File   string `cli:"-f, --file"`
+		Memory bool   `cli:"-m, --memory"`
+	} `cli:"local"`
 
 	Init struct {
 		Single    bool `cli:"-s, --single"`
@@ -434,6 +443,163 @@ func main() {
 			}
 		}
 		return nil
+	})
+
+	r.Dispatch("local", &Help{
+		Summary: "Run a local vault",
+		Usage:   "safe local (--memory|--file path/to/dir) [--as name]",
+		Description: `
+Spins up a new Vault instance, on an unused port between 8201 and 9999
+(inclusive).  The new Vault will be initialized with a single seal key,
+targeted with a catchy name, authenticated by the new root token, and
+populated with a secret/handshake!
+
+If you just need a transient Vault for testing or experimentation, and
+don't particularly care about the contents of the Vault, specify the
+--memory/-m flag and get an in-memory backend.
+
+If, on the other hand, you want to keep the Vault around, possibly
+spinning it down when not in use, specify the --file/-f flag, and give it
+the path to a directory to use for the file backend.  The files created
+by the mechanism will be encrypted.  You will be given the seal key for
+subsequent activations of the Vault.
+`,
+		Type: AdministrativeCommand,
+	}, func(command string, args ...string) error {
+		if !opt.Local.Memory && opt.Local.File == "" {
+			return fmt.Errorf("Please specify either --memory or --file <path>")
+		}
+		if opt.Local.Memory && opt.Local.File != "" {
+			return fmt.Errorf("Please specify either --memory or --file <path>, but not both")
+		}
+
+		var port int
+		for port = 8201; port < 9999; port++ {
+			conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+			if err != nil {
+				break
+			}
+			conn.Close()
+		}
+
+		f, err := ioutil.TempFile("", "kazoo")
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(f, `# safe local config
+disable_mlock = 1
+listener "tcp" {
+  address     = "127.0.0.1:%d"
+  tls_disable = 1
+}
+`, port)
+
+		keys := make([]string, 0)
+		if opt.Local.Memory {
+			fmt.Fprintf(f, "storage \"inmem\" {}\n")
+		} else {
+			fmt.Fprintf(f, "storage \"file\" { path = \"%s\" }\n", opt.Local.File)
+			if _, err := os.Stat(opt.Local.File); err == nil || !os.IsNotExist(err) {
+				keys = append(keys, pr("Unseal Key", false, true))
+			}
+		}
+
+		echan := make(chan error)
+		cmd := exec.Command("vault", "server", "-config", f.Name())
+		cmd.Start()
+		go func() {
+			echan <- cmd.Wait()
+		}()
+		signal.Ignore(syscall.SIGINT)
+
+		die := func(err error) {
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "@R{!! %s}\n", err)
+			}
+			fmt.Fprintf(os.Stderr, "@Y{shutting down the Vault...}\n")
+			if err := cmd.Process.Kill(); err != nil {
+				fmt.Fprintf(os.Stderr, "@R{NOTE: Unable to terminate the Vault process.}\n")
+				fmt.Fprintf(os.Stderr, "@R{      You may have some environmental cleanup to do.}\n")
+				fmt.Fprintf(os.Stderr, "@R{      Apologies.}\n")
+			}
+			os.Exit(1)
+		}
+
+		cfg := rc.Apply("")
+		name := opt.Local.As
+		if name == "" {
+			name = RandomName()
+			var n int
+			for n = 15; n > 0; n-- {
+				if existing, _ := cfg.Vault(name); existing == nil {
+					break
+				}
+				name = RandomName()
+			}
+			if n == 0 {
+				die(fmt.Errorf("I was unable to come up with a cool name for your local Vault.  Please try naming it with --as"))
+			}
+		} else {
+			if existing, _ := cfg.Vault(name); existing != nil {
+				die(fmt.Errorf("You already have '%s' as a Vault target", name))
+			}
+		}
+		previous := cfg.Current
+
+		cfg.SetTarget(name, fmt.Sprintf("http://127.0.0.1:%d", port), false)
+		cfg.Write()
+
+		rc.Apply("")
+		v := connect(false)
+		token := ""
+		if len(keys) == 0 {
+			keys, _, err = v.Init(1, 1)
+			if err != nil {
+				die(fmt.Errorf("Unable to initialize the new (temporary) Vault: %s", err))
+			}
+		}
+
+		if err = v.Unseal(keys); err != nil {
+			die(fmt.Errorf("Unable to unseal the new (temporary) Vault: %s", err))
+		}
+		token, err = v.NewRootToken(keys)
+		if err != nil {
+			die(fmt.Errorf("Unable to generate a new root token: %s", err))
+		}
+
+		cfg.SetToken(token)
+		os.Setenv("VAULT_TOKEN", token)
+		cfg.Write()
+		v = connect(true)
+
+		s := vault.NewSecret()
+		s.Set("knock", "knock", false)
+		v.Write("secret/handshake", s)
+
+		if !opt.Quiet {
+			fmt.Fprintf(os.Stderr, "Now targeting (temporary) @Y{%s} at @C{%s}\n", cfg.Current, cfg.URL())
+			if opt.Local.Memory {
+				fmt.Fprintf(os.Stderr, "@R{This Vault is MEMORY-BACKED!}\n")
+				fmt.Fprintf(os.Stderr, "If you want to @Y{retain your secrets} be sure to @C{safe export}.\n")
+			} else {
+				fmt.Fprintf(os.Stderr, "Storing data (encrypted) in @G{%s}\n", opt.Local.File)
+				fmt.Fprintf(os.Stderr, "Your Vault Seal Key is @M{%s}\n", keys[0])
+			}
+			fmt.Fprintf(os.Stderr, "Ctrl-C to shut down the Vault\n")
+		}
+
+		err = <-echan
+		fmt.Fprintf(os.Stderr, "Vault terminated normally, cleaning up...\n")
+		cfg = rc.Apply("")
+		if cfg.Current == name {
+			if _, found, _ := cfg.Find(previous); found {
+				cfg.Current = previous
+			}
+			cfg.Current = ""
+		}
+		delete(cfg.Vaults, name)
+		cfg.Write()
+		return err
 	})
 
 	r.Dispatch("init", &Help{

@@ -114,6 +114,10 @@ func (c *Config) Write() error {
 	if err != nil {
 		return err
 	}
+	if v == nil {
+		os.Remove(svtoken())
+		return nil
+	}
 
 	sv := struct {
 		Vault      string `yaml:"vault"` /* this is different than Vault.URL */
