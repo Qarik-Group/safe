@@ -86,12 +86,16 @@ func Apply(use string) Config {
 	if c.Version == 0 {
 		var legacy oldConfig
 		if err = yaml.Unmarshal(b, &legacy); err != nil {
-			return c
+			fmt.Fprintf(os.Stderr, "@R{!!! %s}\n", err)
+			os.Exit(1)
 		}
 		c = legacy.convert()
 	}
 
-	c.Apply(use)
+	if err := c.Apply(use); err != nil {
+		fmt.Fprintf(os.Stderr, "@R{!!! %s}\n", err)
+		os.Exit(1)
+	}
 	return c
 }
 
@@ -127,7 +131,8 @@ func (c *Config) Write() error {
 func (c *Config) Apply(use string) error {
 	v, err := c.Vault(use)
 	if err != nil {
-		return err
+		fmt.Fprintf(os.Stderr, "@R{!!! %s}\n", err)
+		os.Exit(1)
 	}
 
 	if v != nil {
