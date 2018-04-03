@@ -154,14 +154,18 @@ func (c *Config) Apply(use string) error {
 }
 
 func (c *Config) SetCurrent(alias string, reskip bool) error {
-	if v, ok := c.Vaults[alias]; ok {
-		c.Current = alias
-		if reskip {
-			v.SkipVerify = true
-		}
-		return nil
+	v, ok, err := c.Find(alias)
+	if err != nil {
+		return err
 	}
-	return fmt.Errorf("Unknown target '%s'", alias)
+	if !ok {
+		return fmt.Errorf("Unknown target '%s'", alias)
+	}
+	c.Current = alias
+	if reskip {
+		v.SkipVerify = true
+	}
+	return nil
 }
 
 func (c *Config) SetTarget(alias, url string, skipverify bool) error {
@@ -204,6 +208,31 @@ func (c *Config) Verified() bool {
 	return false
 }
 
+func (c *Config) Find(alias string) (*Vault, bool, error) {
+	if v, ok := c.Vaults[alias]; ok {
+		return v, true, nil
+	}
+
+	var v *Vault
+	n := 0
+	want := strings.TrimSuffix(alias, "/")
+
+	for _, maybe := range c.Vaults {
+		if strings.TrimSuffix(maybe.URL, "/") == want {
+			n++
+			v = maybe
+		}
+	}
+	if n == 1 {
+		return v, true, nil
+	}
+	if n > 1 {
+		return nil, true, fmt.Errorf("More than one target for Vault at '%s' (maybe try an alias?)", alias)
+	}
+
+	return nil, false, nil
+}
+
 func (c *Config) Vault(which string) (*Vault, error) {
 	if which == "" {
 		which = c.Current
@@ -213,8 +242,12 @@ func (c *Config) Vault(which string) (*Vault, error) {
 		return nil, nil /* not an error */
 	}
 
-	if v, ok := c.Vaults[which]; ok {
-		return v, nil
+	v, ok, err := c.Find(which)
+	if err != nil {
+		return nil, err
 	}
-	return nil, fmt.Errorf("Current target vault '%s' not found in ~/.saferc", which)
+	if !ok {
+		return nil, fmt.Errorf("Current target '%s' not found in ~/.saferc", which)
+	}
+	return v, nil
 }

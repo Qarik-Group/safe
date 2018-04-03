@@ -295,6 +295,35 @@ for version in ${versions[@]}; do
   clearvault
 
 
+  ########    ###    ########   ######   ######## ########
+     ##      ## ##   ##     ## ##    ##  ##          ##
+     ##     ##   ##  ##     ## ##        ##          ##
+     ##    ##     ## ########  ##   #### ######      ##
+     ##    ######### ##   ##   ##    ##  ##          ##
+     ##    ##     ## ##    ##  ##    ##  ##          ##
+     ##    ##     ## ##     ##  ######   ########    ##
+
+  #######
+  testing $version targeting by ip
+  (run; ./safe target http://127.0.0.1:8199) ; exitok $? 0
+  (run; ./safe -T http://127.0.0.1:8199 env) ; exitok $? 0
+
+  testing $version targeting by alias
+  (run; ./safe target unit-tests)            ; exitok $? 0
+  (run; ./safe -T unit-tests env)            ; exitok $? 0
+
+  testing $version targeting a bad ip
+  (run; ./safe target http://127.0.0.1:8200) ; exitok $? 1
+  (run; ./safe -T http://127.0.0.1:8200 env) ; exitok $? 1
+
+  testing $version ambiguous targets
+  (run; ./safe target alternate \
+                      http://127.0.0.1:8199) ; exitok $? 0
+  (run; ./safe target http://127.0.0.1:8199) ; exitok $? 1
+  (run; ./safe -T http://127.0.0.1:8199 env) ; exitok $? 1
+  restart_vault_server
+
+
    ######  ##     ## ########  ##
   ##    ## ##     ## ##     ## ##
   ##       ##     ## ##     ## ##
