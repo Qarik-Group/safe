@@ -2319,8 +2319,8 @@ The following options are recognized:
   -t, --ttl         How long the new certificate will be valid
                     for.  Specified in units h (hours), m (months)
                     d (days) or y (years).  1m = 30d and 1y = 365d
-                    Defaults to same duration used by the certificate
-                    starting at the time of the renew.
+                    Defaults to the last TTL used to issue or renew
+                    the certificate.
 
 	`,
 	}, func(command string, args ...string) error {
@@ -2397,7 +2397,7 @@ The following options are recognized:
 
 		newCert, err := x509.ParseCertificate(certBytes)
 		if err != nil {
-			panic("Could not parse certificate we just made. We so STUPID!!!")
+			panic("Could not parse certificate we just made")
 		}
 
 		cert.Certificate = newCert
