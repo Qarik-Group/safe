@@ -2334,14 +2334,34 @@ The following options are recognized:
 		var s *vault.Secret
 		var err error
 
+		/* find the Certificate that we want to renew */
+		s, err = v.Read(args[0])
+		if err != nil {
+			return err
+		}
+		cert, err := s.X509()
+		if err != nil {
+			return err
+		}
+
 		/* find the CA */
 		if opt.X509.Renew.SignedBy == "" {
-			// Lets see if we can guess the CA if none was provided
-			caPath := args[0][0:strings.LastIndex(args[0], "/")] + "/ca"
-			s, err = v.Read(caPath)
+			// Check if this cert is self-signed
+			//If so, don't change the value of s, because its already the cert we
+			// loaded in. #Hax
+			err = cert.Certificate.CheckSignature(
+				cert.Certificate.SignatureAlgorithm,
+				cert.Certificate.RawTBSCertificate,
+				cert.Certificate.Signature,
+			)
 			if err != nil {
-				fmt.Printf("No signing authority provided and no 'ca' sibling found.\n")
-				r.ExitWithUsage("x509 renew")
+				// Lets see if we can guess the CA if none was provided
+				caPath := args[0][0:strings.LastIndex(args[0], "/")] + "/ca"
+				s, err = v.Read(caPath)
+				if err != nil {
+					fmt.Printf("No signing authority provided and no 'ca' sibling found.\n")
+					r.ExitWithUsage("x509 renew")
+				}
 			}
 		} else {
 			s, err = v.Read(opt.X509.Renew.SignedBy)
@@ -2350,16 +2370,6 @@ The following options are recognized:
 			}
 		}
 		ca, err := s.X509()
-		if err != nil {
-			return err
-		}
-
-		/* find the Certificate */
-		s, err = v.Read(args[0])
-		if err != nil {
-			return err
-		}
-		cert, err := s.X509()
 		if err != nil {
 			return err
 		}
