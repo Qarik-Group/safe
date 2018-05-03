@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
@@ -193,6 +194,11 @@ type Options struct {
 			SignedBy string `cli:"-i, --signed-by"`
 			TTL      string `cli:"-t, --ttl"`
 		} `cli:"renew"`
+
+		Reissue struct {
+			SignedBy string `cli:"-i, --signed-by"`
+			TTL      string `cli:"-t, --ttl"`
+		} `cli:"reissue"`
 
 		Show struct {
 		} `cli:"show"`
@@ -2303,11 +2309,132 @@ The following options are recognized:
 		return nil
 	})
 
+	r.Dispatch("x509 reissue", &Help{
+		Summary: "Reissue X.509 Certificates and Certificate Authorities",
+		Usage:   "safe x509 issue [OPTIONS] path/to/certificate",
+		Description: `
+Reissues an X.509 Certificate with a new key.
+
+The following options are recognized:
+
+  -i, --signed-by   Path in the Vault where the CA certificate
+					(and signing key) can be found.  If this is not
+					provided, a sibling secret named 'ca' will used
+					if it exists.
+
+  -t, --ttl         How long the new certificate will be valid
+					for.  Specified in units h (hours), m (months)
+					d (days) or y (years).  1m = 30d and 1y = 365d
+					Defaults to the last TTL used to issue or renew
+					the certificate.
+
+	`,
+	}, func(command string, args ...string) error {
+		rc.Apply(opt.UseTarget)
+
+		if len(args) != 1 {
+			r.ExitWithUsage("x509 reissue")
+		}
+
+		v := connect(true)
+		var s *vault.Secret
+		var err error
+
+		/* find the Certificate that we want to renew */
+		s, err = v.Read(args[0])
+		if err != nil {
+			return err
+		}
+		cert, err := s.X509()
+		if err != nil {
+			return err
+		}
+
+		/* find the CA */
+		if opt.X509.Renew.SignedBy == "" {
+			// Check if this cert is self-signed If so, don't change the value
+			// of s, because its already the cert we loaded in. #Hax
+			err = cert.Certificate.CheckSignature(
+				cert.Certificate.SignatureAlgorithm,
+				cert.Certificate.RawTBSCertificate,
+				cert.Certificate.Signature,
+			)
+			if err != nil {
+				// Lets see if we can guess the CA if none was provided
+				caPath := args[0][0:strings.LastIndex(args[0], "/")] + "/ca"
+				s, err = v.Read(caPath)
+				if err != nil {
+					fmt.Printf("No signing authority provided and no 'ca' sibling found.\n")
+					r.ExitWithUsage("x509 reissue")
+				}
+			}
+		} else {
+			s, err = v.Read(opt.X509.Renew.SignedBy)
+			if err != nil {
+				return err
+			}
+		}
+		ca, err := s.X509()
+		if err != nil {
+			return err
+		}
+
+		// Get new expiry date
+		var ttl time.Duration
+		if opt.X509.Renew.TTL == "" {
+			ttl = cert.Certificate.NotAfter.Sub(cert.Certificate.NotBefore)
+		} else {
+			ttl, err = duration(opt.X509.Renew.TTL)
+			if err != nil {
+				return err
+			}
+		}
+		cert.Certificate.NotBefore = time.Now()
+		cert.Certificate.NotAfter = cert.Certificate.NotBefore.Add(ttl)
+
+		// Generate new key with same bit length.
+		bits := cert.PrivateKey.N.BitLen()
+		fmt.Printf("\nGenerating new %d-bit key...\n", bits)
+		newKey, err := rsa.GenerateKey(rand.Reader, bits)
+		if err != nil {
+			return err
+		}
+		cert.PrivateKey = newKey
+
+		certBytes, err := x509.CreateCertificate(
+			rand.Reader, cert.Certificate, ca.Certificate,
+			cert.PrivateKey.Public(), ca.PrivateKey,
+		)
+		if err != nil {
+			return err
+		}
+
+		newCert, err := x509.ParseCertificate(certBytes)
+		if err != nil {
+			panic("Could not parse certificate we just made")
+		}
+
+		cert.Certificate = newCert
+		newSecret, err := cert.Secret(false)
+		if err != nil {
+			return err
+		}
+
+		err = v.Write(args[0], newSecret)
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("Reissued x509 certificate at %s - expiry set to %v\n\n", args[0], cert.Certificate.NotAfter)
+
+		return nil
+	})
+
 	r.Dispatch("x509 renew", &Help{
 		Summary: "Renew X.509 Certificates and Certificate Authorities",
 		Usage:   "safe x509 renew [OPTIONS] path/to/certificate",
 		Description: `
-Renew an X.509 Certificate
+Renew an X.509 Certificate with existing key
 
 The following options are recognized:
 
