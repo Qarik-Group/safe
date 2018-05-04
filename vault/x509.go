@@ -463,13 +463,7 @@ func (ca *X509) SaveTo(v *Vault, path string, skipIfExists bool) error {
 	if err != nil {
 		return err
 	}
-
-	err = v.Write(path, s)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return v.Write(path, s)
 }
 
 func (ca *X509) Sign(x *X509, ttl time.Duration) error {
