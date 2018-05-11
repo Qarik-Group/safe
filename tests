@@ -146,6 +146,49 @@ exitok() {
   fi
 }
 
+eq() {
+  got=$1
+  want=$2
+  step $test
+  if [[ $got != $want ]]; then
+    failed
+    rc=1
+    echo "       got $got"
+    echo "  expected $want"
+  else
+    ok
+  fi
+}
+
+eq_or_diff() {
+  got=$1
+  want=$2
+  step $test
+  if [[ $got != $want ]]; then
+    failed
+    rc=1
+    echo "   values were different:"
+    diff -y <(echo "$got") \
+            <(echo "$want")
+  else
+    ok
+  fi
+}
+
+ne() {
+  got=$1
+  want=$2
+  step $test
+  if [[ $got == $want ]]; then
+    failed
+    rc=1
+    echo "       got $got"
+    echo "  expected literally anything else..."
+  else
+    ok
+  fi
+}
+
 eq_key() {
   key1=$1
   key2=$2
@@ -1662,6 +1705,76 @@ EOF
                  secret/existing >t/home/got 3>&1) ; exitok $? 0
     cat >t/home/want <<EOF ; diffok
 EOF
+
+    testing $version safe x509 reissue
+    now issuing a CA and a certificate for reissue testing
+    (run; ./safe x509 issue --ca        secret/reissue/ca --name test.ca   && \
+          ./safe x509 issue --signed-by secret/reissue/ca --name test.cert \
+                            --bits 2048 secret/reissue/cert); exitok $? 0
+    serial1=$(safe read secret/reissue/ca:serial)
+
+    now reissuing the certificate
+    safe cp secret/reissue/cert/ secret/reissue/orig
+    (run; ./safe x509 reissue secret/reissue/cert); exitok $? 0
+
+    now checking that reissue changed the private key
+    ne "$(./safe read secret/reissue/orig:key)" \
+       "$(./safe read secret/reissue/cert:key)"
+
+    now checking that reissue bumps the CA serial number
+    serial2=$(safe read secret/reissue/ca:serial)
+    eq $(( $serial1 + 1 )) $serial2
+
+    now checking that reissue does not change certificate attributes
+    eq_or_diff "$(./safe x509 show secret/reissue/orig | grep -Ev 'secret/re|valid from|expires in')" \
+               "$(./safe x509 show secret/reissue/cert | grep -Ev 'secret/re|valid from|expires in')"
+
+    now reissuing the certificate with a shorter ttl and a smaller key
+    (run; ./safe x509 reissue --ttl 5d --bits 1024 secret/reissue/cert); exitok $? 0
+
+    now checking that the certificates have different dates
+    ne "$(./safe x509 show secret/reissue/orig | grep 'valid from')" \
+       "$(./safe x509 show secret/reissue/cert | grep 'valid from')"
+
+    now checking that reissue does not change certificate attributes, other than ttl
+    eq_or_diff "$(./safe x509 show secret/reissue/orig | grep -Ev 'secret/re|valid from|expires in')" \
+               "$(./safe x509 show secret/reissue/cert | grep -Ev 'secret/re|valid from|expires in')"
+
+
+
+    testing $version safe x509 renew
+    now issuing a CA and a certificate for renew testing
+    (run; ./safe x509 issue --ca        secret/renew/ca --name test.ca   && \
+          ./safe x509 issue --signed-by secret/renew/ca --name test.cert \
+                            --bits 2048 secret/renew/cert); exitok $? 0
+    serial1=$(safe read secret/renew/ca:serial)
+
+    now renewing the certificate
+    safe cp secret/renew/cert/ secret/renew/orig
+    (run; ./safe x509 renew secret/renew/cert); exitok $? 0
+
+    now checking that renew did not change the private key
+    eq "$(./safe read secret/renew/orig:key)" \
+       "$(./safe read secret/renew/cert:key)"
+
+    now checking that renew bumps the CA serial number
+    serial2=$(safe read secret/renew/ca:serial)
+    eq $(( $serial1 + 1 )) $serial2
+
+    now checking that renew does not change certificate attributes
+    eq_or_diff "$(./safe x509 show secret/renew/orig | grep -Ev 'secret/re|valid from|expires in')" \
+               "$(./safe x509 show secret/renew/cert | grep -Ev 'secret/re|valid from|expires in')"
+
+    now renewing the certificate with a shorter ttl
+    (run; ./safe x509 renew --ttl 5d secret/renew/cert); exitok $? 0
+
+    now checking that the certificates have different dates
+    ne "$(./safe x509 show secret/renew/orig | grep 'valid from')" \
+       "$(./safe x509 show secret/renew/cert | grep 'valid from')"
+
+    now checking that renew does not change certificate attributes, other than ttl
+    eq_or_diff "$(./safe x509 show secret/renew/orig | grep -Ev 'secret/re|valid from|expires in')" \
+               "$(./safe x509 show secret/renew/cert | grep -Ev 'secret/re|valid from|expires in')"
   fi
 
 

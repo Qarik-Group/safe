@@ -458,6 +458,14 @@ func (x X509) Secret(skipIfExists bool) (*Secret, error) {
 	return s, nil
 }
 
+func (ca *X509) SaveTo(v *Vault, path string, skipIfExists bool) error {
+	s, err := ca.Secret(skipIfExists)
+	if err != nil {
+		return err
+	}
+	return v.Write(path, s)
+}
+
 func (ca *X509) Sign(x *X509, ttl time.Duration) error {
 	if ca.Serial == nil {
 		x.Certificate.SerialNumber = big.NewInt(1)

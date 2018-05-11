@@ -984,3 +984,45 @@ func (v *Vault) CheckPKIBackend(backend string) error {
 	}
 	return nil
 }
+
+func (v *Vault) FindSigningCA(cert *X509, certPath string, signPath string) (*X509, string, error) {
+	/* find the CA */
+	if signPath != "" {
+		if certPath == signPath {
+			return cert, certPath, nil
+		} else {
+			s, err := v.Read(signPath)
+			if err != nil {
+				return nil, "", err
+			}
+			ca, err := s.X509()
+			if err != nil {
+				return nil, "", err
+			}
+			return ca, signPath, nil
+		}
+	} else {
+		// Check if this cert is self-signed If so, don't change the value
+		// of s, because its already the cert we loaded in. #Hax
+		err := cert.Certificate.CheckSignature(
+			cert.Certificate.SignatureAlgorithm,
+			cert.Certificate.RawTBSCertificate,
+			cert.Certificate.Signature,
+		)
+		if err == nil {
+			return cert, certPath, nil
+		} else {
+			// Lets see if we can guess the CA if none was provided
+			caPath := certPath[0:strings.LastIndex(certPath, "/")] + "/ca"
+			s, err := v.Read(caPath)
+			if err != nil {
+				return nil, "", fmt.Errorf("No signing authority provided and no 'ca' sibling found")
+			}
+			ca, err := s.X509()
+			if err != nil {
+				return nil, "", err
+			}
+			return ca, caPath, nil
+		}
+	}
+}
