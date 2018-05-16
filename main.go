@@ -99,12 +99,14 @@ type Options struct {
 		Threshold int  `cli:"--threshold"`
 		JSON      bool `cli:"--json"`
 		Sealed    bool `cli:"--sealed"`
+		Persist   bool `cli:"--persist, --no-persist"`
 	} `cli:"init"`
 
 	Rekey struct {
 		NKeys     int      `cli:"--keys, --num-unseal-keys"`
 		Threshold int      `cli:"--threshold, --keys-to-unseal"`
 		GPG       []string `cli:"--gpg"`
+		Persist   bool     `cli:"--persist, --no-persist"`
 	} `cli:"rekey"`
 
 	Get struct {
@@ -218,6 +220,9 @@ func main() {
 
 	opt.X509.Issue.Bits = 4096
 	opt.X509.Issue.TTL = "10y"
+
+	opt.Init.Persist = true
+	opt.Rekey.Persist = true
 
 	go Signals()
 
@@ -649,6 +654,13 @@ root token in a machine-friendly JSON format, that looks like this:
 
 This can be used to automate the setup of Vaults for test/dev purposes,
 which can be quite handy.
+
+By default, the seal keys will also be stored in the Vault itself,
+unless you specify the --no-persist flag.  They will be written to
+secret/vault/seal/keys, as key1, key2, ... keyN.
+
+Note that if --sealed is also set, this option is ignored (since the
+Vault will remain sealed).
 `,
 		Type: AdministrativeCommand,
 	}, func(command string, args ...string) error {
@@ -709,6 +721,11 @@ which can be quite handy.
 			s := vault.NewSecret()
 			s.Set("knock", "knock", false)
 			v.Write("secret/handshake", s)
+
+			/* write seal keys to the vault */
+			if opt.Init.Persist {
+				v.SaveSealKeys(keys)
+			}
 		}
 
 		/* be nice to the machines and machine-like intelligences */
@@ -1830,6 +1847,9 @@ in Vault.
 If no --gpg flags are provided, the output will include the raw
 unseal keys, and should be treated accordingly.
 
+By default, the new seal keys will also be stored in the Vault itself,
+unless you specify the --no-persist flag.  They will be written to
+secret/vault/seal/keys, as key1, key2, ... keyN.
 `,
 	}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
@@ -1879,6 +1899,11 @@ unseal keys, and should be treated accordingly.
 		if err != nil {
 			return err
 		}
+
+		if opt.Rekey.Persist {
+			v.SaveSealKeys(keys)
+		}
+
 		fmt.Printf("@G{Your Vault has been re-keyed.} Please take note of your new unseal keys and @R{store them safely!}\n")
 		for i, key := range keys {
 			if len(opt.Rekey.GPG) == len(keys) {

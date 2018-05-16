@@ -1026,3 +1026,12 @@ func (v *Vault) FindSigningCA(cert *X509, certPath string, signPath string) (*X5
 		}
 	}
 }
+
+func (v *Vault) SaveSealKeys(keys []string) {
+	path := "secret/vault/seal/keys"
+	s := NewSecret()
+	for i, key := range keys {
+		s.Set(fmt.Sprintf("key%d", i+1), key, false)
+	}
+	v.Write(path, s)
+}
