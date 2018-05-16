@@ -10,16 +10,25 @@ import (
 	"golang.org/x/crypto/ssh/terminal"
 )
 
+var in *bufio.Reader
+
+func readline() string {
+	if in == nil {
+		in = bufio.NewReader(os.Stdin)
+	}
+
+	s, _ := in.ReadString('\n')
+	return strings.TrimSuffix(s, "\n")
+}
+
 func Normal(label string, args ...interface{}) string {
 	ansi.Fprintf(os.Stderr, label, args...)
-	s, _ := bufio.NewReader(os.Stdin).ReadString('\n')
-	return strings.TrimSuffix(s, "\n")
+	return readline()
 }
 
 func Secure(label string, args ...interface{}) string {
 	if !isatty.IsTerminal(os.Stdin.Fd()) {
-		s, _ := bufio.NewReader(os.Stdin).ReadString('\n')
-		return strings.TrimSuffix(s, "\n")
+		return readline()
 	}
 
 	ansi.Fprintf(os.Stderr, label, args...)
