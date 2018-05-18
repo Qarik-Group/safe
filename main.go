@@ -505,7 +505,8 @@ subsequent activations of the Vault.
 			return err
 		}
 		fmt.Fprintf(f, `# safe local config
-disable_mlock = 1
+disable_mlock = true
+
 listener "tcp" {
   address     = "127.0.0.1:%d"
   tls_disable = 1
@@ -514,9 +515,9 @@ listener "tcp" {
 
 		keys := make([]string, 0)
 		if opt.Local.Memory {
-			fmt.Fprintf(f, "storage \"inmem\" {}\n")
+			fmt.Fprintf(f, "backend \"inmem\" {}\n")
 		} else {
-			fmt.Fprintf(f, "storage \"file\" { path = \"%s\" }\n", opt.Local.File)
+			fmt.Fprintf(f, "backend \"file\" { path = \"%s\" }\n", opt.Local.File)
 			if _, err := os.Stat(opt.Local.File); err == nil || !os.IsNotExist(err) {
 				keys = append(keys, pr("Unseal Key", false, true))
 			}

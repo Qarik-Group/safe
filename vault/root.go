@@ -11,7 +11,7 @@ import (
 )
 
 func (v *Vault) NewRootToken(keys []string) (string, error) {
-	// cancel any previous generate-root attmempts (get a new nonce!)
+	// cancel any previous generate-root attempts (get a new nonce!)
 	req, err := http.NewRequest("DELETE", v.url("/v1/sys/generate-root/attempt"), nil)
 	if err != nil {
 		return "", err
@@ -77,8 +77,10 @@ func (v *Vault) NewRootToken(keys []string) (string, error) {
 
 		// parse the response and save the encoded (token^otp) token
 		var out struct {
-			EncodedToken string `json:"encoded_token"`
-			Complete     bool   `json:"complete"`
+			//encoded_root_token was changed to encoded_token in vault 0.9.0
+			EncodedToken     string `json:"encoded_token"`
+			EncodedRootToken string `json:"encoded_root_token"`
+			Complete         bool   `json:"complete"`
 		}
 		b, err := ioutil.ReadAll(res.Body)
 		if err != nil {
@@ -90,6 +92,9 @@ func (v *Vault) NewRootToken(keys []string) (string, error) {
 		}
 		if out.Complete {
 			encoded = out.EncodedToken
+			if out.EncodedRootToken != "" {
+				encoded = out.EncodedRootToken
+			}
 		}
 	}
 
