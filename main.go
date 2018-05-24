@@ -130,6 +130,8 @@ type Options struct {
 	Target struct {
 		JSON        bool `cli:"--json"`
 		Interactive bool `cli:"-i, --interactive"`
+
+		Delete struct{} `cli:"delete, rm"`
 	} `cli:"target"`
 
 	Delete struct {
@@ -439,6 +441,24 @@ func main() {
 
 		r.ExitWithUsage("target")
 		return nil
+	})
+
+	r.Dispatch("target delete", &Help{
+		Summary: "Forget about a targeted Vault",
+		Usage:   "safe target delete ALIAS",
+		Type:    DestructiveCommand,
+	}, func(command string, args ...string) error {
+		cfg := rc.Apply(opt.UseTarget)
+		if len(args) != 1 {
+			r.ExitWithUsage("target delete")
+		}
+
+		delete(cfg.Vaults, args[0])
+		if cfg.Current == args[0] {
+			cfg.Current = ""
+		}
+
+		return cfg.Write()
 	})
 
 	r.Dispatch("status", &Help{
