@@ -525,25 +525,50 @@ subsequent activations of the Vault.
 			return err
 		}
 		fmt.Fprintf(f, `# safe local config
-disable_mlock = 1
+disable_mlock = true
+
 listener "tcp" {
   address     = "127.0.0.1:%d"
   tls_disable = 1
 }
 `, port)
 
+		//the "storage" configuration key was once called "backend"
+		storageKey := "storage"
+		cmd := exec.Command("vault", "version")
+		versionOutput, err := cmd.CombinedOutput()
+		if err == nil {
+			matches := regexp.MustCompile("v([0-9]+)\\.([0-9]+)").FindSubmatch(versionOutput)
+			if len(matches) >= 3 {
+				major, err := strconv.ParseUint(string(matches[1]), 10, 64)
+				if err != nil {
+					goto doneVersionCheck
+				}
+				minor, err := strconv.ParseUint(string(matches[2]), 10, 64)
+				if err != nil {
+					goto doneVersionCheck
+				}
+
+				//if version < 0.8.0
+				if major == 0 && minor < 8 {
+					storageKey = "backend"
+				}
+			}
+		}
+	doneVersionCheck:
+
 		keys := make([]string, 0)
 		if opt.Local.Memory {
-			fmt.Fprintf(f, "storage \"inmem\" {}\n")
+			fmt.Fprintf(f, "%s \"inmem\" {}\n", storageKey)
 		} else {
-			fmt.Fprintf(f, "storage \"file\" { path = \"%s\" }\n", opt.Local.File)
+			fmt.Fprintf(f, "%s \"file\" { path = \"%s\" }\n", storageKey, opt.Local.File)
 			if _, err := os.Stat(opt.Local.File); err == nil || !os.IsNotExist(err) {
 				keys = append(keys, pr("Unseal Key", false, true))
 			}
 		}
 
 		echan := make(chan error)
-		cmd := exec.Command("vault", "server", "-config", f.Name())
+		cmd = exec.Command("vault", "server", "-config", f.Name())
 		cmd.Start()
 		go func() {
 			echan <- cmd.Wait()
