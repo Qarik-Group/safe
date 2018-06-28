@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"sort"
@@ -554,6 +555,8 @@ listener "tcp" {
 					storageKey = "backend"
 				}
 			}
+		} else {
+			return fmt.Errorf("@R{Vault is not currently installed or located in $PATH}")
 		}
 	doneVersionCheck:
 
@@ -561,6 +564,7 @@ listener "tcp" {
 		if opt.Local.Memory {
 			fmt.Fprintf(f, "%s \"inmem\" {}\n", storageKey)
 		} else {
+			opt.Local.File = filepath.ToSlash(opt.Local.File)
 			fmt.Fprintf(f, "%s \"file\" { path = \"%s\" }\n", storageKey, opt.Local.File)
 			if _, err := os.Stat(opt.Local.File); err == nil || !os.IsNotExist(err) {
 				keys = append(keys, pr("Unseal Key", false, true))

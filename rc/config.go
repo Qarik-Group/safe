@@ -3,6 +3,7 @@ package rc
 import (
 	"io/ioutil"
 	"os"
+	"runtime"
 	"strings"
 
 	fmt "github.com/jhunt/go-ansi"
@@ -28,12 +29,23 @@ type oldConfig struct {
 	SkipVerify map[string]bool        `yaml:"SkipVerify"`
 }
 
+func userHomeDir() string {
+	if runtime.GOOS == "windows" {
+		home := os.Getenv("USERPROFILE")
+		if home == "" {
+			home = os.Getenv("HOMEDRIVE") + os.Getenv("HOMEPATH")
+		}
+		return home
+	}
+	return os.Getenv("HOME")
+}
+
 func saferc() string {
-	return fmt.Sprintf("%s/.saferc", os.Getenv("HOME"))
+	return fmt.Sprintf("%s/.saferc", userHomeDir())
 }
 
 func svtoken() string {
-	return fmt.Sprintf("%s/.svtoken", os.Getenv("HOME"))
+	return fmt.Sprintf("%s/.svtoken", userHomeDir())
 }
 
 func (legacy *oldConfig) convert() Config {
