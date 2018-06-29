@@ -38,7 +38,7 @@ fi
 
 go version; echo; echo
 #?#ORIGIN=$(pwd)
-TARGETS=${TARGETS:-linux/amd64 darwin/amd64}
+TARGETS=${TARGETS:-linux/amd64 darwin/amd64 windows/amd64}
 ROOT=$( cd "$( dirname "${BASH_SOURCE[0]}" )/../.." && pwd )
 
 pushd $REPO_ROOT
