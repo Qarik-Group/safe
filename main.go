@@ -1405,7 +1405,7 @@ to get your bearings.
 	}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
 		opts := vault.TreeOptions{
-			UseANSI:    true,
+			UseANSI:    fmt.CanColorize(os.Stdout),
 			HideLeaves: opt.Tree.HideLeaves,
 			ShowKeys:   opt.Tree.ShowKeys,
 		}
