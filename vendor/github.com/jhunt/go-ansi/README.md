@@ -58,6 +58,26 @@ The colorizing formatting codes all look like this:
 You can now also activate super-awesome RAINBOW mode with
 `@*{...}`
 
+To Colorize or Not To Colorize?
+-------------------------------
+
+Is that the question?
+
+This library tries its hardest to determine whether or not
+colorized sequences should be honored or removed outright, based
+on the terminal-iness of the output medium.  For example, if
+stdout is being redirected to a file, `ansi.Printf` will strip out
+the color sequences altogether.
+
+Sometimes this is impossible.  Specifically, for things like
+`ansi.Errorf` and `ansi.Sprintf`, the library has no idea whether
+or not the ultimate output stream even supports color code
+sequences.  In those cases, you can check yourself, with
+`ansi.CanColorize(io.Writer)` -- it returns true if the io.Writer
+you passed it is hooked up to a terminal.  `ansi.ShouldColorize()`
+is similar, except that it also returns true if
+`ansi.ForceColor(true)` has been called.
+
 Contributing
 ------------
 
