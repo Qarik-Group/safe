@@ -11,6 +11,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"runtime"
 	"strings"
 
 	"github.com/jhunt/go-ansi"
@@ -30,7 +31,7 @@ type Vault struct {
 func NewVault(url, token string, auth bool) (*Vault, error) {
 	if auth {
 		if token == "" {
-			b, err := ioutil.ReadFile(fmt.Sprintf("%s/.vault-token", os.Getenv("HOME")))
+			b, err := ioutil.ReadFile(fmt.Sprintf("%s/.vault-token", userHomeDir()))
 			if err != nil {
 				return nil, err
 			}
@@ -42,8 +43,11 @@ func NewVault(url, token string, auth bool) (*Vault, error) {
 		}
 	}
 
+	// x509.SystemCertPool is not implemented for windows currently.
+	// If nil is supplied for RootCAs, the system will verify the certs as per
+	// https://golang.org/src/crypto/x509/verify.go (Line 741)
 	roots, err := x509.SystemCertPool()
-	if err != nil {
+	if err != nil && runtime.GOOS != "windows" {
 		return nil, fmt.Errorf("unable to retrieve system root certificate authorities: %s", err)
 	}
 
