@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"io"
 	"io/ioutil"
 	"net"
 	"net/http/httputil"
@@ -80,7 +81,9 @@ type Options struct {
 	Status struct{} `cli:"status"`
 	Unseal struct{} `cli:"unseal"`
 	Seal   struct{} `cli:"seal"`
-	Env    struct{} `cli:"env"`
+	Env    struct {
+		Format string `cli:"--format"`
+	} `cli:"env"`
 	Auth   struct{} `cli:"auth, login"`
 	Renew  struct{} `cli:"renew"`
 	Ask    struct{} `cli:"ask"`
@@ -226,6 +229,8 @@ func main() {
 
 	opt.Init.Persist = true
 	opt.Rekey.Persist = true
+
+	opt.Env.Format = "simple"
 
 	go Signals()
 
@@ -938,14 +943,44 @@ Vault will remain sealed).
 	})
 
 	r.Dispatch("env", &Help{
-		Summary: "Print the VAULT_ADDR and VAULT_TOKEN for the current target",
+		Summary: "Print the environment variables for the current target",
 		Usage:   "safe env",
-		Type:    AdministrativeCommand,
+		Description: `
+Print the environment variables representing the current target.
+
+ --format FORMAT   Format used to render the environment variables. Supported
+                   values are "simple" (default), "bash", and "fish".
+
+Please note that if you specify the output format to be either "bash" or
+"fish", then the output will be written to STDOUT instead of STDERR to make it
+easier to consume.
+		`,
+		Type: AdministrativeCommand,
 	}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
-		fmt.Fprintf(os.Stderr, "  @B{VAULT_ADDR}  @G{%s}\n", os.Getenv("VAULT_ADDR"))
-		fmt.Fprintf(os.Stderr, "  @B{VAULT_TOKEN} @G{%s}\n", os.Getenv("VAULT_TOKEN"))
-		return nil
+		var print envPrintFunc
+		var out io.Writer
+
+		switch opt.Env.Format {
+		case "bash":
+			print = printEnvForBash
+			out = os.Stdout
+		case "fish":
+			print = printEnvForFish
+			out = os.Stdout
+		case "simple":
+			print = printEnv
+			out = os.Stderr
+		default:
+			return fmt.Errorf("Unrecognized format '%s'", opt.Env.Format)
+		}
+
+		vars := map[string]string{
+			"VAULT_ADDR":        os.Getenv("VAULT_ADDR"),
+			"VAULT_TOKEN":       os.Getenv("VAULT_TOKEN"),
+			"VAULT_SKIP_VERIFY": os.Getenv("VAULT_SKIP_VERIFY"),
+		}
+		return print(out, vars)
 	})
 
 	r.Dispatch("auth", &Help{
@@ -2853,6 +2888,7 @@ Currently, only the --renew option is supported, and it is required:
 			continue
 		}
 
+		os.Unsetenv("VAULT_SKIP_VERIFY")
 		os.Unsetenv("SAFE_SKIP_VERIFY")
 		if opt.Insecure {
 			os.Setenv("VAULT_SKIP_VERIFY", "1")
