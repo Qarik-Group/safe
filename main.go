@@ -958,29 +958,53 @@ easier to consume.
 		Type: AdministrativeCommand,
 	}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
-		var print envPrintFunc
+		var print func(io.Writer, map[string]string) error
 		var out io.Writer
 
 		switch opt.Env.Format {
 		case "bash":
-			print = printEnvForBash
+			print = func(out io.Writer, vars map[string]string) error {
+				for name, value := range vars {
+					if value != "" {
+						fmt.Fprintf(out, "\\export %s=%s;\n", name, value)
+					} else {
+						fmt.Fprintf(out, "\\unset %s;\n", name)
+					}
+				}
+				return nil
+			}
 			out = os.Stdout
 		case "fish":
-			print = printEnvForFish
+			print = func(out io.Writer, vars map[string]string) error {
+				for name, value := range vars {
+					if value == "" {
+						fmt.Fprintf(out, "set -u %s;\n", name)
+					} else {
+						fmt.Fprintf(out, "set -x %s %s;\n", name, value)
+					}
+				}
+				return nil
+			}
 			out = os.Stdout
 		case "simple":
-			print = printEnv
+			print = func(out io.Writer, vars map[string]string) error {
+				for name, value := range vars {
+					if value != "" {
+						fmt.Fprintf(out, "  @B{%s}  @G{%s}\n", name, value)
+					}
+				}
+				return nil
+			}
 			out = os.Stderr
 		default:
 			return fmt.Errorf("Unrecognized format '%s'", opt.Env.Format)
 		}
 
-		vars := map[string]string{
+		return print(out, map[string]string{
 			"VAULT_ADDR":        os.Getenv("VAULT_ADDR"),
 			"VAULT_TOKEN":       os.Getenv("VAULT_TOKEN"),
 			"VAULT_SKIP_VERIFY": os.Getenv("VAULT_SKIP_VERIFY"),
-		}
-		return print(out, vars)
+		})
 	})
 
 	r.Dispatch("auth", &Help{
