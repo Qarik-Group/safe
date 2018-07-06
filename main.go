@@ -82,7 +82,8 @@ type Options struct {
 	Unseal struct{} `cli:"unseal"`
 	Seal   struct{} `cli:"seal"`
 	Env    struct {
-		Format string `cli:"--format"`
+		ForBash bool `cli:"--bash"`
+		ForFish bool `cli:"--fish"`
 	} `cli:"env"`
 	Auth   struct{} `cli:"auth, login"`
 	Renew  struct{} `cli:"renew"`
@@ -229,8 +230,6 @@ func main() {
 
 	opt.Init.Persist = true
 	opt.Rekey.Persist = true
-
-	opt.Env.Format = "simple"
 
 	go Signals()
 
@@ -948,21 +947,26 @@ Vault will remain sealed).
 		Description: `
 Print the environment variables representing the current target.
 
- --format FORMAT   Format used to render the environment variables. Supported
-                   values are "simple" (default), "bash", and "fish".
+ --bash   Format the environment variables to be used by Bash.
 
-Please note that if you specify the output format to be either "bash" or
-"fish", then the output will be written to STDOUT instead of STDERR to make it
-easier to consume.
+ --fish   Format the environment variables to be used by fish.
+
+Please note that if you specify either --bash or --fish then the output will be
+written to STDOUT instead of STDERR to make it easier to consume.
 		`,
 		Type: AdministrativeCommand,
 	}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
 		var print func(io.Writer, map[string]string) error
 		var out io.Writer
+		if opt.Env.ForBash && opt.Env.ForFish {
+			r.Help(os.Stderr, "env")
+			fmt.Fprintf(os.Stderr, "@R{Only specify either --bash OR --fish.}\n")
+			os.Exit(1)
+		}
 
-		switch opt.Env.Format {
-		case "bash":
+		switch {
+		case opt.Env.ForBash:
 			print = func(out io.Writer, vars map[string]string) error {
 				for name, value := range vars {
 					if value != "" {
@@ -974,7 +978,7 @@ easier to consume.
 				return nil
 			}
 			out = os.Stdout
-		case "fish":
+		case opt.Env.ForFish:
 			print = func(out io.Writer, vars map[string]string) error {
 				for name, value := range vars {
 					if value == "" {
@@ -986,7 +990,7 @@ easier to consume.
 				return nil
 			}
 			out = os.Stdout
-		case "simple":
+		default:
 			print = func(out io.Writer, vars map[string]string) error {
 				for name, value := range vars {
 					if value != "" {
@@ -996,8 +1000,6 @@ easier to consume.
 				return nil
 			}
 			out = os.Stderr
-		default:
-			return fmt.Errorf("Unrecognized format '%s'", opt.Env.Format)
 		}
 
 		return print(out, map[string]string{
