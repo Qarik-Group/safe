@@ -387,5 +387,27 @@ safe -t old-vault export secret/sub/tree | \
   safe -t new-vault import
 ```
 
+### env
+
+Print the environment variables describing the current target:
+
+```
+safe env
+  VAULT_ADDR  http://localhost:8200
+  VAULT_TOKEN  $SOME_UUID
+```
+
+You can also use this command to export a target's configuration into the outer
+shell in order to use the Vault CLI directly:
+
+```
+safe env --format bash
+\export VAULT_ADDR=http://localhost:8200;
+\export VAULT_TOKEN=$SOME_UUID;
+\unset VAULT_SKIP_VERIFY;
+
+eval $(safe env --format bash)
+```
+
 [vault]:  https://vaultproject.io
 [spruce]: https://github.com/geofffranks/spruce

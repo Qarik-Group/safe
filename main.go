@@ -80,7 +80,10 @@ type Options struct {
 	Status struct{} `cli:"status"`
 	Unseal struct{} `cli:"unseal"`
 	Seal   struct{} `cli:"seal"`
-	Env    struct{} `cli:"env"`
+	Env    struct {
+		ForBash bool `cli:"--bash"`
+		ForFish bool `cli:"--fish"`
+	} `cli:"env"`
 	Auth   struct{} `cli:"auth, login"`
 	Renew  struct{} `cli:"renew"`
 	Ask    struct{} `cli:"ask"`
@@ -938,13 +941,56 @@ Vault will remain sealed).
 	})
 
 	r.Dispatch("env", &Help{
-		Summary: "Print the VAULT_ADDR and VAULT_TOKEN for the current target",
+		Summary: "Print the environment variables for the current target",
 		Usage:   "safe env",
-		Type:    AdministrativeCommand,
+		Description: `
+Print the environment variables representing the current target.
+
+ --bash   Format the environment variables to be used by Bash.
+
+ --fish   Format the environment variables to be used by fish.
+
+Please note that if you specify either --bash or --fish then the output will be
+written to STDOUT instead of STDERR to make it easier to consume.
+		`,
+		Type: AdministrativeCommand,
 	}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
-		fmt.Fprintf(os.Stderr, "  @B{VAULT_ADDR}  @G{%s}\n", os.Getenv("VAULT_ADDR"))
-		fmt.Fprintf(os.Stderr, "  @B{VAULT_TOKEN} @G{%s}\n", os.Getenv("VAULT_TOKEN"))
+		if opt.Env.ForBash && opt.Env.ForFish {
+			r.Help(os.Stderr, "env")
+			fmt.Fprintf(os.Stderr, "@R{Only specify either --bash OR --fish.}\n")
+			os.Exit(1)
+		}
+		vars := map[string]string{
+			"VAULT_ADDR":        os.Getenv("VAULT_ADDR"),
+			"VAULT_TOKEN":       os.Getenv("VAULT_TOKEN"),
+			"VAULT_SKIP_VERIFY": os.Getenv("VAULT_SKIP_VERIFY"),
+		}
+
+		switch {
+		case opt.Env.ForBash:
+			for name, value := range vars {
+				if value != "" {
+					fmt.Fprintf(os.Stdout, "\\export %s=%s;\n", name, value)
+				} else {
+					fmt.Fprintf(os.Stdout, "\\unset %s;\n", name)
+				}
+			}
+		case opt.Env.ForFish:
+			for name, value := range vars {
+				if value == "" {
+					fmt.Fprintf(os.Stdout, "set -u %s;\n", name)
+				} else {
+					fmt.Fprintf(os.Stdout, "set -x %s %s;\n", name, value)
+				}
+			}
+		default:
+			for name, value := range vars {
+				if value != "" {
+					fmt.Fprintf(os.Stderr, "  @B{%s}  @G{%s}\n", name, value)
+				}
+			}
+		}
 		return nil
 	})
 
@@ -2853,6 +2899,7 @@ Currently, only the --renew option is supported, and it is required:
 			continue
 		}
 
+		os.Unsetenv("VAULT_SKIP_VERIFY")
 		os.Unsetenv("SAFE_SKIP_VERIFY")
 		if opt.Insecure {
 			os.Setenv("VAULT_SKIP_VERIFY", "1")
