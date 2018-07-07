@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"io"
 	"io/ioutil"
 	"net"
 	"net/http/httputil"
@@ -957,56 +956,42 @@ written to STDOUT instead of STDERR to make it easier to consume.
 		Type: AdministrativeCommand,
 	}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
-		var print func(io.Writer, map[string]string) error
-		var out io.Writer
 		if opt.Env.ForBash && opt.Env.ForFish {
 			r.Help(os.Stderr, "env")
 			fmt.Fprintf(os.Stderr, "@R{Only specify either --bash OR --fish.}\n")
 			os.Exit(1)
 		}
-
-		switch {
-		case opt.Env.ForBash:
-			print = func(out io.Writer, vars map[string]string) error {
-				for name, value := range vars {
-					if value != "" {
-						fmt.Fprintf(out, "\\export %s=%s;\n", name, value)
-					} else {
-						fmt.Fprintf(out, "\\unset %s;\n", name)
-					}
-				}
-				return nil
-			}
-			out = os.Stdout
-		case opt.Env.ForFish:
-			print = func(out io.Writer, vars map[string]string) error {
-				for name, value := range vars {
-					if value == "" {
-						fmt.Fprintf(out, "set -u %s;\n", name)
-					} else {
-						fmt.Fprintf(out, "set -x %s %s;\n", name, value)
-					}
-				}
-				return nil
-			}
-			out = os.Stdout
-		default:
-			print = func(out io.Writer, vars map[string]string) error {
-				for name, value := range vars {
-					if value != "" {
-						fmt.Fprintf(out, "  @B{%s}  @G{%s}\n", name, value)
-					}
-				}
-				return nil
-			}
-			out = os.Stderr
-		}
-
-		return print(out, map[string]string{
+		vars := map[string]string{
 			"VAULT_ADDR":        os.Getenv("VAULT_ADDR"),
 			"VAULT_TOKEN":       os.Getenv("VAULT_TOKEN"),
 			"VAULT_SKIP_VERIFY": os.Getenv("VAULT_SKIP_VERIFY"),
-		})
+		}
+
+		switch {
+		case opt.Env.ForBash:
+			for name, value := range vars {
+				if value != "" {
+					fmt.Fprintf(os.Stdout, "\\export %s=%s;\n", name, value)
+				} else {
+					fmt.Fprintf(os.Stdout, "\\unset %s;\n", name)
+				}
+			}
+		case opt.Env.ForFish:
+			for name, value := range vars {
+				if value == "" {
+					fmt.Fprintf(os.Stdout, "set -u %s;\n", name)
+				} else {
+					fmt.Fprintf(os.Stdout, "set -x %s %s;\n", name, value)
+				}
+			}
+		default:
+			for name, value := range vars {
+				if value != "" {
+					fmt.Fprintf(os.Stderr, "  @B{%s}  @G{%s}\n", name, value)
+				}
+			}
+		}
+		return nil
 	})
 
 	r.Dispatch("auth", &Help{
