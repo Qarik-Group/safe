@@ -1375,12 +1375,13 @@ paths/keys.
 		Usage:   "safe ls [-1] [PATH ...]",
 		Type:    NonDestructiveCommand,
 		Description: `
+  Specifying the -1 flag will print one result per line.
 `,
 	}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
 		v := connect(true)
 		if len(args) == 0 {
-			secrets, err := v.Mounts("secret")
+			secrets, err := v.Mounts("generic")
 			if err != nil {
 				return err
 			}
@@ -1392,14 +1393,14 @@ paths/keys.
 			secrets = append(secrets, kvs...)
 			sort.Strings(secrets)
 
+			separator := "  "
 			if opt.List.Single {
-				for _, path := range secrets {
-					fmt.Printf("@B{%s/}\n", path)
-				}
-			} else {
-				for _, path := range secrets {
-					fmt.Printf("@B{%s/}  ", path)
-				}
+				separator = "\n"
+			}
+			for _, path := range secrets {
+				fmt.Printf("@B{%s/}%s", strings.TrimRight(path, "/"), separator)
+			}
+			if !opt.List.Single {
 				fmt.Printf("\n")
 			}
 			return nil
