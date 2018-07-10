@@ -1393,12 +1393,15 @@ paths/keys.
 			secrets = append(secrets, kvs...)
 			sort.Strings(secrets)
 
-			separator := "  \n"
+			separator := "  "
 			if opt.List.Single {
 				separator = "\n"
 			}
 			for _, path := range secrets {
 				fmt.Printf("@B{%s/}%s", strings.TrimRight(path, "/"), separator)
+			}
+			if !opt.List.Single {
+				fmt.Printf("\n")
 			}
 			return nil
 		}
