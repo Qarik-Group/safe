@@ -58,13 +58,21 @@ func (s Secret) X509() (*X509, error) {
 	if len(rest) > 0 {
 		return nil, fmt.Errorf("contains multiple keys (what?)")
 	}
-	if block.Type != "RSA PRIVATE KEY" {
-		return nil, fmt.Errorf("not a valid certificate (type '%s' != 'RSA PRIVATE KEY')", block.Type)
+	if block.Type != "RSA PRIVATE KEY" && block.Type != "PRIVATE KEY" {
+		return nil, fmt.Errorf("not a valid certificate (type '%s' != 'RSA PRIVATE KEY' or 'PRIVATE KEY')", block.Type)
 	}
 
 	key, err := x509.ParsePKCS1PrivateKey(block.Bytes)
 	if err != nil {
-		return nil, fmt.Errorf("not a valid private key (%s)", err)
+		pkcs8TmpKey, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("not a valid private key (%s)", err)
+		}
+		var isRSAEncoded bool
+		key, isRSAEncoded = pkcs8TmpKey.(*rsa.PrivateKey)
+		if !isRSAEncoded {
+			return nil, fmt.Errorf("private key not RSA encoded")
+		}
 	}
 
 	o := &X509{
