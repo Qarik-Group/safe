@@ -165,12 +165,12 @@ Similarly, `safe paste` works the same way, but does not have a confirmation
 prompt for your value. It assumes you have pasted in the value from a known-good
 source.
 
-Setting key to context of a file
+Setting the value of a key to be the contents of a file
 
 Example:
 
 ```
-safe set secret/root ssl_key@ssl_key_file
+safe set secret/root ssl_key@/path/to/ssl_key_file
 ```
 
 ### get path \[path ...\]
