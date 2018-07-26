@@ -25,11 +25,11 @@ type X509 struct {
 	ExtKeyUsage []x509.ExtKeyUsage
 }
 
-func (s Secret) X509() (*X509, error) {
+func (s Secret) X509(requireKey bool) (*X509, error) {
 	if !s.Has("certificate") {
 		return nil, fmt.Errorf("not a valid certificate (missing the `certificate` attribute)")
 	}
-	if !s.Has("key") {
+	if !s.Has("key") && requireKey {
 		return nil, fmt.Errorf("not a valid certificate (missing the `key` attribute)")
 	}
 
@@ -50,28 +50,31 @@ func (s Secret) X509() (*X509, error) {
 		return nil, fmt.Errorf("not a valid certificate (%s)", err)
 	}
 
-	v = s.Get("key")
-	block, rest = pem.Decode([]byte(v))
-	if block == nil {
-		return nil, fmt.Errorf("not a valid certificate (failed to decode key PEM block)")
-	}
-	if len(rest) > 0 {
-		return nil, fmt.Errorf("contains multiple keys (what?)")
-	}
-	if block.Type != "RSA PRIVATE KEY" && block.Type != "PRIVATE KEY" {
-		return nil, fmt.Errorf("not a valid certificate (type '%s' != 'RSA PRIVATE KEY' or 'PRIVATE KEY')", block.Type)
-	}
-
-	key, err := x509.ParsePKCS1PrivateKey(block.Bytes)
-	if err != nil {
-		pkcs8TmpKey, err := x509.ParsePKCS8PrivateKey(block.Bytes)
-		if err != nil {
-			return nil, fmt.Errorf("not a valid private key (%s)", err)
+	var key *rsa.PrivateKey
+	if requireKey {
+		v = s.Get("key")
+		block, rest = pem.Decode([]byte(v))
+		if block == nil {
+			return nil, fmt.Errorf("not a valid certificate (failed to decode key PEM block)")
 		}
-		var isRSAEncoded bool
-		key, isRSAEncoded = pkcs8TmpKey.(*rsa.PrivateKey)
-		if !isRSAEncoded {
-			return nil, fmt.Errorf("private key not RSA encoded")
+		if len(rest) > 0 {
+			return nil, fmt.Errorf("contains multiple keys (what?)")
+		}
+		if block.Type != "RSA PRIVATE KEY" && block.Type != "PRIVATE KEY" {
+			return nil, fmt.Errorf("not a valid certificate (type '%s' != 'RSA PRIVATE KEY' or 'PRIVATE KEY')", block.Type)
+		}
+
+		key, err = x509.ParsePKCS1PrivateKey(block.Bytes)
+		if err != nil {
+			pkcs8TmpKey, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+			if err != nil {
+				return nil, fmt.Errorf("not a valid private key (%s)", err)
+			}
+			var isRSAEncoded bool
+			key, isRSAEncoded = pkcs8TmpKey.(*rsa.PrivateKey)
+			if !isRSAEncoded {
+				return nil, fmt.Errorf("private key not RSA encoded")
+			}
 		}
 	}
 

@@ -2250,7 +2250,7 @@ The following options are recognized:
 			if err != nil {
 				return err
 			}
-			ca, err = s.X509()
+			ca, err = s.X509(true)
 			if err != nil {
 				return err
 			}
@@ -2261,7 +2261,7 @@ The following options are recognized:
 			if err != nil {
 				return err
 			}
-			cert, err := s.X509()
+			cert, err := s.X509(true)
 			if err != nil {
 				return err
 			}
@@ -2380,7 +2380,7 @@ The following options are recognized:
 				return err
 			}
 
-			ca, err = secret.X509()
+			ca, err = secret.X509(true)
 			if err != nil {
 				return err
 			}
@@ -2467,7 +2467,7 @@ The following options are recognized:
 		if err != nil {
 			return err
 		}
-		cert, err := s.X509()
+		cert, err := s.X509(true)
 		if err != nil {
 			return err
 		}
@@ -2564,7 +2564,7 @@ The following options are recognized:
 		if err != nil {
 			return err
 		}
-		cert, err := s.X509()
+		cert, err := s.X509(true)
 		if err != nil {
 			return err
 		}
@@ -2630,7 +2630,7 @@ The following options are recognized:
 		if err != nil {
 			return err
 		}
-		ca, err := s.X509()
+		ca, err := s.X509(true)
 		if err != nil {
 			return err
 		}
@@ -2640,7 +2640,7 @@ The following options are recognized:
 		if err != nil {
 			return err
 		}
-		cert, err := s.X509()
+		cert, err := s.X509(true)
 		if err != nil {
 			return err
 		}
@@ -2690,7 +2690,7 @@ prints out information about a certificate, including:
 			}
 
 			fmt.Printf("%s:\n", path)
-			cert, err := s.X509()
+			cert, err := s.X509(false)
 			if err != nil {
 				fmt.Printf("  !! %s\n\n", err)
 				continue
@@ -2845,7 +2845,7 @@ Currently, only the --renew option is supported, and it is required:
 		if err != nil {
 			return err
 		}
-		ca, err := s.X509()
+		ca, err := s.X509(true)
 		if err != nil {
 			return err
 		}
