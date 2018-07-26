@@ -999,7 +999,7 @@ func (v *Vault) FindSigningCA(cert *X509, certPath string, signPath string) (*X5
 			if err != nil {
 				return nil, "", err
 			}
-			ca, err := s.X509(false)
+			ca, err := s.X509(true)
 			if err != nil {
 				return nil, "", err
 			}
@@ -1022,7 +1022,7 @@ func (v *Vault) FindSigningCA(cert *X509, certPath string, signPath string) (*X5
 			if err != nil {
 				return nil, "", fmt.Errorf("No signing authority provided and no 'ca' sibling found")
 			}
-			ca, err := s.X509(false)
+			ca, err := s.X509(true)
 			if err != nil {
 				return nil, "", err
 			}
