@@ -2699,6 +2699,9 @@ prints out information about a certificate, including:
 			fmt.Printf("  @G{%s}\n", cert.Subject())
 			if cert.Subject() != cert.Issuer() {
 				fmt.Printf("  issued by: @C{%s}\n", cert.Issuer())
+				for i := range cert.Intermediaries {
+					fmt.Printf("        via: @C{%s}\n", cert.IntermediarySubject(i))
+				}
 			}
 
 			fmt.Printf("\n")

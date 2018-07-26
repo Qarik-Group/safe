@@ -16,10 +16,11 @@ import (
 )
 
 type X509 struct {
-	Certificate *x509.Certificate
-	PrivateKey  *rsa.PrivateKey
-	Serial      *big.Int
-	CRL         *pkix.CertificateList
+	Intermediaries []*x509.Certificate
+	Certificate    *x509.Certificate
+	PrivateKey     *rsa.PrivateKey
+	Serial         *big.Int
+	CRL            *pkix.CertificateList
 
 	KeyUsage    x509.KeyUsage
 	ExtKeyUsage []x509.ExtKeyUsage
@@ -33,13 +34,10 @@ func (s Secret) X509(requireKey bool) (*X509, error) {
 		return nil, fmt.Errorf("not a valid certificate (missing the `key` attribute)")
 	}
 
-	v := s.Get("certificate")
-	block, rest := pem.Decode([]byte(v))
+	b := []byte(s.Get("certificate"))
+	block, rest := pem.Decode(b)
 	if block == nil {
 		return nil, fmt.Errorf("not a valid certificate (failed to decode certificate PEM block)")
-	}
-	if len(rest) > 0 {
-		return nil, fmt.Errorf("contains multiple certificates (is this a bundle?)")
 	}
 	if block.Type != "CERTIFICATE" {
 		return nil, fmt.Errorf("not a valid certificate (type '%s' != 'CERTIFICATE')", block.Type)
@@ -50,9 +48,34 @@ func (s Secret) X509(requireKey bool) (*X509, error) {
 		return nil, fmt.Errorf("not a valid certificate (%s)", err)
 	}
 
+	var (
+		n              int
+		intermediaries []*x509.Certificate
+	)
+
+	for len(rest) > 0 {
+		n++
+		b = rest
+		block, rest = pem.Decode(b)
+		if block == nil {
+			return nil, fmt.Errorf("intermediary #%d: not a valid certificate (failed to decode certificate PEM block)", n)
+		}
+
+		if block.Type != "CERTIFICATE" {
+			return nil, fmt.Errorf("intermediary #%d: not a valid certificate (type '%s' != 'CERTIFICATE')", n, block.Type)
+		}
+
+		c, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("intermediary #%d: not a valid certificate (%s)", n, err)
+		}
+
+		intermediaries = append(intermediaries, c)
+	}
+
 	var key *rsa.PrivateKey
 	if requireKey {
-		v = s.Get("key")
+		v := s.Get("key")
 		block, rest = pem.Decode([]byte(v))
 		if block == nil {
 			return nil, fmt.Errorf("not a valid certificate (failed to decode key PEM block)")
@@ -79,14 +102,15 @@ func (s Secret) X509(requireKey bool) (*X509, error) {
 	}
 
 	o := &X509{
-		Certificate: cert,
-		PrivateKey:  key,
-		KeyUsage:    cert.KeyUsage,
-		ExtKeyUsage: cert.ExtKeyUsage,
+		Intermediaries: intermediaries,
+		Certificate:    cert,
+		PrivateKey:     key,
+		KeyUsage:       cert.KeyUsage,
+		ExtKeyUsage:    cert.ExtKeyUsage,
 	}
 
 	if s.Has("serial") {
-		v = s.Get("serial")
+		v := s.Get("serial")
 		i, err := strconv.ParseInt(v, 16, 64)
 		if err != nil {
 			return nil, fmt.Errorf("not a valid CA certificate (serial '%s' is malformed)", v)
@@ -95,7 +119,7 @@ func (s Secret) X509(requireKey bool) (*X509, error) {
 	}
 
 	if s.Has("crl") {
-		v = s.Get("crl")
+		v := s.Get("crl")
 		crl, err := x509.ParseCRL([]byte(v))
 		if err != nil {
 			return nil, fmt.Errorf("not a valid CA certificate (CRL parsing failed: %s)", err)
@@ -136,6 +160,10 @@ func (x *X509) Subject() string {
 
 func (x *X509) Issuer() string {
 	return formatSubject(x.Certificate.Issuer)
+}
+
+func (x *X509) IntermediarySubject(n int) string {
+	return formatSubject(x.Intermediaries[n].Subject)
 }
 
 func parseSubject(subj string) (pkix.Name, error) {
