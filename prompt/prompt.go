@@ -18,7 +18,7 @@ func readline() string {
 	}
 
 	s, _ := in.ReadString('\n')
-	return strings.TrimSuffix(s, "\n")
+	return strings.TrimSuffix(strings.TrimSuffix(s, "\r\n"), "\n")
 }
 
 func Normal(label string, args ...interface{}) string {
