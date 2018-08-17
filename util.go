@@ -28,3 +28,17 @@ func duration(s string) (time.Duration, error) {
 	}
 	return 0, fmt.Errorf("unrecognized time spec '%s'", s)
 }
+
+func uniq(l []string) []string {
+	seen := make(map[string] bool)
+	u := make([]string, 0)
+
+	for _, s := range l {
+		if !seen[s] {
+			u = append(u, s)
+		}
+		seen[s] = true
+	}
+
+	return u
+}

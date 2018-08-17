@@ -2387,7 +2387,7 @@ The following options are recognized:
 		}
 
 		cert, err := vault.NewCertificate(opt.X509.Issue.Subject,
-			opt.X509.Issue.Name, opt.X509.Issue.KeyUsage, opt.X509.Issue.Bits)
+			uniq(opt.X509.Issue.Name), opt.X509.Issue.KeyUsage, opt.X509.Issue.Bits)
 		if err != nil {
 			return err
 		}
