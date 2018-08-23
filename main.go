@@ -1510,7 +1510,7 @@ to get your bearings.
 			for _, segs := range tree.PathSegments() {
 				var has_key bool
 				var key string
-				if segs[len(segs)-1][0] == ':' {
+				if len(segs[len(segs)-1]) > 0 && segs[len(segs)-1][0] == ':' {
 					has_key = true
 					key, segs = segs[len(segs)-1], segs[:len(segs)-1]
 				}
