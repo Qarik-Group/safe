@@ -76,7 +76,7 @@ func (c *Config) credentials() (string, string, bool, error) {
 		return "", "", false, nil
 	}
 
-	v, ok := c.Vaults[c.Current]
+	v, ok, _ := c.Find(c.Current)
 	if !ok {
 		return "", "", false, fmt.Errorf("Current target vault '%s' not found in ~/.saferc", c.Current)
 	}
@@ -202,7 +202,7 @@ func (c *Config) SetToken(token string) error {
 	if c.Current == "" {
 		return fmt.Errorf("No target selected")
 	}
-	v, ok := c.Vaults[c.Current]
+	v, ok, _ := c.Find(c.Current)
 	if !ok {
 		return fmt.Errorf("Unknown target '%s'", c.Current)
 	}
@@ -211,14 +211,14 @@ func (c *Config) SetToken(token string) error {
 }
 
 func (c *Config) URL() string {
-	if v, ok := c.Vaults[c.Current]; ok {
+	if v, ok, _ := c.Find(c.Current); ok {
 		return v.URL
 	}
 	return ""
 }
 
 func (c *Config) Verified() bool {
-	if v, ok := c.Vaults[c.Current]; ok {
+	if v, ok, _ := c.Find(c.Current); ok {
 		return !v.SkipVerify
 	}
 	return false
