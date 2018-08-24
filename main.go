@@ -1161,10 +1161,26 @@ Update a single path in the Vault with new or updated named attributes.
 Any existing name/value pairs not specified on the command-line will be
 left alone, with their original values.
 
-You will be prompted to provide (and confirm) any values that are omitted.
-This can be useful for sensitive credential like passwords and PINs, when
-you don't want the value to show up in your ~/.bash_history, or in the
-process table.
+Values can be provided a number of different ways.
+
+    safe set secret/path key=value
+
+Will set "key" to "value", but that exposes the value in the process table
+(and possibly in shell history files).  This is normally fine for usernames,
+IP addresses, and other public information.
+
+If this worries you, leave off the '=value', and safe will prompt you.
+
+    safe set secret/path key
+
+Some secrets perfer to live on disk, in files.  Certificates, private keys,
+really long secrets that are tough to type, etc.  For those, you can use
+the '@' notation:
+
+    safe set secret/path key@path/to/file
+
+This causes safe to read the file 'path/to/file', relative to the current
+working directory, and insert the contents into the Vault.
 `,
 	}, func(command string, args ...string) error {
 		return writeHelper(true, true, "set", args...)

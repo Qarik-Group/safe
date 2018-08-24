@@ -3,6 +3,9 @@
 - `safe x509 issue` no longer propagates duplicate `--name` values
   into the resulting X.509 certificate's subject alt names list.
 
+- The help for `safe set` now documents all the fun little tricks
+  that safe has up its sleeve, like `safe set key@some/file`.
+
 # Bug Fixes
 
 - If you somehow manage to create an empty path via `safe set` or
