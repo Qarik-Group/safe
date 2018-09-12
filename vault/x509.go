@@ -476,11 +476,21 @@ func (x X509) Secret(skipIfExists bool) (*Secret, error) {
 	}
 
 	if x.IsCA() {
+		if x.Serial == nil {
+			x.Serial = big.NewInt(1)
+		}
+
 		err = s.Set("serial", x.Serial.Text(16), skipIfExists)
 		if err != nil {
 			return s, err
 		}
 
+		if x.CRL == nil {
+			x.CRL = &pkix.CertificateList{}
+		}
+		if x.CRL.TBSCertList.RevokedCertificates == nil {
+			x.CRL.TBSCertList.RevokedCertificates = make([]pkix.RevokedCertificate, 0)
+		}
 		b, err := x.Certificate.CreateCRL(rand.Reader, x.PrivateKey, x.CRL.TBSCertList.RevokedCertificates, time.Now(), time.Now().Add(10*365*24*time.Hour))
 		if err != nil {
 			return s, err

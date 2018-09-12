@@ -1775,8 +1775,37 @@ EOF
     now checking that renew does not change certificate attributes, other than ttl
     eq_or_diff "$(./safe x509 show secret/renew/orig | grep -Ev 'secret/re|valid from|expires in')" \
                "$(./safe x509 show secret/renew/cert | grep -Ev 'secret/re|valid from|expires in')"
-  fi
 
+
+    now removing the CRL from a CA certificate
+    (run; ./safe rm secret/renew/ca:crl); exitok $? 0
+    no_key secret/renew/ca:crl
+
+    now checking that a CA without a CRL is invalid
+    (run; ./safe x509 validate secret/renew/ca); exitok $? 1
+
+    now checking that renew can re-constitute a missing CRL
+    (run; ./safe x509 renew secret/renew/ca); exitok $? 0
+    ok_key secret/renew/ca:crl
+
+    now checking that a CA is valid again
+    (run; ./safe x509 validate secret/renew/ca); exitok $? 0
+
+
+    now removing the serial from a CA certificate
+    (run; ./safe rm secret/renew/ca:serial); exitok $? 0
+    no_key secret/renew/ca:serial
+
+    now checking that a CA without a serial is invalid
+    (run; ./safe x509 validate secret/renew/ca); exitok $? 1
+
+    now checking that renew can re-constitute a missing CA serial
+    (run; ./safe x509 renew secret/renew/ca); exitok $? 0
+    ok_key secret/renew/ca:serial
+
+    now checking that a CA is valid again
+    (run; ./safe x509 validate secret/renew/ca); exitok $? 0
+  fi
 
   #######
   clearvault
