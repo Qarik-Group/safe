@@ -2314,6 +2314,15 @@ The following options are recognized:
 				return err
 			}
 
+			if cert.IsCA() {
+				if cert.Serial == nil {
+					return fmt.Errorf("%s is missing its serial number tracker", path)
+				}
+				if cert.CRL == nil {
+					return fmt.Errorf("%s is missing its certificate revocation list", path)
+				}
+			}
+
 			fmt.Printf("@G{%s} checks out.\n", path)
 		}
 
