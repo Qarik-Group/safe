@@ -2249,18 +2249,6 @@ EOF
   cat <<'EOF' > t/home/want ; diffok
 !! When specifying more than 1 unseal key, you must also have more than one key required to unseal.
 EOF
-  # force a rekey, causing problems with the initialization
-  now forcing a manual rekey to cause the next failure should succeed
-  (./safe curl POST sys/rekey/init '{"secret_threshold":1,"secret_shares":1}'); exitok $? 0
-  now failures from Vault during the rekey initialization should error
-  (run; ./safe rekey > t/home/got 2>&1); exitok $? 1
-  cat <<'EOF' > t/home/want ; diffok
-!! Failed to start rekeying vault:
-["rekey already in progress"]
-EOF
-  now forcing manual cancel of rekeying to continue
-  (./safe curl DELETE sys/rekey/init); exitok $? 0
-
   now trying to rekey with a bad unseal key should error
   (run; ./safe rekey </dev/null >t/home/got 2>&1); exitok $? 1
   # the below sed is used, as earlier versions of vault had a bad error message, that later versions
@@ -2268,8 +2256,7 @@ EOF
   sed -i -e 's/must specified/must be specified/' t/home/got
   cat <<'EOF' > t/home/want ; diffok
 Vault rekey canceled successfully
-!! Error processing unseal key:
-["'key' must be specified in request body as JSON"]
+!! Key submission failed: no key provided
 EOF
 
   now after failures to rekey, the cancel command was sent to reset the rekey

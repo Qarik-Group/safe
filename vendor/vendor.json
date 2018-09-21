@@ -3,6 +3,12 @@
 	"ignore": "test",
 	"package": [
 		{
+			"checksumSHA1": "i5IG3zDlrJYYPJB5NqOnlPWMt8M=",
+			"path": "github.com/cloudfoundry-community/vaultkv",
+			"revision": "b4b55025a795495017442261055ceafc80a99de2",
+			"revisionTime": "2018-09-20T22:51:27Z"
+		},
+		{
 			"checksumSHA1": "17vYJDDMJO63/G/tRFIUuSlMCbE=",
 			"path": "github.com/ghodss/yaml",
 			"revision": "73d445a93680fa1a78ae23a5839bad48f32ba1ee"
