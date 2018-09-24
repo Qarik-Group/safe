@@ -2,8 +2,8 @@
 meta:
   name:    safe
   release: Safe
-  target:  sw
-  url:     https://ci.starkandwayne.com
+  target:  pipes
+  url:     https://pipes.starkandwayne.com
 
   initial_version: 0.0.5
 
@@ -15,15 +15,15 @@ meta:
     name:  CI Bot
 
   aws:
-    access_key: (( vault "secret/aws/cfcommunity:access" ))
-    secret_key: (( vault "secret/aws/cfcommunity:secret" ))
+    access_key: ((cfcommunity.access))
+    secret_key: ((cfcommunity.secret))
 
   github:
     owner:  starkandwayne
     repo:   safe
-    private_key:  (( vault "secret/pipelines/safe/github:private" ))
-    access_token: (( vault "secret/pipelines/safe/github:token" ))
+    private_key:  ((github.private-key))
+    access_token: ((github.access-token))
 
   slack:
-    webhook: (( vault "secret/pipelines/safe/slack:webhook" ))
+    webhook: ((slack.webhook))
     channel: '#vault'
