@@ -83,6 +83,7 @@ type Options struct {
 	Env    struct {
 		ForBash bool `cli:"--bash"`
 		ForFish bool `cli:"--fish"`
+		ForJSON bool `cli:"--json"`
 	} `cli:"env"`
 	Auth   struct{} `cli:"auth, login"`
 	Renew  struct{} `cli:"renew"`
@@ -950,15 +951,17 @@ Print the environment variables representing the current target.
 
  --fish   Format the environment variables to be used by fish.
 
-Please note that if you specify either --bash or --fish then the output will be
+ --json   Format the environment variables in json format.
+
+Please note that if you specify --json, --bash or --fish then the output will be
 written to STDOUT instead of STDERR to make it easier to consume.
 		`,
 		Type: AdministrativeCommand,
 	}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
-		if opt.Env.ForBash && opt.Env.ForFish {
+		if opt.Env.ForBash && opt.Env.ForFish && opt.Env.ForJSON {
 			r.Help(os.Stderr, "env")
-			fmt.Fprintf(os.Stderr, "@R{Only specify either --bash OR --fish.}\n")
+			fmt.Fprintf(os.Stderr, "@R{Only specify one of --json, --bash OR --fish.}\n")
 			os.Exit(1)
 		}
 		vars := map[string]string{
@@ -984,6 +987,23 @@ written to STDOUT instead of STDERR to make it easier to consume.
 					fmt.Fprintf(os.Stdout, "set -x %s %s;\n", name, value)
 				}
 			}
+		case opt.Env.ForJSON:
+			jsonEnv := &struct {
+				Addr  string `json:"VAULT_ADDR"`
+				Token string `json:"VAULT_TOKEN,omitempty"`
+				Skip  string `json:"VAULT_SKIP_VERIFY,omitempty"`
+			}{
+				Addr:  vars["VAULT_ADDR"],
+				Token: vars["VAULT_TOKEN"],
+				Skip:  vars["VAULT_SKIP_VERIFY"],
+			}
+			b, err := json.Marshal(jsonEnv)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("%s\n", string(b))
+			return nil
+
 		default:
 			for name, value := range vars {
 				if value != "" {
