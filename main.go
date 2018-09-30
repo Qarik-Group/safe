@@ -1029,32 +1029,37 @@ written to STDOUT instead of STDERR to make it easier to consume.
 
 		var token string
 		var err error
+		url := os.Getenv("VAULT_ADDR")
+		target := cfg.Current
+		if opts.UseTarget == "" {
+			target := opts.UseTarget
+		}
+		fmt.Fprintf(os.Stderr, "Authenticating against @C{%s} at @C{%s}\n", target, url)
 
-		fmt.Fprintf(os.Stderr, "Authenticating against @C{%s} at @C{%s}\n", cfg.Current, cfg.URL())
 		switch method {
 		case "token":
-			token, err = auth.Token(os.Getenv("VAULT_ADDR"))
+			token, err = auth.Token(url)
 			if err != nil {
 				return err
 			}
 			break
 
 		case "ldap":
-			token, err = auth.LDAP(os.Getenv("VAULT_ADDR"))
+			token, err = auth.LDAP(url)
 			if err != nil {
 				return err
 			}
 			break
 
 		case "github":
-			token, err = auth.Github(os.Getenv("VAULT_ADDR"))
+			token, err = auth.Github(url)
 			if err != nil {
 				return err
 			}
 			break
 
 		case "userpass":
-			token, err = auth.UserPass(os.Getenv("VAULT_ADDR"))
+			token, err = auth.UserPass(url)
 			if err != nil {
 				return err
 			}
