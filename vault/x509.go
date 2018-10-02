@@ -270,6 +270,12 @@ var signatureAlgorithmLookup = map[string]x509.SignatureAlgorithm{
 	"sha256-rsapss": x509.SHA256WithRSAPSS,
 	"sha384-rsapss": x509.SHA384WithRSAPSS,
 	"sha512-rsapss": x509.SHA512WithRSAPSS,
+	"dsa-sha1":      x509.DSAWithSHA1,
+	"dsa-sha256":    x509.DSAWithSHA256,
+	"ecdsa-sha1":    x509.ECDSAWithSHA1,
+	"ecdsa-sha256":  x509.ECDSAWithSHA256,
+	"ecdsa-sha384":  x509.ECDSAWithSHA384,
+	"ecdsa-sha512":  x509.ECDSAWithSHA512,
 }
 
 func translateKeyUsage(input []string) (keyUsage x509.KeyUsage, err error) {

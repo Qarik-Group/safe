@@ -2405,7 +2405,8 @@ The following options are recognized:
   -l, --sig-algorithm The algorithm that the certificate will be signed
                       with. Valid values are md5-rsa, sha1-rsa, sha256-rsa
                       sha384-rsa, sha512-rsa, sha256-rsapss, sha384-rsapss,
-                      and sha512-rsapss.
+                      sha512-rsapss, dsa-sha1, dsa-sha256, ecdsa-sha1,
+                      ecdsa-sha256, ecdsa-sha384, and ecdsa-sha512.
 `,
 	}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
@@ -2511,7 +2512,8 @@ The following options are recognized:
   -l, --sig-algorithm The algorithm that the certificate will be signed
                       with. Valid values are md5-rsa, sha1-rsa, sha256-rsa
                       sha384-rsa, sha512-rsa, sha256-rsapss, sha384-rsapss,
-                      and sha512-rsapss.
+                      sha512-rsapss, dsa-sha1, dsa-sha256, ecdsa-sha1,
+                      ecdsa-sha256, ecdsa-sha384, and ecdsa-sha512.
 `,
 	}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
@@ -2621,7 +2623,8 @@ The following options are recognized:
   -l, --sig-algorithm The algorithm that the certificate will be signed
                       with. Valid values are md5-rsa, sha1-rsa, sha256-rsa
                       sha384-rsa, sha512-rsa, sha256-rsapss, sha384-rsapss,
-                      and sha512-rsapss.
+                      sha512-rsapss, dsa-sha1, dsa-sha256, ecdsa-sha1,
+                      ecdsa-sha256, ecdsa-sha384, and ecdsa-sha512.
 `,
 	}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
