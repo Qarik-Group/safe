@@ -186,13 +186,14 @@ type Options struct {
 		} `cli:"validate, check"`
 
 		Issue struct {
-			CA       bool     `cli:"-A, --ca"`
-			Subject  string   `cli:"-s, --subj, --subject"`
-			Bits     int      `cli:"-b, --bits"`
-			SignedBy string   `cli:"-i, --signed-by"`
-			Name     []string `cli:"-n, --name"`
-			TTL      string   `cli:"-t, --ttl"`
-			KeyUsage []string `cli:"-u, --key-usage"`
+			CA           bool     `cli:"-A, --ca"`
+			Subject      string   `cli:"-s, --subj, --subject"`
+			Bits         int      `cli:"-b, --bits"`
+			SignedBy     string   `cli:"-i, --signed-by"`
+			Name         []string `cli:"-n, --name"`
+			TTL          string   `cli:"-t, --ttl"`
+			KeyUsage     []string `cli:"-u, --key-usage"`
+			SigAlgorithm string   `cli:"-l, --sig-algorithm"`
 		} `cli:"issue"`
 
 		Revoke struct {
@@ -200,14 +201,16 @@ type Options struct {
 		} `cli:"revoke"`
 
 		Renew struct {
-			SignedBy string `cli:"-i, --signed-by"`
-			TTL      string `cli:"-t, --ttl"`
+			SignedBy     string `cli:"-i, --signed-by"`
+			TTL          string `cli:"-t, --ttl"`
+			SigAlgorithm string `cli:"-l, --sig-algorithm"`
 		} `cli:"renew"`
 
 		Reissue struct {
-			Bits     int    `cli:"-b, --bits"`
-			SignedBy string `cli:"-i, --signed-by"`
-			TTL      string `cli:"-t, --ttl"`
+			Bits         int    `cli:"-b, --bits"`
+			SignedBy     string `cli:"-i, --signed-by"`
+			TTL          string `cli:"-t, --ttl"`
+			SigAlgorithm string `cli:"-l, --sig-algorithm"`
 		} `cli:"reissue"`
 
 		Show struct {
@@ -2362,42 +2365,49 @@ Issue a new X.509 Certificate
 
 The following options are recognized:
 
-  -A, --ca          This certificate is a CA, and can
-                    sign other certificates.
+  -A, --ca            This certificate is a CA, and can
+                      sign other certificates.
 
-  -s, --subject     The subject name for this certificate.
-                    i.e. /cn=www.example.com/c=us/st=ny...
-                    If not specified, the first '--name'
-                    will be used as a lone CN=...
+  -s, --subject       The subject name for this certificate.
+                      i.e. /cn=www.example.com/c=us/st=ny...
+                      If not specified, the first '--name'
+                      will be used as a lone CN=...
 
-  -i, --signed-by   Path in the Vault where the CA certificate
-                    (and signing key) can be found.
-                    Without this option, 'x509 issue' creates
-                    self-signed certificates.
+  -i, --signed-by     Path in the Vault where the CA certificate
+                      (and signing key) can be found.
+                      Without this option, 'x509 issue' creates
+                      self-signed certificates.
 
-  -n, --name        Subject Alternate Name(s) for this
-                    certificate.  These can be domain names,
-                    IP addresses or email address -- safe will
-                    figure out how to properly encode them.
-                    Can (and probably should) be specified
-                    more than once.
+  -n, --name          Subject Alternate Name(s) for this
+                      certificate.  These can be domain names,
+                      IP addresses or email address -- safe will
+                      figure out how to properly encode them.
+                      Can (and probably should) be specified
+                      more than once.
 
-  -b, --bits N      RSA key strength, in bits.  The only valid
-                    arguments are 1024 (highly discouraged),
-                    2048 and 4096.  Defaults to 4096.
+  -b, --bits N        RSA key strength, in bits.  The only valid
+                      arguments are 1024 (highly discouraged),
+                      2048 and 4096.  Defaults to 4096.
 
-  -t, --ttl         How long the new certificate will be valid
-                    for.  Specified in units h (hours), m (months)
-                    d (days) or y (years).  1m = 30d and 1y = 365d
-                    Defaults to 10y
+  -t, --ttl           How long the new certificate will be valid
+                      for.  Specified in units h (hours), m (months)
+                      d (days) or y (years).  1m = 30d and 1y = 365d
+                      Defaults to 10y
 
-  -u, --key-usage   An x509 key usage or extended key usage. Can be specified
-                    once for each desired usage. Valid key usage values are:
-                    'digital_signature', 'non_repudiation', 'key_encipherment',
-                    'data_encipherment', 'key_agreement', 'key_cert_sign',
-                    'crl_sign', 'encipher_only', or 'decipher_only'. Valid
-                    extended key usages are 'client_auth', 'server_auth', 'code_signing',
-                    'email_protection', or 'timestamping'
+  -u, --key-usage     An x509 key usage or extended key usage. Can be specified
+                      once for each desired usage. Valid key usage values are:
+                      'digital_signature', 'non_repudiation', 'key_encipherment',
+                      'data_encipherment', 'key_agreement', 'key_cert_sign',
+                      'crl_sign', 'encipher_only', or 'decipher_only'. Valid
+                      extended key usages are 'client_auth', 'server_auth', 'code_signing',
+                      'email_protection', or 'timestamping'
+
+  -l, --sig-algorithm The algorithm that the certificate will be signed
+                      with. Valid values are md5-rsa, sha1-rsa, sha256-rsa
+                      sha384-rsa, sha512-rsa, sha256-rsapss, sha384-rsapss,
+                      sha512-rsapss, dsa-sha1, dsa-sha256, ecdsa-sha1,
+                      ecdsa-sha256, ecdsa-sha384, and ecdsa-sha512. Defaults
+                      to sha512-rsa.
 `,
 	}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
@@ -2437,7 +2447,8 @@ The following options are recognized:
 		}
 
 		cert, err := vault.NewCertificate(opt.X509.Issue.Subject,
-			uniq(opt.X509.Issue.Name), opt.X509.Issue.KeyUsage, opt.X509.Issue.Bits)
+			uniq(opt.X509.Issue.Name), opt.X509.Issue.KeyUsage,
+			opt.X509.Issue.SigAlgorithm, opt.X509.Issue.Bits)
 		if err != nil {
 			return err
 		}
@@ -2481,23 +2492,30 @@ Reissues an X.509 Certificate with a new key.
 
 The following options are recognized:
 
-  -b, --bits  N     RSA key strength, in bits.  The only valid
-                    arguments are 1024 (highly discouraged),
-                    2048 and 4096.  Defaults to the last value used
-                    to (re)issue the certificate.
+  -b, --bits  N       RSA key strength, in bits.  The only valid
+                      arguments are 1024 (highly discouraged),
+                      2048 and 4096.  Defaults to the last value used
+                      to (re)issue the certificate.
 
-  -i, --signed-by   Path in the Vault where the CA certificate
-                    (and signing key) can be found.  If this is not
-                    provided, a sibling secret named 'ca' will used
-                    if it exists. This should be the same CA that
-                    originally signed the certificate, but does not
-                    have to be.
+  -i, --signed-by     Path in the Vault where the CA certificate
+                      (and signing key) can be found.  If this is not
+                      provided, a sibling secret named 'ca' will used
+                      if it exists. This should be the same CA that
+                      originally signed the certificate, but does not
+                      have to be.
 
-  -t, --ttl         How long the new certificate will be valid
-                    for.  Specified in units h (hours), m (months)
-                    d (days) or y (years).  1m = 30d and 1y = 365d
-                    Defaults to the last TTL used to issue or renew
-                    the certificate.
+  -t, --ttl           How long the new certificate will be valid
+                      for.  Specified in units h (hours), m (months)
+                      d (days) or y (years).  1m = 30d and 1y = 365d
+                      Defaults to the last TTL used to issue or renew
+                      the certificate.
+
+  -l, --sig-algorithm The algorithm that the certificate will be signed
+                      with. Valid values are md5-rsa, sha1-rsa, sha256-rsa
+                      sha384-rsa, sha512-rsa, sha256-rsapss, sha384-rsapss,
+                      sha512-rsapss, dsa-sha1, dsa-sha256, ecdsa-sha1,
+                      ecdsa-sha256, ecdsa-sha384, and ecdsa-sha512. Defaults
+                      to sha512-rsa.
 `,
 	}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
@@ -2520,6 +2538,14 @@ The following options are recognized:
 		cert, err := s.X509(true)
 		if err != nil {
 			return err
+		}
+		if opt.X509.Reissue.SigAlgorithm != "" {
+			sigAlgo, err := vault.TranslateSignatureAlgorithm(opt.X509.Reissue.SigAlgorithm)
+			if err != nil {
+				return err
+			}
+
+			cert.Certificate.SignatureAlgorithm = sigAlgo
 		}
 
 		/* find the CA */
@@ -2583,18 +2609,25 @@ Renew an X.509 Certificate with existing key
 
 The following options are recognized:
 
-  -i, --signed-by   Path in the Vault where the CA certificate
-                    (and signing key) can be found.  If this is not
-                    provided, a sibling secret named 'ca' will used
-                    if it exists.  This should be the same CA that
-                    originally signed the certificate, but does not
-                    have to be.
+  -i, --signed-by   	Path in the Vault where the CA certificate
+                      (and signing key) can be found.  If this is not
+                      provided, a sibling secret named 'ca' will used
+                      if it exists.  This should be the same CA that
+                      originally signed the certificate, but does not
+                      have to be.
 
-  -t, --ttl         How long the new certificate will be valid
-                    for.  Specified in units h (hours), m (months)
-                    d (days) or y (years).  1m = 30d and 1y = 365d
-                    Defaults to the last TTL used to issue or renew
-                    the certificate.
+  -t, --ttl           How long the new certificate will be valid
+                      for.  Specified in units h (hours), m (months)
+                      d (days) or y (years).  1m = 30d and 1y = 365d
+                      Defaults to the last TTL used to issue or renew
+                      the certificate.
+
+  -l, --sig-algorithm The algorithm that the certificate will be signed
+                      with. Valid values are md5-rsa, sha1-rsa, sha256-rsa
+                      sha384-rsa, sha512-rsa, sha256-rsapss, sha384-rsapss,
+                      sha512-rsapss, dsa-sha1, dsa-sha256, ecdsa-sha1,
+                      ecdsa-sha256, ecdsa-sha384, and ecdsa-sha512. Defaults
+                      to sha512-rsa.
 `,
 	}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
@@ -2617,6 +2650,15 @@ The following options are recognized:
 		cert, err := s.X509(true)
 		if err != nil {
 			return err
+		}
+
+		if opt.X509.Renew.SigAlgorithm != "" {
+			sigAlgo, err := vault.TranslateSignatureAlgorithm(opt.X509.Renew.SigAlgorithm)
+			if err != nil {
+				return err
+			}
+
+			cert.Certificate.SignatureAlgorithm = sigAlgo
 		}
 
 		/* find the CA */
@@ -2855,6 +2897,29 @@ prints out information about a certificate, including:
 			if n == 0 {
 				fmt.Printf("    (no special key usage constraints present)\n")
 			}
+			fmt.Printf("\n")
+
+			fmt.Printf("  signed with the algorithm ")
+			sigView := map[x509.SignatureAlgorithm]string{
+				x509.UnknownSignatureAlgorithm: "Unknown",
+				x509.MD2WithRSA:                "MD2 With RSA",
+				x509.MD5WithRSA:                "MD5 With RSA",
+				x509.SHA1WithRSA:               "SHA1 With RSA",
+				x509.SHA256WithRSA:             "SHA256 With RSA",
+				x509.SHA384WithRSA:             "SHA384 With RSA",
+				x509.SHA512WithRSA:             "SHA512 With RSA",
+				x509.DSAWithSHA1:               "DSA With SHA1",
+				x509.DSAWithSHA256:             "DSA With SHA256",
+				x509.ECDSAWithSHA1:             "ECDSA With SHA1",
+				x509.ECDSAWithSHA256:           "ECDSA With SHA256",
+				x509.ECDSAWithSHA384:           "ECDSA With SHA384",
+				x509.ECDSAWithSHA512:           "ECDSA With SHA512",
+				x509.SHA256WithRSAPSS:          "SHA256 With RSAPSS",
+				x509.SHA384WithRSAPSS:          "SHA384 With RSAPSS",
+				x509.SHA512WithRSAPSS:          "SHA512 With RSAPSS",
+			}
+			sigAlgo := sigView[cert.Certificate.SignatureAlgorithm]
+			fmt.Printf("@G{%s}\n", sigAlgo)
 			fmt.Printf("\n")
 
 			fmt.Printf("  for the following names:\n")
