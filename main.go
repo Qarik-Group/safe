@@ -284,7 +284,7 @@ func main() {
 				vaults = append(vaults, vault{
 					Name:   name,
 					URL:    details.URL,
-					Verify: details.SkipVerify,
+					Verify: !details.SkipVerify,
 				})
 			}
 			b, err := json.Marshal(vaults)
@@ -1031,8 +1031,8 @@ written to STDOUT instead of STDERR to make it easier to consume.
 		var err error
 		url := os.Getenv("VAULT_ADDR")
 		target := cfg.Current
-		if opts.UseTarget == "" {
-			target := opts.UseTarget
+		if opt.UseTarget == "" {
+			target = opt.UseTarget
 		}
 		fmt.Fprintf(os.Stderr, "Authenticating against @C{%s} at @C{%s}\n", target, url)
 
