@@ -256,6 +256,22 @@ var extendedKeyUsageLookup = map[string]x509.ExtKeyUsage{
 	"timestamping":     x509.ExtKeyUsageTimeStamping,
 }
 
+var signatureAlgorithmLookup = map[string]x509.SignatureAlgorithm{
+	"md5":           x509.MD5WithRSA,
+	"md5-rsa":       x509.MD5WithRSA,
+	"sha1":          x509.SHA1WithRSA,
+	"sha1-rsa":      x509.SHA1WithRSA,
+	"sha256":        x509.SHA256WithRSA,
+	"sha256-rsa":    x509.SHA256WithRSA,
+	"sha384":        x509.SHA384WithRSA,
+	"sha384-rsa":    x509.SHA384WithRSA,
+	"sha512":        x509.SHA512WithRSA,
+	"sha512-rsa":    x509.SHA512WithRSA,
+	"sha256-rsapss": x509.SHA256WithRSAPSS,
+	"sha384-rsapss": x509.SHA384WithRSAPSS,
+	"sha512-rsapss": x509.SHA512WithRSAPSS,
+}
+
 func translateKeyUsage(input []string) (keyUsage x509.KeyUsage, err error) {
 	var found bool
 
@@ -291,7 +307,17 @@ func translateExtendedKeyUsage(input []string) (extendedKeyUsage []x509.ExtKeyUs
 	return
 }
 
-func NewCertificate(subj string, names, keyUsage []string, bits int) (*X509, error) {
+func TranslateSignatureAlgorithm(signatureAlgorithm string) (sigAlgo x509.SignatureAlgorithm, err error) {
+	var found bool
+	sigAlgo, found = signatureAlgorithmLookup[signatureAlgorithm]
+	if !found {
+		err = fmt.Errorf("%s is not a supported signature algorithm", signatureAlgorithm)
+	}
+
+	return
+}
+
+func NewCertificate(subj string, names, keyUsage []string, signatureAlgorithm string, bits int) (*X509, error) {
 	if bits != 1024 && bits != 2048 && bits != 4096 {
 		return nil, fmt.Errorf("invalid RSA key strength '%d', must be one of: 1024, 2048, 4096", bits)
 	}
@@ -324,10 +350,18 @@ func NewCertificate(subj string, names, keyUsage []string, bits int) (*X509, err
 		return nil, err
 	}
 
+	translatedSigAlgo := x509.SHA512WithRSA
+	if signatureAlgorithm != "" {
+		translatedSigAlgo, err = TranslateSignatureAlgorithm(signatureAlgorithm)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return &X509{
 		PrivateKey: key,
 		Certificate: &x509.Certificate{
-			SignatureAlgorithm: x509.SHA512WithRSA, /* FIXME: hard-coded */
+			SignatureAlgorithm: translatedSigAlgo,
 			PublicKeyAlgorithm: x509.RSA,
 			Subject:            name,
 			DNSNames:           domains,
