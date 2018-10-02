@@ -758,7 +758,7 @@ Vault will remain sealed).
 		if !opt.Init.Sealed {
 			if st, err := v.Strongbox(); err == nil {
 				for addr := range st {
-					v.URL = addr
+					v.SetURL(addr)
 					if err := v.Unseal(keys); err != nil {
 						fmt.Fprintf(os.Stderr, "!!! unable to unseal newly-initialized vault (at %s): %s\n", addr, err)
 					}
@@ -862,7 +862,7 @@ Vault will remain sealed).
 		for addr, state := range st {
 			if state == "sealed" {
 				n++
-				v.URL = addr
+				v.SetURL(addr)
 				nkeys, err = v.SealKeys()
 				if err != nil {
 					return err
@@ -883,7 +883,7 @@ Vault will remain sealed).
 			for addr, state := range st {
 				if state == "sealed" {
 					fmt.Printf("unsealing @G{%s}...\n", addr)
-					v.URL = addr
+					v.SetURL(addr)
 					if err = v.Unseal(keys); err != nil {
 						return err
 					}
@@ -920,7 +920,7 @@ Vault will remain sealed).
 		for n > 0 {
 			for addr, state := range st {
 				if state == "unsealed" {
-					v.URL = addr
+					v.SetURL(addr)
 
 					sealed, err := v.Seal()
 					if err != nil {

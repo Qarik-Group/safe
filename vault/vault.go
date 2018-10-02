@@ -6,29 +6,26 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
-	"net/http/httputil"
 	"net/url"
 	"os"
 	"runtime"
 	"strings"
 
+	"github.com/cloudfoundry-community/vaultkv"
 	"github.com/jhunt/go-ansi"
 	"github.com/starkandwayne/goutils/tree"
 )
 
-// A Vault represents a means for interacting with a remote Vault
-// instance (unsealed and pre-authenticated) to read and write secrets.
 type Vault struct {
-	URL    string
-	Token  string
-	Client *http.Client
+	client *vaultkv.Client
 }
 
 // NewVault creates a new Vault object.  If an empty token is specified,
 // the current user's token is read from ~/.vault-token.
-func NewVault(url, token string, auth bool) (*Vault, error) {
+func NewVault(u, token string, auth bool) (*Vault, error) {
 	if auth {
 		if token == "" {
 			b, err := ioutil.ReadFile(fmt.Sprintf("%s/.vault-token", userHomeDir()))
@@ -51,30 +48,43 @@ func NewVault(url, token string, auth bool) (*Vault, error) {
 		return nil, fmt.Errorf("unable to retrieve system root certificate authorities: %s", err)
 	}
 
+	vaultURL, err := url.Parse(strings.TrimSuffix(u, "/"))
+	if err != nil {
+		return nil, fmt.Errorf("Could not parse Vault URL: %s", err)
+	}
+
+	//The default port for Vault is typically 8200 (which is the VaultKV default),
+	// but safe has historically ignored that and used the default http or https
+	// port, depending on which was specified as the scheme
+	if vaultURL.Port() == "" {
+		port := ":80"
+		if strings.ToLower(vaultURL.Scheme) == "https" {
+			port = ":443"
+		}
+		vaultURL.Host = vaultURL.Host + port
+	}
+
 	return &Vault{
-		URL:   strings.TrimSuffix(url, "/"),
-		Token: token,
-		Client: &http.Client{
-			Transport: &http.Transport{
-				Proxy: http.ProxyFromEnvironment,
-				TLSClientConfig: &tls.Config{
-					RootCAs:            roots,
-					InsecureSkipVerify: os.Getenv("VAULT_SKIP_VERIFY") != "",
+		client: &vaultkv.Client{
+			VaultURL:  vaultURL,
+			AuthToken: token,
+			Client: &http.Client{
+				Transport: &http.Transport{
+					Proxy: http.ProxyFromEnvironment,
+					TLSClientConfig: &tls.Config{
+						RootCAs:            roots,
+						InsecureSkipVerify: os.Getenv("VAULT_SKIP_VERIFY") != "",
+					},
 				},
 			},
-			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				if len(via) > 10 {
-					return fmt.Errorf("stopped after 10 redirects")
+			Trace: func() (ret io.Writer) {
+				if shouldDebug() {
+					ret = os.Stderr
 				}
-				req.Header.Add("X-Vault-Token", token)
-				return nil
-			},
+				return ret
+			}(),
 		},
 	}, nil
-}
-
-func (v *Vault) url(f string, args ...interface{}) string {
-	return v.URL + fmt.Sprintf(f, args...)
 }
 
 func shouldDebug() bool {
@@ -82,142 +92,50 @@ func shouldDebug() bool {
 	return d != "" && d != "false" && d != "0" && d != "no" && d != "off"
 }
 
-func (v *Vault) request(req *http.Request) (*http.Response, error) {
-	var (
-		body []byte
-		err  error
-	)
-	if req.Body != nil {
-		body, err = ioutil.ReadAll(req.Body)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	req.Header.Add("X-Vault-Token", v.Token)
-	for i := 0; i < 10; i++ {
-		if req.Body != nil {
-			req.Body = ioutil.NopCloser(bytes.NewReader(body))
-		}
-		if shouldDebug() {
-			r, _ := httputil.DumpRequest(req, true)
-			fmt.Fprintf(os.Stderr, "Request:\n%s\n----------------\n", r)
-		}
-		res, err := v.Client.Do(req)
-		if shouldDebug() {
-			r, _ := httputil.DumpResponse(res, true)
-			fmt.Fprintf(os.Stderr, "Response:\n%s\n----------------\n", r)
-		}
-		if err != nil {
-			return nil, err
-		}
-		// Vault returns a 307 to redirect during HA / Auth
-		switch res.StatusCode {
-		case 307:
-			// Note: this does not handle relative Location headers
-			url, err := url.Parse(res.Header.Get("Location"))
-			if err != nil {
-				return nil, err
-			}
-			req.URL = url
-			// ... and try again.
-
-		default:
-			return res, err
-		}
-	}
-
-	return nil, fmt.Errorf("redirection loop detected")
-}
-
 func (v *Vault) Curl(method string, path string, body []byte) (*http.Response, error) {
 	path = Canonicalize(path)
-	req, err := http.NewRequest(method, v.url("/v1/%s", path), bytes.NewBuffer(body))
+	u, err := url.Parse(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Could not parse input path: %s", err.Error())
 	}
-	return v.request(req)
-}
 
-func (v *Vault) Configure(path string, params map[string]string) error {
-	data, err := json.Marshal(params)
+	query, err := url.ParseQuery(u.RawQuery)
 	if err != nil {
-		return err
+		panic("Could not parse query: " + err.Error())
 	}
 
-	res, err := v.Curl("POST", path, data)
-	if err != nil {
-		return err
-	}
-
-	if res.StatusCode != 200 && res.StatusCode != 204 {
-		return fmt.Errorf("configuration via '%s' failed", path)
-	}
-
-	return nil
+	return v.client.Curl(method, u.Path, query, bytes.NewBuffer(body))
 }
 
 // Read checks the Vault for a Secret at the specified path, and returns it.
 // If there is nothing at that path, a nil *Secret will be returned, with no
 // error.
 func (v *Vault) Read(path string) (secret *Secret, err error) {
+	path = Canonicalize(path)
 	//split at last colon, if present
 	path, key := ParsePath(path)
 
 	secret = NewSecret()
-	req, err := http.NewRequest("GET", v.url("/v1/%s", path), nil)
+
+	raw := map[string]string{}
+	err = v.client.Get(path, &raw)
 	if err != nil {
-		return
-	}
-	res, err := v.request(req)
-	if err != nil {
-		return
-	}
-
-	switch res.StatusCode {
-	case 200:
-		break
-	case 404:
-		err = NewSecretNotFoundError(path)
-		return
-	default:
-		err = fmt.Errorf("API %s", res.Status)
-		return
-	}
-
-	b, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return
-	}
-
-	var raw map[string]interface{}
-	if err = json.Unmarshal(b, &raw); err != nil {
-		return
-	}
-
-	if rawdata, ok := raw["data"]; ok {
-		if data, ok := rawdata.(map[string]interface{}); ok {
-			for k, v := range data {
-				if (key != "" && k == key) || key == "" {
-					if s, ok := v.(string); ok {
-						secret.data[k] = s
-					} else {
-						b, err = json.Marshal(v)
-						if err != nil {
-							return
-						}
-						secret.data[k] = string(b)
-					}
-				}
-			}
-
-			if key != "" && len(secret.data) == 0 {
-				err = NewKeyNotFoundError(path, key)
-			}
-			return
+		if vaultkv.IsNotFound(err) {
+			err = NewSecretNotFoundError(path)
 		}
+		return
 	}
-	err = fmt.Errorf("malformed response from vault")
+
+	if key != "" {
+		val, found := raw[key]
+		if !found {
+			return nil, NewKeyNotFoundError(path, key)
+		}
+		secret.data[key] = val
+	} else {
+		secret.data = raw
+	}
+
 	return
 }
 
@@ -227,52 +145,12 @@ func (v *Vault) Read(path string) (secret *Secret, err error) {
 func (v *Vault) List(path string) (paths []string, err error) {
 	path = Canonicalize(path)
 
-	req, err := http.NewRequest("GET", v.url("/v1/%s?list=1", path), nil)
-	if err != nil {
-		return
-	}
-	res, err := v.request(req)
-	if err != nil {
-		return
+	paths, err = v.client.List(path)
+	if vaultkv.IsNotFound(err) {
+		err = NewSecretNotFoundError(path)
 	}
 
-	switch res.StatusCode {
-	case 200:
-		break
-	case 404:
-		req, err = http.NewRequest("GET", v.url("/v1/%s", path), nil)
-		if err != nil {
-			return
-		}
-		res, err = v.request(req)
-		if err != nil {
-			return
-		}
-		switch res.StatusCode {
-		case 200:
-			break
-		case 404:
-			err = NewSecretNotFoundError(path)
-			return
-		default:
-			err = fmt.Errorf("API %s", res.Status)
-			return
-		}
-	default:
-		err = fmt.Errorf("API %s", res.Status)
-		return
-	}
-
-	b, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return
-	}
-
-	var r struct{ Data struct{ Keys []string } }
-	if err = json.Unmarshal(b, &r); err != nil {
-		return
-	}
-	return r.Data.Keys, nil
+	return paths, err
 }
 
 type TreeOptions struct {
@@ -284,18 +162,34 @@ type TreeOptions struct {
 }
 
 func (v *Vault) walktree(path string, options TreeOptions) (tree.Node, int, error) {
-	t := tree.New(path)
-	l, err := v.List(path)
-	if err != nil {
-		return t, 0, err
-	}
-
 	var key_fmt string
 	if options.UseANSI {
 		key_fmt = "@Y{:%s}"
 	} else {
 		key_fmt = ":%s"
 	}
+
+	t := tree.New(path)
+	l, err := v.List(path)
+	if err != nil {
+		//This can be either because a leaf is being listed or because nothing is
+		// there at all
+		if IsNotFound(err) {
+			//If we need the subkeys inside a leaf...
+			if options.ShowKeys {
+				//Then we actually need to check if its a leaf
+				if s, err := v.Read(path); err == nil {
+					for _, key := range s.Keys() {
+						t.Append(tree.New(ansi.Sprintf(key_fmt, key)))
+					}
+				}
+			}
+
+			err = nil
+		}
+		return t, 0, err
+	}
+
 	if options.ShowKeys && !options.InSubbranch {
 		if s, err := v.Read(path); err == nil {
 			for _, key := range s.Keys() {
@@ -383,43 +277,20 @@ func (v *Vault) Write(path string, s *Secret) error {
 		return v.deleteIfPresent(path)
 	}
 
-	raw := s.JSON()
-
-	req, err := http.NewRequest("POST", v.url("/v1/%s", path), strings.NewReader(raw))
-	if err != nil {
-		return err
-	}
-	res, err := v.request(req)
-	if err != nil {
-		return err
+	err := v.client.Set(path, s.data)
+	if vaultkv.IsNotFound(err) {
+		err = NewSecretNotFoundError(path)
 	}
 
-	switch res.StatusCode {
-	case 200:
-		break
-	case 204:
-		break
-	default:
-		return fmt.Errorf("API %s", res.Status)
-	}
-
-	return nil
+	return err
 }
 
-//errIfFolder returns an error with your provided message if the given path exists,
-// either as a secret or a folder.
+//errIfFolder returns an error with your provided message if the given path is a folder.
 // Can also throw an error if contacting the backend failed, in which case that error
 // is returned.
 func (v *Vault) errIfFolder(path, message string, args ...interface{}) error {
 	path = Canonicalize(path)
-
-	//need to check if length of list is 0 because prior to vault 0.6.0, no 404 is
-	//given for attempting to list a path which does not exist.
-	if paths, err := v.List(path); err == nil && len(paths) != 0 { //...see if it is a subtree "folder"
-		// the "== nil" is not a typo. if there is an error, NotFound or otherwise,
-		// simply fall through to the error return below
-		// Otherwise, give a different error signifying that the problem is that
-		// the target is a directory when we expected a secret.
+	if _, err := v.List(path); err == nil {
 		return fmt.Errorf(message, args...)
 	} else if err != nil && !IsNotFound(err) {
 		return err
@@ -440,7 +311,7 @@ func (v *Vault) verifySecretExists(path string) error {
 }
 
 //DeleteTree recursively deletes the leaf nodes beneath the given root until
-// the root has no children, and then deletes that.
+//the root has no children, and then deletes that.
 func (v *Vault) DeleteTree(root string) error {
 	root = Canonicalize(root)
 
@@ -475,26 +346,7 @@ func (v *Vault) Delete(path string) error {
 }
 
 func (v *Vault) deleteEntireSecret(path string) error {
-
-	req, err := http.NewRequest("DELETE", v.url("/v1/%s", path), nil)
-	if err != nil {
-		return err
-	}
-	res, err := v.request(req)
-	if err != nil {
-		return err
-	}
-
-	switch res.StatusCode {
-	case 200:
-		break
-	case 204:
-		break
-	default:
-		return fmt.Errorf("API %s", res.Status)
-	}
-
-	return nil
+	return v.client.Delete(path)
 }
 
 func (v *Vault) deleteSpecificKey(path, key string) error {
@@ -1038,4 +890,12 @@ func (v *Vault) SaveSealKeys(keys []string) {
 		s.Set(fmt.Sprintf("key%d", i+1), key, false)
 	}
 	v.Write(path, s)
+}
+
+func (v *Vault) SetURL(u string) {
+	vaultURL, err := url.Parse(strings.TrimSuffix(u, "/"))
+	if err != nil {
+		panic(fmt.Sprintf("Could not parse Vault URL: %s", err))
+	}
+	v.client.VaultURL = vaultURL
 }
