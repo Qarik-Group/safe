@@ -2900,41 +2900,25 @@ prints out information about a certificate, including:
 			fmt.Printf("\n")
 
 			fmt.Printf("  signed with the algorithm ")
-			var sigAlgo string
-			switch cert.Certificate.SignatureAlgorithm {
-			case x509.UnknownSignatureAlgorithm:
-				sigAlgo = "Unknown"
-			case x509.MD2WithRSA:
-				sigAlgo = "MD2 With RSA"
-			case x509.MD5WithRSA:
-				sigAlgo = "MD5 With RSA"
-			case x509.SHA1WithRSA:
-				sigAlgo = "SHA1 With RSA"
-			case x509.SHA256WithRSA:
-				sigAlgo = "SHA256 With RSA"
-			case x509.SHA384WithRSA:
-				sigAlgo = "SHA384 With RSA"
-			case x509.SHA512WithRSA:
-				sigAlgo = "SHA512 With RSA"
-			case x509.DSAWithSHA1:
-				sigAlgo = "DSA With SHA1"
-			case x509.DSAWithSHA256:
-				sigAlgo = "DSA With SHA256"
-			case x509.ECDSAWithSHA1:
-				sigAlgo = "ECDSA With SHA1"
-			case x509.ECDSAWithSHA256:
-				sigAlgo = "ECDSA With SHA256"
-			case x509.ECDSAWithSHA384:
-				sigAlgo = "ECDSA With SHA256"
-			case x509.ECDSAWithSHA512:
-				sigAlgo = "ECDSA With SHA512"
-			case x509.SHA256WithRSAPSS:
-				sigAlgo = "SHA256 With RSAPSS"
-			case x509.SHA384WithRSAPSS:
-				sigAlgo = "SHA384 With RSAPSS"
-			case x509.SHA512WithRSAPSS:
-				sigAlgo = "SHA512 With RSAPSS"
+			sigView := map[x509.SignatureAlgorithm]string{
+				x509.UnknownSignatureAlgorithm: "Unknown",
+				x509.MD2WithRSA:                "MD2 With RSA",
+				x509.MD5WithRSA:                "MD5 With RSA",
+				x509.SHA1WithRSA:               "SHA1 With RSA",
+				x509.SHA256WithRSA:             "SHA256 With RSA",
+				x509.SHA384WithRSA:             "SHA384 With RSA",
+				x509.SHA512WithRSA:             "SHA512 With RSA",
+				x509.DSAWithSHA1:               "DSA With SHA1",
+				x509.DSAWithSHA256:             "DSA With SHA256",
+				x509.ECDSAWithSHA1:             "ECDSA With SHA1",
+				x509.ECDSAWithSHA256:           "ECDSA With SHA256",
+				x509.ECDSAWithSHA384:           "ECDSA With SHA384",
+				x509.ECDSAWithSHA512:           "ECDSA With SHA512",
+				x509.SHA256WithRSAPSS:          "SHA256 With RSAPSS",
+				x509.SHA384WithRSAPSS:          "SHA384 With RSAPSS",
+				x509.SHA512WithRSAPSS:          "SHA512 With RSAPSS",
 			}
+			sigAlgo := sigView[cert.Certificate.SignatureAlgorithm]
 			fmt.Printf("@G{%s}\n", sigAlgo)
 			fmt.Printf("\n")
 
