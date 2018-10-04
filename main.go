@@ -2351,6 +2351,14 @@ The following options are recognized:
 				}
 			}
 
+			if ca != nil { //If --signed-by was specified...
+				err = cert.Certificate.CheckSignatureFrom(ca.Certificate)
+
+				if err != nil {
+					return fmt.Errorf("%s was not signed by %s", path, opt.X509.Validate.SignedBy)
+				}
+			}
+
 			fmt.Printf("@G{%s} checks out.\n", path)
 		}
 
