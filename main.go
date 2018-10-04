@@ -1424,40 +1424,7 @@ paths/keys.
 	}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
 		v := connect(true)
-		if len(args) == 0 {
-			secrets, err := v.Mounts("generic")
-			if err != nil {
-				return err
-			}
-			kvs, err := v.Mounts("kv")
-			if err != nil {
-				return err
-			}
-
-			secrets = append(secrets, kvs...)
-			sort.Strings(secrets)
-
-			separator := "  "
-			if opt.List.Single {
-				separator = "\n"
-			}
-			for _, path := range secrets {
-				fmt.Printf("@B{%s/}%s", strings.TrimRight(path, "/"), separator)
-			}
-			if !opt.List.Single {
-				fmt.Printf("\n")
-			}
-			return nil
-		}
-		for _, path := range args {
-			paths, err := v.List(path)
-			if err != nil {
-				return err
-			}
-
-			if len(args) != 1 {
-				fmt.Printf("@C{%s}:\n", path)
-			}
+		display := func(paths []string) {
 			if opt.List.Single {
 				for _, s := range paths {
 					if strings.HasSuffix(s, "/") {
@@ -1476,6 +1443,39 @@ paths/keys.
 				}
 				fmt.Printf("\n")
 			}
+		}
+
+		if len(args) == 0 {
+			args = []string{"/"}
+		}
+
+		for _, path := range args {
+			var paths []string
+			if path == "" || path == "/" {
+				generics, err := v.Mounts("generic")
+				if err != nil {
+					return err
+				}
+				kvs, err := v.Mounts("kv")
+				if err != nil {
+					return err
+				}
+
+				paths = append(generics, kvs...)
+			} else {
+				var err error
+				paths, err = v.List(path)
+				if err != nil {
+					return err
+				}
+			}
+
+			sort.Strings(paths)
+
+			if len(args) != 1 {
+				fmt.Printf("@C{%s}:\n", path)
+			}
+			display(paths)
 			if len(args) != 1 {
 				fmt.Printf("\n")
 			}
