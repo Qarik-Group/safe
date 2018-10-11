@@ -25,6 +25,12 @@
 			"revision": "f04a1744b5e341ae543d4ba4f6b2290425627a3a"
 		},
 		{
+			"checksumSHA1": "8bXnF0vOnAodePX8tfy7vfBPM64=",
+			"path": "github.com/jhunt/go-envirotron",
+			"revision": "8bdb90f72b39102d14b82a2ead076865f8ba5886",
+			"revisionTime": "2017-10-17T04:30:50Z"
+		},
+		{
 			"checksumSHA1": "/L4hlvjltOZXrXJOrVRBdcWDAQc=",
 			"path": "github.com/jhunt/go-snapshot",
 			"revision": "92984e0ad8d83220d55e97554c5ec8d41d8edc18"

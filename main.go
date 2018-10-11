@@ -24,6 +24,7 @@ import (
 
 	fmt "github.com/jhunt/go-ansi"
 	"github.com/jhunt/go-cli"
+	env "github.com/jhunt/go-envirotron"
 	"gopkg.in/yaml.v2"
 
 	"github.com/starkandwayne/safe/auth"
@@ -68,7 +69,10 @@ type Options struct {
 	SkipIfExists bool
 	Quiet        bool `cli:"--quiet"`
 
-	UseTarget string `cli:"-T, --target"`
+	// Behavour of -T must chain through -- separated commands.  There is code
+	// that relies on this.  Will default to $SAFE_TARGET if it exists, or
+	// the current safe target otherwise.
+	UseTarget string `cli:"-T, --target" env:"SAFE_TARGET"`
 
 	HelpCommand    struct{} `cli:"help"`
 	VersionCommand struct{} `cli:"version"`
@@ -2993,6 +2997,7 @@ Currently, only the --renew option is supported, and it is required:
 		return nil
 	})
 
+	env.Override(&opt)
 	p, err := cli.NewParser(&opt, os.Args[1:])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "@R{!! %s}\n", err)
