@@ -247,6 +247,10 @@ func (v *Vault) walktree(path string, options TreeOptions) (tree.Node, int, erro
 	return t, len(l), nil
 }
 
+type treeTaskStack struct {
+	stack []workOrder
+}
+
 // Tree returns a tree that represents the hierarchy of paths contained
 // below the given path, inside of the Vault.
 func (v *Vault) Tree(path string, options TreeOptions) (tree.Node, error) {

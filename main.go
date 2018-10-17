@@ -1499,11 +1499,6 @@ to get your bearings.
 `,
 	}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
-		opts := vault.TreeOptions{
-			UseANSI:    fmt.CanColorize(os.Stdout),
-			HideLeaves: opt.Tree.HideLeaves,
-			ShowKeys:   opt.Tree.ShowKeys,
-		}
 		if opt.Tree.HideLeaves && opt.Tree.ShowKeys {
 			return fmt.Errorf("Cannot specify both -d and --keys at the same time")
 		}
@@ -1514,11 +1509,11 @@ to get your bearings.
 		r2, _ := regexp.Compile("^└")
 		v := connect(true)
 		for i, path := range args {
-			tree, err := v.Tree(path, opts)
+			tree, err := v.ConstructTree(path, opt.Tree.ShowKeys)
 			if err != nil {
 				return err
 			}
-			lines := strings.Split(tree.Draw(), "\n")
+			lines := strings.Split(tree.Draw(fmt.CanColorize(os.Stdout), !opt.Tree.HideLeaves), "\n")
 			if i > 0 {
 				lines = lines[1:] // Drop root '.' from subsequent paths
 			}
@@ -1546,28 +1541,19 @@ to get your bearings.
 		}
 		v := connect(true)
 		for _, path := range args {
-			tree, err := v.Tree(path, vault.TreeOptions{
-				UseANSI:      false,
-				ShowKeys:     opt.Paths.ShowKeys,
-				StripSlashes: true,
-			})
+			//tree, err := v.Tree(path, vault.TreeOptions{
+			//UseANSI:      false,
+			//ShowKeys:     opt.Paths.ShowKeys,
+			//StripSlashes: true,
+			//})
+
+			tree, err := v.ConstructTree(path, opt.Paths.ShowKeys)
 			if err != nil {
 				return err
 			}
 
-			for _, segs := range tree.PathSegments() {
-				var has_key bool
-				var key string
-				if len(segs[len(segs)-1]) > 0 && segs[len(segs)-1][0] == ':' {
-					has_key = true
-					key, segs = segs[len(segs)-1], segs[:len(segs)-1]
-				}
-				path := strings.Join(segs, "/")
-				if has_key {
-					path = fmt.Sprintf("%s%s", path, key)
-				}
-				fmt.Printf("%s\n", path)
-			}
+			fmt.Printf(strings.Join(tree.Paths(), "\n"))
+			fmt.Printf("\n")
 		}
 		return nil
 	})
@@ -1612,21 +1598,25 @@ to get your bearings.
 			args = append(args, "secret")
 		}
 		v := connect(true)
-		data := make(map[string]*vault.Secret)
+		data := make(map[string]map[string]string)
 		for _, path := range args {
-			tree, err := v.Tree(path, vault.TreeOptions{
-				StripSlashes: true,
-			})
+			tree, err := v.ConstructTree(path, true)
 			if err != nil {
 				return err
 			}
-			for _, sub := range tree.Paths("/") {
-				s, err := v.Read(sub)
-				if err != nil {
-					return err
+
+			tree.DepthFirstMap(func(node *vault.Tree) {
+				if node.Type == vault.TreeTypeSecret || node.Type == vault.TreeTypeDirAndSecret {
+					toAdd := make(map[string]string, len(node.Branches))
+					for i := range node.Branches {
+						if node.Branches[i].Type == vault.TreeTypeKey {
+							toAdd[node.Branches[i].Basename()] = node.Branches[i].Value
+						}
+					}
+
+					data[node.Name] = toAdd
 				}
-				data[sub] = s
-			}
+			})
 		}
 
 		b, err := json.Marshal(data)
