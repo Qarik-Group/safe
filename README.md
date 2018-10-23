@@ -22,6 +22,19 @@ So, why `safe`?  To solve the following problems:
 Primarily, these are things encountered in trying to build secure
 BOSH deployments using Vault and [Spruce][spruce].
 
+ATTENTION HOMEBREW USERS
+------------------------
+
+If you run Homebrew on MacOS, be aware that the the Formula for
+safe in homebrew core is outdated, incorrect, and unmaintained.
+We maintain our own tap, which you ar eencouraged to use instead:
+
+```
+brew tap starkandwayne/cf
+brew install starkandwayne/cf/safe
+```
+
+
 Authentication
 --------------
 
