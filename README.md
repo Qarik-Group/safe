@@ -27,7 +27,7 @@ ATTENTION HOMEBREW USERS
 
 If you run Homebrew on MacOS, be aware that the the Formula for
 safe in homebrew core is outdated, incorrect, and unmaintained.
-We maintain our own tap, which you ar eencouraged to use instead:
+We maintain our own tap, which you are encouraged to use instead:
 
 ```
 brew tap starkandwayne/cf
