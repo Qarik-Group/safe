@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cloudfoundry/socks5-proxy"
+	"github.com/starkandwayne/safe/vault"
 )
 
 func shouldDebug() bool {
@@ -28,7 +29,7 @@ func authurl(base, f string, args ...interface{}) string {
 
 func authenticate(req *http.Request) (string, error) {
 
-	var dialer = SOCKS5DialFuncFromEnvironment((&net.Dialer{
+	var dialer = vault.SOCKS5DialFuncFromEnvironment((&net.Dialer{
 		Timeout:   30 * time.Second,
 		KeepAlive: 30 * time.Second,
 	}).Dial, proxy.NewSocks5Proxy(proxy.NewHostKey(), nil))
