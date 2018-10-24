@@ -26,6 +26,7 @@ import (
 	"github.com/jhunt/go-cli"
 	env "github.com/jhunt/go-envirotron"
 	"gopkg.in/yaml.v2"
+
 	"github.com/starkandwayne/safe/auth"
 	"github.com/starkandwayne/safe/prompt"
 	"github.com/starkandwayne/safe/rc"
