@@ -23,14 +23,12 @@ import (
 	"time"
 
 	fmt "github.com/jhunt/go-ansi"
-	"github.com/jhunt/go-cli"
 	env "github.com/jhunt/go-envirotron"
-	"gopkg.in/yaml.v2"
-
 	"github.com/starkandwayne/safe/auth"
 	"github.com/starkandwayne/safe/prompt"
 	"github.com/starkandwayne/safe/rc"
 	"github.com/starkandwayne/safe/vault"
+	"gopkg.in/yaml.v2"
 )
 
 var Version string
@@ -2119,6 +2117,10 @@ Supported formats:
 		Description: `
 This is a debugging and diagnostics tool.  You should not need to use
 'safe curl' for normal operation or interaction with a Vault.
+
+The following OPTIONS are recognized:
+
+  --data-only         Do not show the curl progress meter.
 
 METHOD must be one of GET, LIST, POST, or PUT.
 
