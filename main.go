@@ -23,12 +23,13 @@ import (
 	"time"
 
 	fmt "github.com/jhunt/go-ansi"
+	"github.com/jhunt/go-cli"
 	env "github.com/jhunt/go-envirotron"
+	"gopkg.in/yaml.v2"
 	"github.com/starkandwayne/safe/auth"
 	"github.com/starkandwayne/safe/prompt"
 	"github.com/starkandwayne/safe/rc"
 	"github.com/starkandwayne/safe/vault"
-	"gopkg.in/yaml.v2"
 )
 
 var Version string
