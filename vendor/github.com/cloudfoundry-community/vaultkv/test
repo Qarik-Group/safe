@@ -1,13 +1,15 @@
 #!/bin/bash
 
-vaultVersions=("0.6.5" "0.7.3" "0.8.3" "0.9.6" "0.10.4" "0.11.0")
+vaultVersions=("0.7.3" "0.8.3" "0.9.6" "0.10.4" "0.11.4")
 
 if [[ -z $1 ]]; then
 	for version in "${vaultVersions[@]}"; do
     ginkgo -noisySkippings=false -p -- -v="$version"
   done
 elif [[ $1 == "latest" ]]; then
-  ginkgo -noisySkippings=false -p -- -v="${vaultVersions[${#vaultVersions}-1]}"
+  latest="${vaultVersions[${#vaultVersions} - 1]}"
+  echo "testing latest version: $latest"
+  ginkgo -noisySkippings=false -p -- -v="$latest"
 else
   echo "Unknown arg"
   exit 1

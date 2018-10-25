@@ -14,7 +14,10 @@ import (
 type GenerateRoot struct {
 	client *Client
 	otp    []byte
-	state  GenerateRootState
+	//Versions of Vault before 11.2 encode their 16 byte root tokens as base16 uuids
+	// After that... they are encoded as base64 strings
+	shouldNotUUIDify bool
+	state            GenerateRootState
 }
 
 //GenerateRootState contains state information about the GenerateRoot operation
@@ -27,7 +30,12 @@ type GenerateRootState struct {
 	EncodedToken string `json:"encoded_token"`
 	//Vault versions before 0.9.x returned the value as encoded_root_token
 	EncodedRootToken string `json:"encoded_root_token"`
-	Complete         bool   `json:"complete"`
+	//Vault versions before 0.11.2 had the user generate their own 16-byte root token
+	// Versions after that have the API generate it for you (at a length that is
+	// decided by the API).
+	OTP       string `json:"otp"`
+	OTPLength int    `json:"otp_length"`
+	Complete  bool   `json:"complete"`
 }
 
 //NewGenerateRoot initializes and returns a new generate root object.
@@ -46,9 +54,27 @@ func (v *Client) NewGenerateRoot() (*GenerateRoot, error) {
 
 	err = v.doRequest("PUT", "/sys/generate-root/attempt",
 		map[string]string{"otp": string(base64OTP)}, &ret.state)
-
 	if err != nil {
 		return nil, err
+	}
+
+	if ret.state.OTPLength != 0 {
+		//Then we need to let the API generate the root token
+		err = ret.Cancel()
+		if err != nil {
+			return nil, err
+		}
+
+		//In 0.11.2 and 0.11.3, you can't provide an empty body or else Vault EOFs.
+		// So you have to give an empty string otp to prompt Vault to make an otp
+		// of the proper length for you. This was fixed in 0.11.4.
+		err = v.doRequest("PUT", "/sys/generate-root/attempt",
+			map[string]string{"otp": ""}, &ret.state)
+		if err != nil {
+			return nil, err
+		}
+		ret.otp = []byte(ret.state.OTP)
+		ret.shouldNotUUIDify = true
 	}
 
 	return &ret, nil
@@ -157,9 +183,13 @@ func (g *GenerateRoot) RootToken() (string, error) {
 		tok[i] ^= g.otp[i]
 	}
 
-	tokHex := make([]byte, hex.EncodedLen(tokenLen))
-	hex.Encode(tokHex, tok)
-	return fmt.Sprintf("%s-%s-%s-%s-%s",
-			tokHex[0:8], tokHex[8:12], tokHex[12:16], tokHex[16:20], tokHex[20:]),
-		nil
+	ret := string(tok)
+	if !g.shouldNotUUIDify {
+		tokHex := make([]byte, hex.EncodedLen(tokenLen))
+		hex.Encode(tokHex, tok)
+		ret = fmt.Sprintf("%s-%s-%s-%s-%s",
+			tokHex[0:8], tokHex[8:12], tokHex[12:16], tokHex[16:20], tokHex[20:])
+	}
+
+	return ret, nil
 }
