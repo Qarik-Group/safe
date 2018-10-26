@@ -15,19 +15,21 @@ case $OSTYPE in
 (darwin*)
   platform=darwin
   declare -a versions=(
-    0.6.5
-    0.7.3
-    0.8.3
-    0.9.0
+    "0.7.3"
+    "0.8.3"
+    "0.9.6"
+    "0.10.4"
+    "0.11.4"
   )
   ;;
 (linux*)
   platform=linux
   declare -a versions=(
-    0.6.5
-    0.7.3
-    0.8.3
-    0.9.0
+    "0.7.3"
+    "0.8.3"
+    "0.9.6"
+    "0.10.4"
+    "0.11.4"
   )
   ;;
 (*)
@@ -293,6 +295,10 @@ restart_vault_server() {
   (run; ./safe target unit-tests http://127.0.0.1:8199) ; exitok $? 0
   now authenticating with ${root_token} root token
   (run; echo "$root_token" | ./safe auth token)         ; exitok $? 0
+  local engine="kv"
+  if [[ $version =~ ^0\.[6-8].* ]]; then engine="generic"; fi
+  now making sure that the backend is a kv v1 engine
+  (run; ./safe vault secrets disable secret/; ./safe vault secrets enable -path="secret/" "$engine"); exitok $? 0
 }
 
 mkdir -p vaults t/tmp
@@ -1586,7 +1592,8 @@ EOF
 
 
   if [[ -z "${TEST_QUICK:-}" ]]; then
-  for op in ssh rsa dhparam; do
+  for op in ssh rsa; do
+  #for op in ssh rsa dhparam; do
     case $op in
     ssh)     what="an SSH key" ;;
     rsa)     what="an RSA key" ;;

@@ -140,9 +140,16 @@ func (v *Client) InitVault(in InitConfig) (out *InitVaultOutput, err error) {
 //Seal puts to the /sys/seal endpoint to seal the Vault.
 // If the Vault is already sealed, this doesn't return an error.
 // If the Vault is unsealed and an incorrect token is provided, then this
-// returns *ErrForbidden.
+// returns *ErrForbidden. Newer versions of Vault (0.11.2+) APIs return errors
+// if the Vault is uninitialized or already sealed. This function squelches
+// these errors for consistency with earlier versions of Vault
 func (v *Client) Seal() error {
-	return v.doSysRequest("PUT", "/sys/seal", nil, nil)
+	err := v.doSysRequest("PUT", "/sys/seal", nil, nil)
+	if err != nil && (IsUninitialized(err) || IsSealed(err)) {
+		err = nil
+	}
+
+	return err
 }
 
 //Unseal puts to the /sys/unseal endpoint with a single key to progress the
