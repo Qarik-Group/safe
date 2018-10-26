@@ -1592,8 +1592,7 @@ EOF
 
 
   if [[ -z "${TEST_QUICK:-}" ]]; then
-  for op in ssh rsa; do
-  #for op in ssh rsa dhparam; do
+  for op in ssh dhparam rsa; do
     case $op in
     ssh)     what="an SSH key" ;;
     rsa)     what="an RSA key" ;;
