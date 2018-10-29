@@ -86,15 +86,6 @@ func NewVault(u, token string, auth bool) (*Vault, error) {
 					MaxIdleConnsPerHost: 100,
 				},
 			},
-			// Client: &http.Client{
-			// 	Transport: &http.Transport{
-			// 		Proxy: http.ProxyFromEnvironment,
-			// 		TLSClientConfig: &tls.Config{
-			// 			RootCAs:            roots,
-			// 			InsecureSkipVerify: os.Getenv("VAULT_SKIP_VERIFY") != "",
-			// 		},
-			// 	},
-			// },
 			Trace: func() (ret io.Writer) {
 				if shouldDebug() {
 					ret = os.Stderr
