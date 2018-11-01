@@ -2120,6 +2120,10 @@ Supported formats:
 This is a debugging and diagnostics tool.  You should not need to use
 'safe curl' for normal operation or interaction with a Vault.
 
+The following OPTIONS are recognized:
+
+  --data-only         Show only the response body, hiding the response headers.
+
 METHOD must be one of GET, LIST, POST, or PUT.
 
 REL-URI is the relative URI (the path component, starting with the first
