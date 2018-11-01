@@ -2122,7 +2122,7 @@ This is a debugging and diagnostics tool.  You should not need to use
 
 The following OPTIONS are recognized:
 
-  --data-only         Do not show the curl progress meter.
+  --data-only         Show only the response body, hiding the response headers.
 
 METHOD must be one of GET, LIST, POST, or PUT.
 
