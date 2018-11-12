@@ -1870,7 +1870,7 @@ EOF
   now checking the output
   cat >t/home/want <<EOF ; diffok
 .
-└── secret/tree
+└── secret/tree/
     ├── alpha
     ├── beta/
     │   ├── env
@@ -1893,7 +1893,7 @@ EOF
   now checking the output
   cat >t/home/want <<EOF ; diffok
 .
-└── secret/tree
+└── secret/tree/
     ├── beta/
     └── g/
         └── a/
@@ -1927,7 +1927,7 @@ EOF
   now checking that tree output contains :keys
   cat <<'EOF' >t/home/want ; diffok
 .
-├── secret/tree/a
+├── secret/tree/a/
 │   └── b/
 │       ├── c
 │       │   └── :subkey

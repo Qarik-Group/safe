@@ -16,7 +16,6 @@ import (
 
 	"github.com/cloudfoundry-community/vaultkv"
 	"github.com/jhunt/go-ansi"
-	"github.com/starkandwayne/goutils/tree"
 )
 
 type Vault struct {
@@ -153,117 +152,6 @@ func (v *Vault) List(path string) (paths []string, err error) {
 	return paths, err
 }
 
-type TreeOptions struct {
-	UseANSI      bool /* Use ANSI colorizing sequences */
-	HideLeaves   bool /* Hide leaf nodes of the tree (actual secrets) */
-	ShowKeys     bool /* Include keys in the output */
-	InSubbranch  bool /* If true, suppresses key output on branches */
-	StripSlashes bool /* If true, strip the trailing slashes from interior nodes */
-}
-
-func (v *Vault) walktree(path string, options TreeOptions) (tree.Node, int, error) {
-	var key_fmt string
-	if options.UseANSI {
-		key_fmt = "@Y{:%s}"
-	} else {
-		key_fmt = ":%s"
-	}
-
-	t := tree.New(path)
-	l, err := v.List(path)
-	if err != nil {
-		//This can be either because a leaf is being listed or because nothing is
-		// there at all
-		if IsNotFound(err) {
-			//If we need the subkeys inside a leaf...
-			if options.ShowKeys {
-				//Then we actually need to check if its a leaf
-				if s, err := v.Read(path); err == nil {
-					for _, key := range s.Keys() {
-						t.Append(tree.New(ansi.Sprintf(key_fmt, key)))
-					}
-				}
-			}
-
-			err = nil
-		}
-		return t, 0, err
-	}
-
-	if options.ShowKeys && !options.InSubbranch {
-		if s, err := v.Read(path); err == nil {
-			for _, key := range s.Keys() {
-				key_name := ansi.Sprintf(key_fmt, key)
-				t.Append(tree.New(key_name))
-			}
-		}
-	}
-	options.InSubbranch = true
-	for _, p := range l {
-		if strings.HasSuffix(p, "/") {
-			kid, n, err := v.walktree(path+"/"+p[0:len(p)-1], options)
-			if err != nil {
-				return t, 0, err
-			}
-			if n == 0 {
-				fmt.Fprintf(os.Stderr, "%s\n", kid.Name)
-				continue
-			}
-			if options.StripSlashes {
-				p = p[0 : len(p)-1]
-			}
-			if options.UseANSI {
-				kid.Name = ansi.Sprintf("@B{%s}", p)
-			} else {
-				kid.Name = p
-			}
-			t.Append(kid)
-
-		} else if options.HideLeaves {
-			continue
-
-		} else {
-			var name string
-			if options.UseANSI {
-				name = ansi.Sprintf("@G{%s}", p)
-			} else {
-				name = p
-			}
-			leaf := tree.New(name)
-			if options.ShowKeys {
-				if s, err := v.Read(path + "/" + p); err == nil {
-					for _, key := range s.Keys() {
-						key_name := ansi.Sprintf(key_fmt, key)
-						leaf.Append(tree.New(key_name))
-					}
-				} else {
-					fmt.Fprintf(os.Stderr, "error: %s\n", err)
-				}
-
-			}
-			t.Append(leaf)
-		}
-	}
-	return t, len(l), nil
-}
-
-// Tree returns a tree that represents the hierarchy of paths contained
-// below the given path, inside of the Vault.
-func (v *Vault) Tree(path string, options TreeOptions) (tree.Node, error) {
-	path = Canonicalize(path)
-
-	t, _, err := v.walktree(path, options)
-	if err != nil {
-		return t, err
-	}
-	if options.UseANSI {
-		t.Name = ansi.Sprintf("@C{%s}", path)
-	} else {
-		t.Name = path
-	}
-	return t, nil
-}
-
 // Write takes a Secret and writes it to the Vault at the specified path.
 func (v *Vault) Write(path string, s *Secret) error {
 	path = Canonicalize(path)
@@ -315,13 +203,11 @@ func (v *Vault) verifySecretExists(path string) error {
 func (v *Vault) DeleteTree(root string) error {
 	root = Canonicalize(root)
 
-	tree, err := v.Tree(root, TreeOptions{
-		StripSlashes: true,
-	})
+	tree, err := v.ConstructTree(root, false)
 	if err != nil {
 		return err
 	}
-	for _, path := range tree.Paths("/") {
+	for _, path := range tree.Paths() {
 		err = v.deleteEntireSecret(path)
 		if err != nil {
 			return err
@@ -465,21 +351,21 @@ func (v *Vault) MoveCopyTree(oldRoot, newRoot string, f func(string, string, boo
 	oldRoot = Canonicalize(oldRoot)
 	newRoot = Canonicalize(newRoot)
 
-	tree, err := v.Tree(oldRoot, TreeOptions{})
+	tree, err := v.ConstructTree(oldRoot, false)
 	if err != nil {
 		return err
 	}
 	if skipIfExists {
-		newTree, err := v.Tree(newRoot, TreeOptions{})
+		newTree, err := v.ConstructTree(newRoot, false)
 		if err != nil && !IsNotFound(err) {
 			return err
 		}
 		existing := map[string]bool{}
-		for _, path := range newTree.Paths("/") {
+		for _, path := range newTree.Paths() {
 			existing[path] = true
 		}
 		existingPaths := []string{}
-		for _, path := range tree.Paths("/") {
+		for _, path := range tree.Paths() {
 			newPath := strings.Replace(path, oldRoot, newRoot, 1)
 			if existing[newPath] {
 				existingPaths = append(existingPaths, newPath)
@@ -495,7 +381,7 @@ func (v *Vault) MoveCopyTree(oldRoot, newRoot string, f func(string, string, boo
 			return nil
 		}
 	}
-	for _, path := range tree.Paths("/") {
+	for _, path := range tree.Paths() {
 		newPath := strings.Replace(path, oldRoot, newRoot, 1)
 		err = f(path, newPath, skipIfExists, quiet)
 		if err != nil {
