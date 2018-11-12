@@ -80,9 +80,8 @@ testing() {
   fi
   rm -f t/home/got t/home/want t/home/diff t/home/errors
   echo
-  local v=$1 ; shift
   if [[ -t 1 ]]; then
-    echo -e "[\033[1;36m$v\033[0m] \033[1;34m$*\033[0m"
+    echo -e "[\033[1;36m$version\033[0m|\033[1;35mkv$kvversion\033[0m] \033[1;34m$*\033[0m"
   else
     echo "[$v] $*"
   fi
@@ -297,8 +296,8 @@ restart_vault_server() {
   (run; echo "$root_token" | ./safe auth token)         ; exitok $? 0
   local engine="kv"
   if [[ $version =~ ^0\.[6-8].* ]]; then engine="generic"; fi
-  now making sure that the backend is a kv v1 engine
-  (run; ./safe vault secrets disable secret/; ./safe vault secrets enable -path="secret/" "$engine"); exitok $? 0
+  now mounting a kv v$kvversion engine
+  (run; ./safe vault secrets disable secret/; ./safe vault secrets enable -path="secret/" -version $kvversion "$engine"); exitok $? 0
 }
 
 mkdir -p vaults t/tmp
@@ -308,7 +307,13 @@ for version in "${versions[@]}"; do
   killall vault-${platform}-${version} >/dev/null 2>&1 || true
 done
 for version in "${versions[@]}"; do
-  echo "VAULT ${version}"
+for kvversion in 1 2; do
+  # KV v2 was introduced in 0.10
+  if [[ kvversion -eq 2 && $version =~ ^0\.[6-9].* ]]; then
+    continue
+  fi
+
+  echo "VAULT ${version}" -- KV v${kvversion}
   killall vault-${platform}-${version} >/dev/null 2>&1 || true
   echo "----------------------------------------------"
   if [[ ! -f vaults/vault-${platform}-${version} ]]; then
@@ -339,7 +344,7 @@ for version in "${versions[@]}"; do
    ######  ########    ##     #######  ##
 
   #######
-  testing $version setup
+  testing setup
   restart_vault_server
   clearvault
 
@@ -353,19 +358,19 @@ for version in "${versions[@]}"; do
      ##    ##     ## ##     ##  ######   ########    ##
 
   #######
-  testing $version targeting by ip
+  testing targeting by ip
   (run; ./safe target http://127.0.0.1:8199) ; exitok $? 0
   (run; ./safe -T http://127.0.0.1:8199 env) ; exitok $? 0
 
-  testing $version targeting by alias
+  testing targeting by alias
   (run; ./safe target unit-tests)            ; exitok $? 0
   (run; ./safe -T unit-tests env)            ; exitok $? 0
 
-  testing $version targeting a bad ip
+  testing targeting a bad ip
   (run; ./safe target http://127.0.0.1:8200) ; exitok $? 1
   (run; ./safe -T http://127.0.0.1:8200 env) ; exitok $? 1
 
-  testing $version ambiguous targets
+  testing ambiguous targets
   (run; ./safe target alternate \
                       http://127.0.0.1:8199) ; exitok $? 0
   (run; ./safe target http://127.0.0.1:8199) ; exitok $? 1
@@ -383,7 +388,7 @@ for version in "${versions[@]}"; do
 
   #######
   clearvault
-  testing $version safe curl plumbing
+  testing safe curl plumbing
   now trying to curl without a leading slash
   (run; ./safe curl sys/seal-status)    ; exitok $? 0
   now trying to curl with a leading slash
@@ -402,7 +407,7 @@ for version in "${versions[@]}"; do
 
   #######
   clearvault
-  testing $version basic set/get operation
+  testing basic set/get operation
   now setting a key=value on a new path
   (run; ./safe set secret/handshake knock=knock) ; exitok $? 0
 
@@ -451,7 +456,7 @@ EOF
 
   #######
   #clearvault
-  testing $version get operation with --yaml on single path
+  testing get operation with --yaml on single path
   now retrieving secret/handshake as --yaml
   (run; ./safe get --yaml secret/handshake >t/home/got) ; exitok $? 0
 
@@ -466,7 +471,7 @@ EOF
 
   #######
   #clearvault
-  testing $version get operation: multiple requests, some missing
+  testing get operation: multiple requests, some missing
   now setting secret/other/thing to a valid value
   (run; ./safe set secret/other/thing get=this); exitok $? 0
 
@@ -486,7 +491,7 @@ EOF
 
   #######
   #clearvault
-  testing $version get operation: multiple requests
+  testing get operation: multiple requests
   now checking that a get of multiple existing paths succeeds
   (run; ./safe get secret/handshake secret/other/thing >t/home/got) ; exitok $? 0
 
@@ -503,7 +508,7 @@ EOF
 
   #######
   #clearvault
-  testing $version get --keys operation: multiple requests, some missing
+  testing get --keys operation: multiple requests, some missing
   now checking that a get where some of the keys are missing still works
   (run; ./safe get --keys secret/handshake secret/other/thing secret/code:pssst >t/home/got 2>t/home/warn); exitok $? 0
 
@@ -527,7 +532,7 @@ EOF
 
   #######
   #clearvault
-  testing $version get --keys operation: single key
+  testing get --keys operation: single key
   now retrieving a single path and all of its --keys
   (run;./safe get --keys secret/handshake >t/home/got) ; exitok $? 0
 
@@ -539,7 +544,7 @@ EOF
 
   #######
   #clearvault
-  testing $version get --keys operation: single key with --yaml
+  testing get --keys operation: single key with --yaml
   now retrieving a single path and all of its --keys in --yaml format
   (run; ./safe get --keys --yaml secret/handshake >t/home/got) ; exitok $? 0
 
@@ -554,7 +559,7 @@ EOF
 
   #######
   clearvault
-  testing $version multiple-attribute set operation
+  testing multiple-attribute set operation
   now setting multiple keys on the same path
   (run; ./safe set secret/account username=admin password=sekrit) ; exitok $? 0
 
@@ -580,7 +585,7 @@ EOF
 
   #######
   clearvault
-  testing $version basic check/exists operation
+  testing basic check/exists operation
   now setting secret/handshake
   (run; ./safe set secret/handshake knock=knock) ; exitok $? 0
 
@@ -608,7 +613,7 @@ EOF
 
   #######
   clearvault
-  testing $version password randomization
+  testing password randomization
   now generating some random secrets
   (run; ./safe gen secret/random one    ) ; exitok $? 0
   (run; ./safe gen secret/random another) ; exitok $? 0
@@ -639,7 +644,7 @@ EOF
 
   #######
   clearvault
-  testing $version command chaining
+  testing command chaining
   now generating three credentials via a command chain
   (run; ./safe gen secret/chained a -- \
                gen secret/chained b -- \
@@ -663,7 +668,7 @@ EOF
 
   #######
   clearvault
-  testing $version custom password runes randomization
+  testing custom password runes randomization
   now generating credentials consisting of only the digits 1 - 9
   (run; ./safe gen --policy "1-9" 64 secret/random one)       ; exitok $? 0
 
@@ -684,7 +689,7 @@ EOF
 
   #######
   clearvault
-  testing $version password with secret:key syntax
+  testing password with secret:key syntax
   now generating a random secret at secret/random:two
   (run; ./safe gen 64 secret/random:two) ; exitok $? 0
 
@@ -694,7 +699,7 @@ EOF
 
   #######
   clearvault
-  testing $version gen with multiple passwords to make
+  testing gen with multiple passwords to make
   now generating passwords
   (run; ./safe gen 64 secret/random:three secret/random four secret/random:five) ; exitok $? 0
   ok_key secret/random:{three,four,five}
@@ -702,7 +707,7 @@ EOF
 
   #######
   clearvault
-  testing $version gen with length flag
+  testing gen with length flag
   now generating a 10-character password
   (run; ./safe gen secret/random:six -l 10) ; exitok $? 0
 
@@ -721,21 +726,21 @@ EOF
 
   #######
   clearvault
-  testing $version gen with incorrectly mixed path:key should fail
+  testing gen with incorrectly mixed path:key should fail
   (run; ./safe gen secret/random secret/random:seven) ; exitok $? 1
   no_key secret/random
 
 
   #######
   clearvault
-  testing $version gen with missing key should fail
+  testing gen with missing key should fail
   (run; ./safe gen secret/random) ; exitok $? 1
   no_key secret/random
 
 
   #######
   clearvault
-  testing $version single-value retrieval
+  testing single-value retrieval
   (run; ./safe set secret/single/value foo=bar baz=quux) ; exitok $? 0
   foo=$(./safe get secret/single/value:foo)
   step "retrieving our single value"
@@ -751,7 +756,7 @@ EOF
 
   #######
   clearvault
-  testing $version set key from file
+  testing set key from file
   echo -n "this is a value" >t/home/value-file
   echo -n "" >t/home/empty-file
   cat >t/home/long-file <<EOF
@@ -787,7 +792,7 @@ EOF
 
   #######
   clearvault
-  testing $version set key to empty value
+  testing set key to empty value
   now setting values
   (run; ./safe set secret/setec/astronomy too= many="") ; exitok $? 0
   is_key secret/setec/astronomy:too  ""
@@ -796,7 +801,7 @@ EOF
 
   #######
   clearvault
-  testing $version set key from file - error conditions
+  testing set key from file - error conditions
   now setting values from a non-existent file - should fail
   (run; ./safe set secret/from-file/content nothing@non-existent-file 2>t/home/got) ; exitok $? 1
   now checking the output error
@@ -830,7 +835,7 @@ EOF
 
   #######
   clearvault
-  testing $version fmt - all formats
+  testing fmt - all formats
   now generating a test secret to format
   (run; ./safe gen secret/fmt/formats original) ; exitok $? 0
 
@@ -876,7 +881,7 @@ EOF
 
   #######
   clearvault
-  testing $version secret deletion
+  testing secret deletion
   no_key secret/delete
   generate secret/delete hello=world
   is_key secret/delete:hello world
@@ -887,7 +892,7 @@ EOF
 
   #######
   clearvault
-  testing $version recursive secret deletion
+  testing recursive secret deletion
   no_key secret/a/b/c/d/e/f/delete
   generate secret/a/b/c/d/e/f/delete hello=world
   generate secret/a/b/c/1/2/3/delete goodbye=cruel-world
@@ -905,7 +910,7 @@ EOF
 
   #######
   clearvault
-  testing $version multiple secret deletion
+  testing multiple secret deletion
   no_key secret/delete/{two,three}
   generate secret/delete/two foo=bar
   generate secret/delete/three wom=bat
@@ -918,7 +923,7 @@ EOF
 
   #######
   clearvault
-  testing $version key deletion with key remaining within secret afterwards
+  testing key deletion with key remaining within secret afterwards
   generate secret/delete foo=bar wom=bat
 
   now deleting a single key in the multi-key path
@@ -929,7 +934,7 @@ EOF
 
   #######
   clearvault
-  testing $version key deletion with no keys remaining should delete secret
+  testing key deletion with no keys remaining should delete secret
   generate secret/delete foo=bar
 
   now deleting the last key in a single path
@@ -939,7 +944,7 @@ EOF
 
   #######
   clearvault
-  testing $version multiple key deletion
+  testing multiple key deletion
   generate secret/delete foo=bar wom=bat beep=boop
 
   now deleting the a subset of the keys
@@ -950,7 +955,7 @@ EOF
 
   #######
   clearvault
-  testing $version attempt to delete non-existent key should fail
+  testing attempt to delete non-existent key should fail
   no_key secret/delete
   (run; ./safe delete secret/delete) ; exitok $? 1
   no_key secret/delete
@@ -958,7 +963,7 @@ EOF
 
   #######
   clearvault
-  testing $version attempt to delete non-existing key within existing secret should error
+  testing attempt to delete non-existing key within existing secret should error
   no_key secret/delete
   generate secret/delete foo=bar
 
@@ -969,7 +974,7 @@ EOF
 
   #######
   clearvault
-  testing $version delete non-existent key should not fail if -f is given
+  testing delete non-existent key should not fail if -f is given
   no_key secret/delete
   (run; ./safe delete secret/delete -f) ; exitok $? 0
   no_key secret/delete
@@ -977,7 +982,7 @@ EOF
 
   #######
   clearvault
-  testing $version deleting non-existent key with -f specified should fail silently
+  testing deleting non-existent key with -f specified should fail silently
   no_key secret/delete
   generate secret/delete foo=bar
 
@@ -989,7 +994,7 @@ EOF
 
   #######
   clearvault
-  testing $version recursively delete a subtree
+  testing recursively delete a subtree
   no_key secret/delete/subtree/{one,two}
   generate secret/delete/subtree/one foo=bar
   generate secret/delete/subtree/two beep=boop
@@ -1000,7 +1005,7 @@ EOF
 
   #######
   clearvault
-  testing $version attempting to delete a subtree without -R should fail
+  testing attempting to delete a subtree without -R should fail
   no_key secret/delete/subtree/{one,two}
   generate secret/delete/subtree/one foo=bar
   generate secret/delete/subtree/two foo=bar
@@ -1014,7 +1019,7 @@ EOF
 
   #######
   clearvault
-  testing $version recursively delete a leaf node secret
+  testing recursively delete a leaf node secret
   no_key secret/delete
   generate secret/delete foo=bar
 
@@ -1025,7 +1030,7 @@ EOF
 
   #######
   clearvault
-  testing $version recursively delete a key
+  testing recursively delete a key
   generate secret/delete foo=bar beep=boop
 
   now deleting a key recursively
@@ -1036,7 +1041,7 @@ EOF
 
   #######
   clearvault
-  testing $version recursively delete a secret that does not exist with -f should not fail
+  testing recursively delete a secret that does not exist with -f should not fail
   no_key secret/delete
 
   now deleting a non-existent secret
@@ -1046,7 +1051,7 @@ EOF
 
   #######
   clearvault
-  testing $version recursively delete a key that does not exist with -f should not fail
+  testing recursively delete a key that does not exist with -f should not fail
   generate secret/delete beep=boop
 
   now deleting a non-existent key with -Rf
@@ -1065,7 +1070,7 @@ EOF
 
   #######
   clearvault
-  testing $version copy a secret to another location
+  testing copy a secret to another location
   no_key secret/copy/{from,to}
   generate secret/copy/from beep=boop
 
@@ -1076,7 +1081,7 @@ EOF
 
   #######
   clearvault
-  testing $version copy a key to another secret without a key specified
+  testing copy a key to another secret without a key specified
   no_key secret/copy/{from,to}
   generate secret/copy/from beep=boop foo=bar
 
@@ -1088,7 +1093,7 @@ EOF
 
   #######
   clearvault
-  testing $version copy a key to another specified key where the dest secret exists
+  testing copy a key to another specified key where the dest secret exists
   no_key secret/copy/{from,to}
   generate secret/copy/from beep=boop foo=bar
   generate secret/copy/to wom=bat
@@ -1103,7 +1108,7 @@ EOF
 
   #######
   clearvault
-  testing $version copy a key to another specified key where the dest secret does not exist
+  testing copy a key to another specified key where the dest secret does not exist
   no_key secret/copy/{from,to}
   generate secret/copy/from beep=boop foo=bar
 
@@ -1114,7 +1119,7 @@ EOF
 
   #######
   clearvault
-  testing $version copying a full secret to a specified key should fail
+  testing copying a full secret to a specified key should fail
   (run; ./safe set secret/copy/from beep=boop)             ; exitok $? 0
   (run; ./safe copy secret/copy/from secret/copy/to:hell) ; exitok $? 1
   is_key secret/copy/from:beep "boop"
@@ -1123,7 +1128,7 @@ EOF
 
   #######
   clearvault
-  testing $version copying from a secret that does not exist should fail
+  testing copying from a secret that does not exist should fail
   (run; ./safe copy secret/copy/from6 secret/copy/to) ; exitok $? 1
   no_key secret/copy/from6
   no_key secret/copy/to
@@ -1131,7 +1136,7 @@ EOF
 
   #######
   clearvault
-  testing $version copying from a key where the underlying secret does not exist should fail
+  testing copying from a key where the underlying secret does not exist should fail
   no_key secret/copy/from7:beep
   (run; ./safe copy secret/copy/from7:beep secret/copy/to) ; exitok $? 1
   no_key secret/copy/to
@@ -1139,7 +1144,7 @@ EOF
 
   #######
   clearvault
-  testing $version copying from a missing key where the underlying secret exists should fail
+  testing copying from a missing key where the underlying secret exists should fail
   (run; ./safe set secret/copy/from8 foo=bar)              ; exitok $? 0
   (run; ./safe copy secret/copy/from8:beep secret/copy/to) ; exitok $? 1
   no_key secret/copy/to
@@ -1147,7 +1152,7 @@ EOF
 
   #######
   clearvault
-  testing $version copying recursively from a leaf node secret
+  testing copying recursively from a leaf node secret
   now generating some secrets to test with
   (run; ./safe set secret/copy/from foo=bar)             ; exitok $? 0
 
@@ -1158,7 +1163,7 @@ EOF
 
   #######
   clearvault
-  testing $version copying recursively from a key
+  testing copying recursively from a key
   now generating some secrets to test with
   (run; ./safe set secret/copy/from foo=bar)                   ; exitok $? 0
 
@@ -1169,7 +1174,7 @@ EOF
 
   #######
   clearvault
-  testing $version copying recursively from a subtree
+  testing copying recursively from a subtree
   now generating some secrets to test with
   (run; ./safe set secret/copy/fromtree/one foo=bar)              ; exitok $? 0
 
@@ -1180,7 +1185,7 @@ EOF
 
   #######
   clearvault
-  testing $version attempting to copy a subtree without -R should fail
+  testing attempting to copy a subtree without -R should fail
   now generating some secrets to test with
   (run; ./safe set secret/copy/fromtree/one foo=bar); exitok $? 0
 
@@ -1192,7 +1197,7 @@ EOF
 
   #######
   clearvault
-  testing $version copying a non-existent secret with -f should fail silently
+  testing copying a non-existent secret with -f should fail silently
   now copying
   (run; ./safe copy -f secret/copy/gobbledegook secret/copy/fakedes) ; exitok $? 0
   no_key secret/copy/fakedes
@@ -1200,7 +1205,7 @@ EOF
 
   #######
   clearvault
-  testing $version copying a non-existent key with -f should fail silently
+  testing copying a non-existent key with -f should fail silently
   now generating some secrets to test with
   (run; ./safe set secret/copy/from foo=bar)                   ; exitok $? 0
 
@@ -1220,7 +1225,7 @@ EOF
 
   #######
   clearvault
-  testing $version move a secret to another location
+  testing move a secret to another location
   no_key secret/move/from
   no_key secret/move/to
 
@@ -1235,7 +1240,7 @@ EOF
 
   #######
   clearvault
-  testing $version move a key to another secret without a key specified
+  testing move a key to another secret without a key specified
   no_key secret/move/{from,to}
   generate secret/move/from beep=boop foo=bar
 
@@ -1250,7 +1255,7 @@ EOF
 
   #######
   clearvault
-  testing $version move a key to another specified key where the dest secret exists
+  testing move a key to another specified key where the dest secret exists
   no_key secret/move/{from,to}
   generate secret/move/from beep=boop foo=bar
   generate secret/move/to   wom=bat
@@ -1267,7 +1272,7 @@ EOF
 
   #######
   clearvault
-  testing $version move a key to another specified key where the dest secret does not exist
+  testing move a key to another specified key where the dest secret does not exist
   no_key secret/move/from
   no_key secre/move/to
 
@@ -1286,7 +1291,7 @@ EOF
 
   #######
   clearvault
-  testing $version moving a full secret to a specified key should fail
+  testing moving a full secret to a specified key should fail
   no_key secret/move/from
   no_key secret/move/to
   generate secret/move/from beep=boop
@@ -1299,7 +1304,7 @@ EOF
 
   #######
   clearvault
-  testing $version moving from a secret that does not exist should fail
+  testing moving from a secret that does not exist should fail
   no_key secret/move/from
   no_key secret/move/to
 
@@ -1310,7 +1315,7 @@ EOF
 
   #######
   clearvault
-  testing $version moving from a key where the underlying secret does not exist should fail
+  testing moving from a key where the underlying secret does not exist should fail
   no_key secret/move/from
   no_key secret/move/to
 
@@ -1321,7 +1326,7 @@ EOF
 
   #######
   clearvault
-  testing $version moving from a missing key where the underlying secret exists should fail
+  testing moving from a missing key where the underlying secret exists should fail
   no_key secret/move/from
   no_key secret/move/to
   generate secret/move/from foo=bar
@@ -1334,7 +1339,7 @@ EOF
 
   #######
   clearvault
-  testing $version moving recursively from a leaf node secret
+  testing moving recursively from a leaf node secret
   no_key secret/move/from
   no_key secret/move/to
   generate secret/move/from foo=bar
@@ -1347,7 +1352,7 @@ EOF
 
   #######
   clearvault
-  testing $version moving recursively from a key
+  testing moving recursively from a key
   no_key secret/move/{from,to}
   generate secret/move/from foo=bar
 
@@ -1359,7 +1364,7 @@ EOF
 
   #######
   clearvault
-  testing $version moving recursively from a subtree
+  testing moving recursively from a subtree
   no_key secret/{from,to}tree{,/one}
   generate secret/move/fromtree/one foo=bar
 
@@ -1371,7 +1376,7 @@ EOF
 
   #######
   clearvault
-  testing $version attempting to copy a subtree without -R should fail
+  testing attempting to copy a subtree without -R should fail
   no_key secret/{from,to}tree{,/one}
   generate secret/move/fromtree/one foo=bar
 
@@ -1382,7 +1387,7 @@ EOF
 
   #######
   clearvault
-  testing $version moving a non-existent secret with -f should fail silently
+  testing moving a non-existent secret with -f should fail silently
   no_key secret/move/gobbledegook
   (run; ./safe move -f secret/move/gobbledegook secret/move/fakedes) ; exitok $? 0
   no_key secret/move/fakedes
@@ -1390,7 +1395,7 @@ EOF
 
   #######
   clearvault
-  testing $version moving a non-existent key with -f should fail silently
+  testing moving a non-existent key with -f should fail silently
   no_key secret/copy/{from,to}
   generate secret/move/from foo=bar
 
@@ -1410,7 +1415,7 @@ EOF
 
   #######
   clearvault
-  testing $version safe gen --no-clobber
+  testing safe gen --no-clobber
   no_key secret/existing
   now running safe gen --no-clobber with no pre-existing secrets
   (run; ./safe gen --no-clobber secret/existing val) ; exitok $? 0
@@ -1437,7 +1442,7 @@ EOF
   for op in set paste ask; do
     #######
     clearvault
-    testing $version safe $op --no-clobber
+    testing safe $op --no-clobber
     no_key secret/existing
 
     now running safe $op --no-clobber with no pre-existing secrets
@@ -1463,7 +1468,7 @@ EOF
 
     #######
     clearvault
-    testing $version safe $op --no-clobber, with different key in same path
+    testing safe $op --no-clobber, with different key in same path
     no_key secret/existing
 
     now running safe $op --no-clobber with no pre-existing secrets
@@ -1478,7 +1483,7 @@ EOF
 
   #######
   clearvault
-  testing $version safe import --no-clobber
+  testing safe import --no-clobber
   no_key safe/existing/import
 
   now running safe import --no-clobber
@@ -1496,7 +1501,7 @@ EOF
   for op in move copy; do
     #######
     clearvault
-    testing $version safe $op --no-clobber
+    testing safe $op --no-clobber
     no_key secret/existing/{from,to}
     generate secret/existing/from key=val
 
@@ -1511,7 +1516,7 @@ EOF
 
     #######
     clearvault
-    testing $version safe $op --no-clobber with pre-existing destination secrets
+    testing safe $op --no-clobber with pre-existing destination secrets
     no_key secret/existing/{from,to}
     generate secret/existing/from key=FROM
     generate secret/existing/to   key=TO
@@ -1527,7 +1532,7 @@ EOF
 
     #######
     clearvault
-    testing $version safe $op --no-clobber with pre-existing destination secrets in --quiet mode
+    testing safe $op --no-clobber with pre-existing destination secrets in --quiet mode
     no_key secret/existing/{from,to}
     generate secret/existing/from key=FROM
     generate secret/existing/to   key=TO
@@ -1542,7 +1547,7 @@ EOF
 
     #######
     clearvault
-    testing $version safe $op --no-clobber recursive
+    testing safe $op --no-clobber recursive
     no_key secret/existing/from/{first,second} \
            secret/existing/to/{first,second}
     generate secret/existing/from/first  key=val
@@ -1558,7 +1563,7 @@ EOF
 
     #######
     clearvault
-    testing $version $op --no-clobber recursive, with existing data
+    testing $op --no-clobber recursive, with existing data
     no_key secret/existing/from/{first,second} \
            secret/existing/to/{first,second}
     generate secret/existing/from/first  key=FROM-1
@@ -1591,7 +1596,7 @@ EOF
   done
 
   clearvault
-  testing $version safe fmt --no-clobber
+  testing safe fmt --no-clobber
   no_key secret/existing
   generate secret/existing val=original
 
@@ -1629,7 +1634,7 @@ EOF
 
   #######
   clearvault
-  testing $version safe delete --no-clobber
+  testing safe delete --no-clobber
   no_key secret/existing
   generate secret/existing key=val
 
@@ -1644,7 +1649,7 @@ EOF
 
   #######
   clearvault
-  testing $version safe delete --no-clobber recursively
+  testing safe delete --no-clobber recursively
   no_key secret/existing{,/subkey}
   generate secret/existing key=val
   generate secret/existing/subkey key=val
@@ -1667,7 +1672,7 @@ EOF
 
   #######
   clearvault
-  testing $version tree display
+  testing tree display
   now generating secrets to test with
   (run; ./safe gen secret/tree/alpha     x)  ; exitok $? 0
   (run; ./safe gen secret/tree/g         x)  ; exitok $? 0
@@ -1968,13 +1973,14 @@ EOF
 
   dump_log
 done
+done
 
 if [[ -z "${TEST_QUICK:-}" ]]; then
   #######
   clearvault
   no_key secret/existing
 
-  testing $version safe x509 --no-clobber
+  testing safe x509 --no-clobber
   now running safe x509 issue --no-clobber with no pre-existing certificates
   (run; ./safe x509 issue --no-clobber \
                 --ca --name test \
@@ -2013,7 +2019,7 @@ EOF
   cat >t/home/want <<EOF ; diffok
 EOF
 
-  testing $version safe x509 reissue
+  testing safe x509 reissue
   now issuing a CA and a certificate for reissue testing
   (run; ./safe x509 issue --ca        secret/reissue/ca --name test.ca   && \
         ./safe x509 issue --signed-by secret/reissue/ca --name test.cert \
@@ -2049,7 +2055,7 @@ EOF
 
 
 
-  testing $version safe x509 renew
+  testing safe x509 renew
   now issuing a CA and a certificate for renew testing
   (run; ./safe x509 issue --ca        secret/renew/ca --name test.ca   && \
         ./safe x509 issue --signed-by secret/renew/ca --name test.cert \
@@ -2123,7 +2129,7 @@ EOF
 
     #######
     clearvault
-    testing $version safe $op --no-clobber
+    testing safe $op --no-clobber
     no_key secret/existing
 
     now running safe $op --no-clobber with no pre-existing secrets
