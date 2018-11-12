@@ -20,7 +20,7 @@ import (
 )
 
 type Vault struct {
-	client *vaultkv.Client
+	client *vaultkv.KV
 }
 
 // NewVault creates a new Vault object.  If an empty token is specified,
@@ -65,7 +65,7 @@ func NewVault(u, token string, auth bool) (*Vault, error) {
 	}
 
 	return &Vault{
-		client: &vaultkv.Client{
+		client: (&vaultkv.Client{
 			VaultURL:  vaultURL,
 			AuthToken: token,
 			Client: &http.Client{
@@ -83,7 +83,7 @@ func NewVault(u, token string, auth bool) (*Vault, error) {
 				}
 				return ret
 			}(),
-		},
+		}).NewKV(),
 	}, nil
 }
 
@@ -104,7 +104,7 @@ func (v *Vault) Curl(method string, path string, body []byte) (*http.Response, e
 		panic("Could not parse query: " + err.Error())
 	}
 
-	return v.client.Curl(method, u.Path, query, bytes.NewBuffer(body))
+	return v.client.Client.Curl(method, u.Path, query, bytes.NewBuffer(body))
 }
 
 // Read checks the Vault for a Secret at the specified path, and returns it.
@@ -118,7 +118,7 @@ func (v *Vault) Read(path string) (secret *Secret, err error) {
 	secret = NewSecret()
 
 	raw := map[string]string{}
-	err = v.client.Get(path, &raw)
+	_, err = v.client.Get(path, &raw, nil)
 	if err != nil {
 		if vaultkv.IsNotFound(err) {
 			err = NewSecretNotFoundError(path)
@@ -173,7 +173,7 @@ func (v *Vault) walktree(path string, options TreeOptions) (tree.Node, int, erro
 	l, err := v.List(path)
 	if err != nil {
 		//This can be either because a leaf is being listed or because nothing is
-		// there at all
+		//there at all
 		if IsNotFound(err) {
 			//If we need the subkeys inside a leaf...
 			if options.ShowKeys {
@@ -277,7 +277,7 @@ func (v *Vault) Write(path string, s *Secret) error {
 		return v.deleteIfPresent(path)
 	}
 
-	err := v.client.Set(path, s.data)
+	_, err := v.client.Set(path, s.data, nil)
 	if vaultkv.IsNotFound(err) {
 		err = NewSecretNotFoundError(path)
 	}
@@ -346,7 +346,31 @@ func (v *Vault) Delete(path string) error {
 }
 
 func (v *Vault) deleteEntireSecret(path string) error {
-	return v.client.Delete(path)
+	toDelete := []uint{}
+	mv, err := v.client.MountVersion(path)
+	if err != nil {
+		return err
+	}
+
+	if mv == 1 {
+		toDelete = []uint{1}
+	} else {
+		versions, err := v.client.Versions(path)
+		if err != nil {
+			//Deleting a secret that doesn't exist should not err
+			if vaultkv.IsNotFound(err) {
+				return nil
+			}
+
+			return err
+		}
+
+		for i := range versions {
+			toDelete = append(toDelete, versions[i].Version)
+		}
+	}
+
+	return v.client.Delete(path, &vaultkv.KVDeleteOpts{Versions: toDelete, V1Destroy: true})
 }
 
 func (v *Vault) deleteSpecificKey(path, key string) error {
@@ -897,5 +921,5 @@ func (v *Vault) SetURL(u string) {
 	if err != nil {
 		panic(fmt.Sprintf("Could not parse Vault URL: %s", err))
 	}
-	v.client.VaultURL = vaultURL
+	v.client.Client.VaultURL = vaultURL
 }

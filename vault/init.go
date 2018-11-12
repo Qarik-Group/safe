@@ -5,7 +5,7 @@ import (
 )
 
 func (v *Vault) Init(nkeys, threshold int) ([]string, string, error) {
-	out, err := v.client.InitVault(vaultkv.InitConfig{
+	out, err := v.client.Client.InitVault(vaultkv.InitConfig{
 		Shares:    nkeys,
 		Threshold: threshold,
 	})

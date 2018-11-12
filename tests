@@ -304,10 +304,10 @@ restart_vault_server() {
 mkdir -p vaults t/tmp
 trap 'cleanup' INT QUIT TERM EXIT
 
-for version in ${versions[@]}; do
+for version in "${versions[@]}"; do
   killall vault-${platform}-${version} >/dev/null 2>&1 || true
 done
-for version in ${versions[@]}; do
+for version in "${versions[@]}"; do
   echo "VAULT ${version}"
   killall vault-${platform}-${version} >/dev/null 2>&1 || true
   echo "----------------------------------------------"
@@ -1590,48 +1590,6 @@ EOF
     no_key secret/existing/to/second
   done
 
-
-  if [[ -z "${TEST_QUICK:-}" ]]; then
-  for op in ssh dhparam rsa; do
-    case $op in
-    ssh)     what="an SSH key" ;;
-    rsa)     what="an RSA key" ;;
-    dhparam) what="a Diffie-Hellman key exchange parameter set" ;;
-    *)       what="(i don't know what)" ;;
-    esac
-
-    #######
-    clearvault
-    testing $version safe $op --no-clobber
-    no_key secret/existing
-
-    now running safe $op --no-clobber with no pre-existing secrets
-    (run; ./safe $op --no-clobber secret/existing >t/home/got 2>/dev/null) ; exitok $? 0
-    cat >t/home/want <<EOF ; diffok
-EOF
-    expected=$(./safe get secret/existing)
-
-    now running safe $op --no-clobber with pre-existing secrets
-    (run; ./safe $op --no-clobber secret/existing >t/home/got 2>&1) ; exitok $? 0
-
-    now checking the error output
-    cat >t/home/want <<EOF ; diffok
-Cowardly refusing to generate $what at secret/existing as it is already present in Vault
-EOF
-    is_key secret/existing "$expected" '<existing>'
-
-    now running safe $op --no-clobber with pre-existing secrets in --quiet mode
-    (run; ./safe $op --no-clobber --quiet secret/existing >t/home/got 2>&1) ; exitok $? 0
-
-    now checking the error output
-    cat >t/home/want <<EOF ; diffok
-EOF
-    is_key secret/existing "$expected" '<existing>'
-  done
-  fi
-
-
-  #######
   clearvault
   testing $version safe fmt --no-clobber
   no_key secret/existing
@@ -1668,150 +1626,6 @@ EOF
   is_key secret/existing:crypted "$expected"
 
 
-  if [[ -z "${TEST_QUICK:-}" ]]; then
-    #######
-    clearvault
-    no_key secret/existing
-
-    testing $version safe x509 --no-clobber
-    now running safe x509 issue --no-clobber with no pre-existing certificates
-    (run; ./safe x509 issue --no-clobber \
-                 --ca --name test \
-                 secret/existing >t/home/got 2>&1) ; exitok $? 0
-
-    now checking the error output
-    cat >t/home/want <<EOF ; diffok
-EOF
-    expected=$(./safe get secret/existing)
-
-    now running safe x509 issue --no-clobber with pre-existing certificates
-    (run; ./safe x509 issue \
-                 --no-clobber --ca --name test \
-                 secret/existing >t/home/got 2>&1) ; exitok $? 0
-
-    now checking the error output
-    cat >t/home/want <<EOF ; diffok
-Cowardly refusing to create a new certificate in secret/existing as it is already present in Vault
-EOF
-    is_key secret/existing "$expected" "<existing>"
-
-    now running safe x509 issue --no-clobber with pre-existing certificates in --quiet mode
-    (run; ./safe x509 issue --quiet --no-clobber \
-                 --ca --name test \
-                 secret/existing >t/home/got 2>&1) ; exitok $? 0
-
-    now checking the error output
-    cat >t/home/want <<EOF ; diffok
-EOF
-    is_key secret/existing "$expected" "<existing>"
-
-    now running safe x509 revoke --no-clobber with no pre-existing revocation list
-    (run; ./safe x509 revoke --no-clobber \
-                 --signed-by secret/existing \
-                 secret/existing >t/home/got 3>&1) ; exitok $? 0
-    cat >t/home/want <<EOF ; diffok
-EOF
-
-    testing $version safe x509 reissue
-    now issuing a CA and a certificate for reissue testing
-    (run; ./safe x509 issue --ca        secret/reissue/ca --name test.ca   && \
-          ./safe x509 issue --signed-by secret/reissue/ca --name test.cert \
-                            --bits 2048 secret/reissue/cert); exitok $? 0
-    serial1=$(safe read secret/reissue/ca:serial)
-
-    now reissuing the certificate
-    safe cp secret/reissue/cert/ secret/reissue/orig
-    (run; ./safe x509 reissue secret/reissue/cert); exitok $? 0
-
-    now checking that reissue changed the private key
-    ne "$(./safe read secret/reissue/orig:key)" \
-       "$(./safe read secret/reissue/cert:key)"
-
-    now checking that reissue bumps the CA serial number
-    serial2=$(safe read secret/reissue/ca:serial)
-    eq $(( $serial1 + 1 )) $serial2
-
-    now checking that reissue does not change certificate attributes
-    eq_or_diff "$(./safe x509 show secret/reissue/orig | grep -Ev 'secret/re|valid from|expires in')" \
-               "$(./safe x509 show secret/reissue/cert | grep -Ev 'secret/re|valid from|expires in')"
-
-    now reissuing the certificate with a shorter ttl and a smaller key
-    (run; ./safe x509 reissue --ttl 5d --bits 1024 secret/reissue/cert); exitok $? 0
-
-    now checking that the certificates have different dates
-    ne "$(./safe x509 show secret/reissue/orig | grep 'valid from')" \
-       "$(./safe x509 show secret/reissue/cert | grep 'valid from')"
-
-    now checking that reissue does not change certificate attributes, other than ttl
-    eq_or_diff "$(./safe x509 show secret/reissue/orig | grep -Ev 'secret/re|valid from|expires in')" \
-               "$(./safe x509 show secret/reissue/cert | grep -Ev 'secret/re|valid from|expires in')"
-
-
-
-    testing $version safe x509 renew
-    now issuing a CA and a certificate for renew testing
-    (run; ./safe x509 issue --ca        secret/renew/ca --name test.ca   && \
-          ./safe x509 issue --signed-by secret/renew/ca --name test.cert \
-                            --bits 2048 secret/renew/cert); exitok $? 0
-    serial1=$(safe read secret/renew/ca:serial)
-
-    now renewing the certificate
-    safe cp secret/renew/cert/ secret/renew/orig
-    (run; ./safe x509 renew secret/renew/cert); exitok $? 0
-
-    now checking that renew did not change the private key
-    eq "$(./safe read secret/renew/orig:key)" \
-       "$(./safe read secret/renew/cert:key)"
-
-    now checking that renew bumps the CA serial number
-    serial2=$(safe read secret/renew/ca:serial)
-    eq $(( $serial1 + 1 )) $serial2
-
-    now checking that renew does not change certificate attributes
-    eq_or_diff "$(./safe x509 show secret/renew/orig | grep -Ev 'secret/re|valid from|expires in')" \
-               "$(./safe x509 show secret/renew/cert | grep -Ev 'secret/re|valid from|expires in')"
-
-    now renewing the certificate with a shorter ttl
-    (run; ./safe x509 renew --ttl 5d secret/renew/cert); exitok $? 0
-
-    now checking that the certificates have different dates
-    ne "$(./safe x509 show secret/renew/orig | grep 'valid from')" \
-       "$(./safe x509 show secret/renew/cert | grep 'valid from')"
-
-    now checking that renew does not change certificate attributes, other than ttl
-    eq_or_diff "$(./safe x509 show secret/renew/orig | grep -Ev 'secret/re|valid from|expires in')" \
-               "$(./safe x509 show secret/renew/cert | grep -Ev 'secret/re|valid from|expires in')"
-
-
-    now removing the CRL from a CA certificate
-    (run; ./safe rm secret/renew/ca:crl); exitok $? 0
-    no_key secret/renew/ca:crl
-
-    now checking that a CA without a CRL is invalid
-    (run; ./safe x509 validate secret/renew/ca); exitok $? 1
-
-    now checking that renew can re-constitute a missing CRL
-    (run; ./safe x509 renew secret/renew/ca); exitok $? 0
-    ok_key secret/renew/ca:crl
-
-    now checking that a CA is valid again
-    (run; ./safe x509 validate secret/renew/ca); exitok $? 0
-
-
-    now removing the serial from a CA certificate
-    (run; ./safe rm secret/renew/ca:serial); exitok $? 0
-    no_key secret/renew/ca:serial
-
-    now checking that a CA without a serial is invalid
-    (run; ./safe x509 validate secret/renew/ca); exitok $? 1
-
-    now checking that renew can re-constitute a missing CA serial
-    (run; ./safe x509 renew secret/renew/ca); exitok $? 0
-    ok_key secret/renew/ca:serial
-
-    now checking that a CA is valid again
-    (run; ./safe x509 validate secret/renew/ca); exitok $? 0
-  fi
 
   #######
   clearvault
@@ -2051,189 +1865,6 @@ EOF
 
 
 
-  ##     ##     ########   #####    #######
-   ##   ##      ##        ##   ##  ##     ##
-    ## ##       ##       ##     ## ##     ##
-     ###        #######  ##     ##  ########
-    ## ##             ## ##     ##        ##
-   ##   ##  ### ##    ##  ##   ##  ##     ##
-  ##     ## ###  ######    #####    #######
-
-  if [[ -z "${TEST_QUICK:-}" ]]; then
-    #######
-    clearvault
-    testing ${version} x509 commands
-
-    now running safe x509 issue without a path
-    (run; ./safe x509 issue)                                                ; exitok $? 1
-    now running safe x509 issue without a name
-    (run; ./safe x509 issue --signed-by secret/enoent)                      ; exitok $? 1
-    now running safe x509 issue with a non-existent ca
-    (run; ./safe x509 issue --signed-by secret/enoent secret/cert)          ; exitok $? 1
-
-    now generating a new self-signed certificate
-    (run; ./safe x509 issue secret/x509/self-signed --name www.example.com) ; exitok $? 0
-    now validating our self-signed certificate
-    (run; ./safe x509 validate secret/x509/self-signed)                     ; exitok $? 0
-
-    ok_key secret/x509/self-signed:{certificate,key,combined}
-    no_key secret/x509/self-signed:{serial,crl}
-
-    now validating the certificate applicability
-    (run; ./safe x509 check secret/x509/self-signed)                        ; exitok $? 0
-    (run; ./safe x509 check secret/x509/self-signed --for www.example.com)  ; exitok $? 0
-    (run; ./safe x509 check secret/x509/self-signed --for mail.example.com) ; exitok $? 1
-    (run; ./safe x509 check secret/x509/self-signed --for test@example.com) ; exitok $? 1
-    (run; ./safe x509 check secret/x509/self-signed --for 10.40.5.6)        ; exitok $? 1
-
-    now running safe x509 issue without a name
-    (run; ./safe x509 issue secret/fail-without-name)                       ; exitok $? 1
-    no_key secret/fail-without-name:{certificate,key,combined,serial,crl}
-
-    now generate a CA certificate
-    (run; ./safe x509 issue secret/x509/ca --name ca.example.com --ca)      ; exitok $? 0
-    ok_key secret/x509/ca:{certificate,key,combined,serial,crl}
-
-    now validating our new CA certificate
-    (run; ./safe x509 validate secret/x509/ca --ca)                         ; exitok $? 0
-    (run; ./safe x509 validate secret/x509/ca --not-expired)                ; exitok $? 0
-    (run; ./safe x509 validate secret/x509/ca --for ca.example.com)         ; exitok $? 0
-    (run; ./safe x509 validate secret/x509/ca --for www.example.com)        ; exitok $? 1
-    (run; ./safe x509 validate secret/x509/ca --signed-by secret/x509/ca \
-                                              --not-revoked)                ; exitok $? 0
-
-    now running safe x509 check without a path
-    (run; ./safe x509 check)                                                ; exitok $? 1
-    now running safe x509 check with --signed-by but no path
-    (run; ./safe x509 check --signed-by secret/enoent)                      ; exitok $? 1
-    now running safe x509 check with no CA
-    (run; ./safe x509 check --signed-by secret/enoent secret/cert)          ; exitok $? 1
-    now running safe x509 check with a bad certificate path
-    (run; ./safe x509 check --signed-by secret/x509/ca secret/enoent)       ; exitok $? 1
-
-    now issuing a CA-signed certificate
-    (run; ./safe x509 issue secret/x509/signed --signed-by secret/x509/ca \
-                                               --name mail.example.com)     ; exitok $? 0
-    now validating our CA-signed certificate
-    (run; ./safe x509 validate secret/x509/signed --signed-by secret/x509/ca \
-                                                  --not-expired \
-                                                  --not-revoked \
-                                                  --for mail.example.com)   ; exitok $? 0
-
-    now running safe x509 revoke without a path
-    (run; ./safe x509 revoke)                                               ; exitok $? 1
-    (run; ./safe x509 revoke --signed-by secret/x509/ca)                    ; exitok $? 1
-    now running safe x509 revoke with a bad path
-    (run; ./safe x509 revoke --signed-by secret/x509/ca secret/enoent)      ; exitok $? 1
-    now running safe x509 revoke with a bad CA
-    (run; ./safe x509 revoke --signed-by secret/enoent secret/x509/signed)  ; exitok $? 1
-
-    now running safe x509 crl --renew without a path
-    (run; ./safe x509 crl --renew)                                          ; exitok $? 1
-    now running safe x509 crl with a CA path but no --renew
-    (run; ./safe x509 crl secret/x509/ca)                                   ; exitok $? 1
-    now running safe x509 crl --renew against a bad path
-    (run; ./safe x509 crl --renew secret/enoent)                            ; exitok $? 1
-    now running safe x509 crl --renew without a CA
-    (run; ./safe x509 crl --renew secret/x509/signed)                       ; exitok $? 1
-    now running safe x509 crl --renew
-    (run; ./safe x509 crl --renew secret/x509/ca)                           ; exitok $? 0
-
-    now revoke our signed certificate
-    (run; ./safe x509 revoke secret/x509/signed --signed-by secret/x509/ca) ; exitok $? 0
-    now validating that our signed certificate is only revoked
-    (run; ./safe x509 validate secret/x509/signed --signed-by secret/x509/ca \
-                                                  --not-expired \
-                                                  --revoked \
-                                                  --for mail.example.com)   ; exitok $? 0
-
-    now issuing a certificate with lots of subjectAltNames
-    (run; ./safe x509 issue secret/x509/multi --signed-by secret/x509/ca \
-                                              --name dns.example.com \
-                                              --name *.dns.example.com \
-                                              --name 10.255.6.7 \
-                                              --name 10.255.6.8 \
-                                              --name admin@example.com \
-                                              --name safe.vault@example.com) ; exitok $? 0
-    now validating our SAN certificate
-    (run; ./safe x509 check secret/x509/multi --signed-by secret/x509/ca \
-                                              --not-expired \
-                                              --not-revoked \
-                                              --for dns.example.com \
-                                              --for 10.255.6.7 \
-                                              --for 10.255.6.8 \
-                                              --for admin@example.com \
-                                              --for safe.vault@example.com) ; exitok $? 0
-    now checking our SAN certificate applicability
-    (run; ./safe x509 check secret/x509/multi --for whatever.dns.example.com \
-                                              --for anything.dns.example.com \
-                                              --for x.dns.example.com)     ; exitok $? 0
-    (run; ./safe x509 check secret/x509/multi --for x.y.dns.example.com)   ; exitok $? 1
-    (run; ./safe x509 check secret/x509/multi --for x.com)                 ; exitok $? 1
-
-    now issuing a wildcard SAN certificate
-    (run; ./safe x509 issue secret/x509/wild --signed-by secret/x509/ca \
-                                             --name cn.tld \
-                                             --name '*.tld' \
-                                             --name '*.*.tld' \
-                                             --name '*.*.*.tld')           ; exitok $? 0
-    now validating our wildcard SAN certificate applicability
-    (run; ./safe x509 check secret/x509/wild --signed-by secret/x509/ca \
-                                             --for cn.tld \
-                                             --for x.tld \
-                                             --for x.y.tld \
-                                             --for x.y.z.tld)              ; exitok $? 0
-    (run; ./safe x509 check secret/x509/wild --signed-by secret/x509/ca \
-                                             --for tld)                    ; exitok $? 1
-    (run; ./safe x509 check secret/x509/wild --signed-by secret/x509/ca \
-                                             --for w.x.y.z.tld)            ; exitok $? 1
-
-    now issuing a weak 1024-bit certificate
-    (run; ./safe x509 issue secret/x509/weak --bits 1024 -n weak.tld)      ; exitok $? 0
-    now checking that our 1024-bit certificate is actually 1024-bits
-    (run; ./safe x509 check secret/x509/weak --bits 1024)                  ; exitok $? 0
-    (run; ./safe x509 check secret/x509/weak --bits 2048)                  ; exitok $? 1
-    (run; ./safe x509 check secret/x509/weak --bits 4096)                  ; exitok $? 1
-    (run; ./safe x509 check secret/x509/weak --bits 1024 \
-                                             --bits 2048 \
-                                             --bits 4096)                  ; exitok $? 0
-
-    now issuing a moderately strong 2048-bit certificate
-    (run; ./safe x509 issue secret/x509/meh --bits 2048 -n meh.tld)        ; exitok $? 0
-    now checking that our 2048-bit certificate is actually 2048-bits
-    (run; ./safe x509 check secret/x509/meh --bits 1024)                   ; exitok $? 1
-    (run; ./safe x509 check secret/x509/meh --bits 2048)                   ; exitok $? 0
-    (run; ./safe x509 check secret/x509/meh --bits 4096)                   ; exitok $? 1
-    (run; ./safe x509 check secret/x509/meh --bits 1024 \
-                                            --bits 2048 \
-                                            --bits 4096)                   ; exitok $? 0
-
-    now issuing a strong 4096-bit certificate
-    (run; ./safe x509 issue secret/x509/strong --bits 4096 -n strong.tld)  ; exitok $? 0
-    now checking that our 4096-bit certificate is actually 4096-bits
-    (run; ./safe x509 check secret/x509/strong --bits 1024)                ; exitok $? 1
-    (run; ./safe x509 check secret/x509/strong --bits 2048)                ; exitok $? 1
-    (run; ./safe x509 check secret/x509/strong --bits 4096)                ; exitok $? 0
-    (run; ./safe x509 check secret/x509/strong --bits 1024 \
-                                               --bits 2048 \
-                                               --bits 4096)                ; exitok $? 0
-
-    now issuing a certificate with an invalid strength
-    (run; ./safe x509 issue secret/x509/bad --bits 1000000000 -n one.mil)  ; exitok $? 1
-
-    now checking the validity of multiple certificates
-    (run; ./safe x509 check secret/x509/{weak,meh,strong})                 ; exitok $? 0
-    (run; ./safe x509 check secret/x509/{weak,ENOENT,strong})              ; exitok $? 1
-
-    now issuing a CA certificate
-    (run; ./safe x509 issue secret/x509/imposter --name x.y.z --ca)        ; exitok $? 0
-    now checking that we got a CA certificate
-    (run; ./safe x509 check secret/x509/imposter --ca)                     ; exitok $? 0
-    now overwrite our CA certificate with a non-CA certificate
-    (run; ./safe x509 issue secret/x509/imposter --name a.b.c)             ; exitok $? 0
-    now checking that we no longer have a CA certificate
-    (run; ./safe x509 check secret/x509/imposter --ca)                     ; exitok $? 1
-  fi
 
 
   ########  ######## ##    ## ######## ##    ##
@@ -2337,5 +1968,371 @@ EOF
 
   dump_log
 done
+
+if [[ -z "${TEST_QUICK:-}" ]]; then
+  #######
+  clearvault
+  no_key secret/existing
+
+  testing $version safe x509 --no-clobber
+  now running safe x509 issue --no-clobber with no pre-existing certificates
+  (run; ./safe x509 issue --no-clobber \
+                --ca --name test \
+                secret/existing >t/home/got 2>&1) ; exitok $? 0
+
+  now checking the error output
+  cat >t/home/want <<EOF ; diffok
+EOF
+  expected=$(./safe get secret/existing)
+
+  now running safe x509 issue --no-clobber with pre-existing certificates
+  (run; ./safe x509 issue \
+                --no-clobber --ca --name test \
+                secret/existing >t/home/got 2>&1) ; exitok $? 0
+
+  now checking the error output
+  cat >t/home/want <<EOF ; diffok
+Cowardly refusing to create a new certificate in secret/existing as it is already present in Vault
+EOF
+  is_key secret/existing "$expected" "<existing>"
+
+  now running safe x509 issue --no-clobber with pre-existing certificates in --quiet mode
+  (run; ./safe x509 issue --quiet --no-clobber \
+                --ca --name test \
+                secret/existing >t/home/got 2>&1) ; exitok $? 0
+
+  now checking the error output
+  cat >t/home/want <<EOF ; diffok
+EOF
+  is_key secret/existing "$expected" "<existing>"
+
+  now running safe x509 revoke --no-clobber with no pre-existing revocation list
+  (run; ./safe x509 revoke --no-clobber \
+                --signed-by secret/existing \
+                secret/existing >t/home/got 3>&1) ; exitok $? 0
+  cat >t/home/want <<EOF ; diffok
+EOF
+
+  testing $version safe x509 reissue
+  now issuing a CA and a certificate for reissue testing
+  (run; ./safe x509 issue --ca        secret/reissue/ca --name test.ca   && \
+        ./safe x509 issue --signed-by secret/reissue/ca --name test.cert \
+                          --bits 2048 secret/reissue/cert); exitok $? 0
+  serial1=$(safe read secret/reissue/ca:serial)
+
+  now reissuing the certificate
+  safe cp secret/reissue/cert/ secret/reissue/orig
+  (run; ./safe x509 reissue secret/reissue/cert); exitok $? 0
+
+  now checking that reissue changed the private key
+  ne "$(./safe read secret/reissue/orig:key)" \
+      "$(./safe read secret/reissue/cert:key)"
+
+  now checking that reissue bumps the CA serial number
+  serial2=$(safe read secret/reissue/ca:serial)
+  eq $(( $serial1 + 1 )) $serial2
+
+  now checking that reissue does not change certificate attributes
+  eq_or_diff "$(./safe x509 show secret/reissue/orig | grep -Ev 'secret/re|valid from|expires in')" \
+              "$(./safe x509 show secret/reissue/cert | grep -Ev 'secret/re|valid from|expires in')"
+
+  now reissuing the certificate with a shorter ttl and a smaller key
+  (run; ./safe x509 reissue --ttl 5d --bits 1024 secret/reissue/cert); exitok $? 0
+
+  now checking that the certificates have different dates
+  ne "$(./safe x509 show secret/reissue/orig | grep 'valid from')" \
+      "$(./safe x509 show secret/reissue/cert | grep 'valid from')"
+
+  now checking that reissue does not change certificate attributes, other than ttl
+  eq_or_diff "$(./safe x509 show secret/reissue/orig | grep -Ev 'secret/re|valid from|expires in')" \
+              "$(./safe x509 show secret/reissue/cert | grep -Ev 'secret/re|valid from|expires in')"
+
+
+
+  testing $version safe x509 renew
+  now issuing a CA and a certificate for renew testing
+  (run; ./safe x509 issue --ca        secret/renew/ca --name test.ca   && \
+        ./safe x509 issue --signed-by secret/renew/ca --name test.cert \
+                          --bits 2048 secret/renew/cert); exitok $? 0
+  serial1=$(safe read secret/renew/ca:serial)
+
+  now renewing the certificate
+  safe cp secret/renew/cert/ secret/renew/orig
+  (run; ./safe x509 renew secret/renew/cert); exitok $? 0
+
+  now checking that renew did not change the private key
+  eq "$(./safe read secret/renew/orig:key)" \
+      "$(./safe read secret/renew/cert:key)"
+
+  now checking that renew bumps the CA serial number
+  serial2=$(safe read secret/renew/ca:serial)
+  eq $(( $serial1 + 1 )) $serial2
+
+  now checking that renew does not change certificate attributes
+  eq_or_diff "$(./safe x509 show secret/renew/orig | grep -Ev 'secret/re|valid from|expires in')" \
+              "$(./safe x509 show secret/renew/cert | grep -Ev 'secret/re|valid from|expires in')"
+
+  now renewing the certificate with a shorter ttl
+  (run; ./safe x509 renew --ttl 5d secret/renew/cert); exitok $? 0
+
+  now checking that the certificates have different dates
+  ne "$(./safe x509 show secret/renew/orig | grep 'valid from')" \
+      "$(./safe x509 show secret/renew/cert | grep 'valid from')"
+
+  now checking that renew does not change certificate attributes, other than ttl
+  eq_or_diff "$(./safe x509 show secret/renew/orig | grep -Ev 'secret/re|valid from|expires in')" \
+              "$(./safe x509 show secret/renew/cert | grep -Ev 'secret/re|valid from|expires in')"
+
+
+  now removing the CRL from a CA certificate
+  (run; ./safe rm secret/renew/ca:crl); exitok $? 0
+  no_key secret/renew/ca:crl
+
+  now checking that a CA without a CRL is invalid
+  (run; ./safe x509 validate secret/renew/ca); exitok $? 1
+
+  now checking that renew can re-constitute a missing CRL
+  (run; ./safe x509 renew secret/renew/ca); exitok $? 0
+  ok_key secret/renew/ca:crl
+
+  now checking that a CA is valid again
+  (run; ./safe x509 validate secret/renew/ca); exitok $? 0
+
+
+  now removing the serial from a CA certificate
+  (run; ./safe rm secret/renew/ca:serial); exitok $? 0
+  no_key secret/renew/ca:serial
+
+  now checking that a CA without a serial is invalid
+  (run; ./safe x509 validate secret/renew/ca); exitok $? 1
+
+  now checking that renew can re-constitute a missing CA serial
+  (run; ./safe x509 renew secret/renew/ca); exitok $? 0
+  ok_key secret/renew/ca:serial
+
+  now checking that a CA is valid again
+  (run; ./safe x509 validate secret/renew/ca); exitok $? 0
+
+  for op in ssh rsa dhparam; do
+    case $op in
+    ssh)     what="an SSH key" ;;
+    rsa)     what="an RSA key" ;;
+    dhparam) what="a Diffie-Hellman key exchange parameter set" ;;
+    *)       what="(i don't know what)" ;;
+    esac
+
+    #######
+    clearvault
+    testing $version safe $op --no-clobber
+    no_key secret/existing
+
+    now running safe $op --no-clobber with no pre-existing secrets
+    (run; ./safe $op --no-clobber secret/existing >t/home/got 2>/dev/null) ; exitok $? 0
+    cat >t/home/want <<EOF ; diffok
+EOF
+    expected=$(./safe get secret/existing)
+
+    now running safe $op --no-clobber with pre-existing secrets
+    (run; ./safe $op --no-clobber secret/existing >t/home/got 2>&1) ; exitok $? 0
+
+    now checking the error output
+    cat >t/home/want <<EOF ; diffok
+Cowardly refusing to generate $what at secret/existing as it is already present in Vault
+EOF
+    is_key secret/existing "$expected" '<existing>'
+
+    now running safe $op --no-clobber with pre-existing secrets in --quiet mode
+    (run; ./safe $op --no-clobber --quiet secret/existing >t/home/got 2>&1) ; exitok $? 0
+
+    now checking the error output
+    cat >t/home/want <<EOF ; diffok
+EOF
+    is_key secret/existing "$expected" '<existing>'
+  done
+
+  #######
+
+  ##     ##     ########   #####    #######
+   ##   ##      ##        ##   ##  ##     ##
+    ## ##       ##       ##     ## ##     ##
+     ###        #######  ##     ##  ########
+    ## ##             ## ##     ##        ##
+   ##   ##  ### ##    ##  ##   ##  ##     ##
+  ##     ## ###  ######    #####    #######
+
+  #######
+  clearvault
+  testing ${version} x509 commands
+
+  now running safe x509 issue without a path
+  (run; ./safe x509 issue)                                                ; exitok $? 1
+  now running safe x509 issue without a name
+  (run; ./safe x509 issue --signed-by secret/enoent)                      ; exitok $? 1
+  now running safe x509 issue with a non-existent ca
+  (run; ./safe x509 issue --signed-by secret/enoent secret/cert)          ; exitok $? 1
+
+  now generating a new self-signed certificate
+  (run; ./safe x509 issue secret/x509/self-signed --name www.example.com) ; exitok $? 0
+  now validating our self-signed certificate
+  (run; ./safe x509 validate secret/x509/self-signed)                     ; exitok $? 0
+
+  ok_key secret/x509/self-signed:{certificate,key,combined}
+  no_key secret/x509/self-signed:{serial,crl}
+
+  now validating the certificate applicability
+  (run; ./safe x509 check secret/x509/self-signed)                        ; exitok $? 0
+  (run; ./safe x509 check secret/x509/self-signed --for www.example.com)  ; exitok $? 0
+  (run; ./safe x509 check secret/x509/self-signed --for mail.example.com) ; exitok $? 1
+  (run; ./safe x509 check secret/x509/self-signed --for test@example.com) ; exitok $? 1
+  (run; ./safe x509 check secret/x509/self-signed --for 10.40.5.6)        ; exitok $? 1
+
+  now running safe x509 issue without a name
+  (run; ./safe x509 issue secret/fail-without-name)                       ; exitok $? 1
+  no_key secret/fail-without-name:{certificate,key,combined,serial,crl}
+
+  now generate a CA certificate
+  (run; ./safe x509 issue secret/x509/ca --name ca.example.com --ca)      ; exitok $? 0
+  ok_key secret/x509/ca:{certificate,key,combined,serial,crl}
+
+  now validating our new CA certificate
+  (run; ./safe x509 validate secret/x509/ca --ca)                         ; exitok $? 0
+  (run; ./safe x509 validate secret/x509/ca --not-expired)                ; exitok $? 0
+  (run; ./safe x509 validate secret/x509/ca --for ca.example.com)         ; exitok $? 0
+  (run; ./safe x509 validate secret/x509/ca --for www.example.com)        ; exitok $? 1
+  (run; ./safe x509 validate secret/x509/ca --signed-by secret/x509/ca \
+                                            --not-revoked)                ; exitok $? 0
+
+  now running safe x509 check without a path
+  (run; ./safe x509 check)                                                ; exitok $? 1
+  now running safe x509 check with --signed-by but no path
+  (run; ./safe x509 check --signed-by secret/enoent)                      ; exitok $? 1
+  now running safe x509 check with no CA
+  (run; ./safe x509 check --signed-by secret/enoent secret/cert)          ; exitok $? 1
+  now running safe x509 check with a bad certificate path
+  (run; ./safe x509 check --signed-by secret/x509/ca secret/enoent)       ; exitok $? 1
+
+  now issuing a CA-signed certificate
+  (run; ./safe x509 issue secret/x509/signed --signed-by secret/x509/ca \
+                                              --name mail.example.com)     ; exitok $? 0
+  now validating our CA-signed certificate
+  (run; ./safe x509 validate secret/x509/signed --signed-by secret/x509/ca \
+                                                --not-expired \
+                                                --not-revoked \
+                                                --for mail.example.com)   ; exitok $? 0
+
+  now running safe x509 revoke without a path
+  (run; ./safe x509 revoke)                                               ; exitok $? 1
+  (run; ./safe x509 revoke --signed-by secret/x509/ca)                    ; exitok $? 1
+  now running safe x509 revoke with a bad path
+  (run; ./safe x509 revoke --signed-by secret/x509/ca secret/enoent)      ; exitok $? 1
+  now running safe x509 revoke with a bad CA
+  (run; ./safe x509 revoke --signed-by secret/enoent secret/x509/signed)  ; exitok $? 1
+
+  now running safe x509 crl --renew without a path
+  (run; ./safe x509 crl --renew)                                          ; exitok $? 1
+  now running safe x509 crl with a CA path but no --renew
+  (run; ./safe x509 crl secret/x509/ca)                                   ; exitok $? 1
+  now running safe x509 crl --renew against a bad path
+  (run; ./safe x509 crl --renew secret/enoent)                            ; exitok $? 1
+  now running safe x509 crl --renew without a CA
+  (run; ./safe x509 crl --renew secret/x509/signed)                       ; exitok $? 1
+  now running safe x509 crl --renew
+  (run; ./safe x509 crl --renew secret/x509/ca)                           ; exitok $? 0
+
+  now revoke our signed certificate
+  (run; ./safe x509 revoke secret/x509/signed --signed-by secret/x509/ca) ; exitok $? 0
+  now validating that our signed certificate is only revoked
+  (run; ./safe x509 validate secret/x509/signed --signed-by secret/x509/ca \
+                                                --not-expired \
+                                                --revoked \
+                                                --for mail.example.com)   ; exitok $? 0
+
+  now issuing a certificate with lots of subjectAltNames
+  (run; ./safe x509 issue secret/x509/multi --signed-by secret/x509/ca \
+                                            --name dns.example.com \
+                                            --name *.dns.example.com \
+                                            --name 10.255.6.7 \
+                                            --name 10.255.6.8 \
+                                            --name admin@example.com \
+                                            --name safe.vault@example.com) ; exitok $? 0
+  now validating our SAN certificate
+  (run; ./safe x509 check secret/x509/multi --signed-by secret/x509/ca \
+                                            --not-expired \
+                                            --not-revoked \
+                                            --for dns.example.com \
+                                            --for 10.255.6.7 \
+                                            --for 10.255.6.8 \
+                                            --for admin@example.com \
+                                            --for safe.vault@example.com) ; exitok $? 0
+  now checking our SAN certificate applicability
+  (run; ./safe x509 check secret/x509/multi --for whatever.dns.example.com \
+                                            --for anything.dns.example.com \
+                                            --for x.dns.example.com)     ; exitok $? 0
+  (run; ./safe x509 check secret/x509/multi --for x.y.dns.example.com)   ; exitok $? 1
+  (run; ./safe x509 check secret/x509/multi --for x.com)                 ; exitok $? 1
+
+  now issuing a wildcard SAN certificate
+  (run; ./safe x509 issue secret/x509/wild --signed-by secret/x509/ca \
+                                            --name cn.tld \
+                                            --name '*.tld' \
+                                            --name '*.*.tld' \
+                                            --name '*.*.*.tld')           ; exitok $? 0
+  now validating our wildcard SAN certificate applicability
+  (run; ./safe x509 check secret/x509/wild --signed-by secret/x509/ca \
+                                            --for cn.tld \
+                                            --for x.tld \
+                                            --for x.y.tld \
+                                            --for x.y.z.tld)              ; exitok $? 0
+  (run; ./safe x509 check secret/x509/wild --signed-by secret/x509/ca \
+                                            --for tld)                    ; exitok $? 1
+  (run; ./safe x509 check secret/x509/wild --signed-by secret/x509/ca \
+                                            --for w.x.y.z.tld)            ; exitok $? 1
+
+  now issuing a weak 1024-bit certificate
+  (run; ./safe x509 issue secret/x509/weak --bits 1024 -n weak.tld)      ; exitok $? 0
+  now checking that our 1024-bit certificate is actually 1024-bits
+  (run; ./safe x509 check secret/x509/weak --bits 1024)                  ; exitok $? 0
+  (run; ./safe x509 check secret/x509/weak --bits 2048)                  ; exitok $? 1
+  (run; ./safe x509 check secret/x509/weak --bits 4096)                  ; exitok $? 1
+  (run; ./safe x509 check secret/x509/weak --bits 1024 \
+                                            --bits 2048 \
+                                            --bits 4096)                  ; exitok $? 0
+
+  now issuing a moderately strong 2048-bit certificate
+  (run; ./safe x509 issue secret/x509/meh --bits 2048 -n meh.tld)        ; exitok $? 0
+  now checking that our 2048-bit certificate is actually 2048-bits
+  (run; ./safe x509 check secret/x509/meh --bits 1024)                   ; exitok $? 1
+  (run; ./safe x509 check secret/x509/meh --bits 2048)                   ; exitok $? 0
+  (run; ./safe x509 check secret/x509/meh --bits 4096)                   ; exitok $? 1
+  (run; ./safe x509 check secret/x509/meh --bits 1024 \
+                                          --bits 2048 \
+                                          --bits 4096)                   ; exitok $? 0
+
+  now issuing a strong 4096-bit certificate
+  (run; ./safe x509 issue secret/x509/strong --bits 4096 -n strong.tld)  ; exitok $? 0
+  now checking that our 4096-bit certificate is actually 4096-bits
+  (run; ./safe x509 check secret/x509/strong --bits 1024)                ; exitok $? 1
+  (run; ./safe x509 check secret/x509/strong --bits 2048)                ; exitok $? 1
+  (run; ./safe x509 check secret/x509/strong --bits 4096)                ; exitok $? 0
+  (run; ./safe x509 check secret/x509/strong --bits 1024 \
+                                              --bits 2048 \
+                                              --bits 4096)                ; exitok $? 0
+
+  now issuing a certificate with an invalid strength
+  (run; ./safe x509 issue secret/x509/bad --bits 1000000000 -n one.mil)  ; exitok $? 1
+
+  now checking the validity of multiple certificates
+  (run; ./safe x509 check secret/x509/{weak,meh,strong})                 ; exitok $? 0
+  (run; ./safe x509 check secret/x509/{weak,ENOENT,strong})              ; exitok $? 1
+
+  now issuing a CA certificate
+  (run; ./safe x509 issue secret/x509/imposter --name x.y.z --ca)        ; exitok $? 0
+  now checking that we got a CA certificate
+  (run; ./safe x509 check secret/x509/imposter --ca)                     ; exitok $? 0
+  now overwrite our CA certificate with a non-CA certificate
+  (run; ./safe x509 issue secret/x509/imposter --name a.b.c)             ; exitok $? 0
+  now checking that we no longer have a CA certificate
+  (run; ./safe x509 check secret/x509/imposter --ca)                     ; exitok $? 1
+fi
 
 done_testing=1

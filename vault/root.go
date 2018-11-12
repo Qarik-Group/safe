@@ -6,12 +6,12 @@ import (
 
 func (v *Vault) NewRootToken(keys []string) (string, error) {
 	// cancel any previous generate-root attempts (get a new nonce!)
-	err := v.client.GenerateRootCancel()
+	err := v.client.Client.GenerateRootCancel()
 	if err != nil {
 		return "", err
 	}
 
-	genRoot, err := v.client.NewGenerateRoot()
+	genRoot, err := v.client.Client.NewGenerateRoot()
 	if err != nil {
 		return "", err
 	}

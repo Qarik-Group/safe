@@ -11,7 +11,7 @@ import (
 func (v *Vault) Strongbox() (map[string]string, error) {
 	m := make(map[string]string)
 
-	u := *v.client.VaultURL
+	u := *v.client.Client.VaultURL
 
 	c := &http.Client{}
 	re := regexp.MustCompile(`:[0-9]+$`)

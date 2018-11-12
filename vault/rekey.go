@@ -18,7 +18,7 @@ func (v *Vault) cancelRekey() {
 	if termState != nil {
 		terminal.Restore(int(os.Stdin.Fd()), termState)
 	}
-	err := v.client.RekeyCancel()
+	err := v.client.Client.RekeyCancel()
 	if err != nil {
 		ansi.Fprintf(os.Stderr, "Failed to cancel rekey process: %s\n", err.Error())
 		return
@@ -28,13 +28,13 @@ func (v *Vault) cancelRekey() {
 }
 
 func (v *Vault) ReKey(unsealKeyCount, numToUnseal int, pgpKeys []string) ([]string, error) {
-	err := v.client.RekeyCancel()
+	err := v.client.Client.RekeyCancel()
 	if err != nil {
 		return nil, fmt.Errorf("An error occurred when trying to cancel potentially preexisting rekey: %s", err)
 	}
 
 	backup := len(pgpKeys) > 0
-	rekey, err := v.client.NewRekey(vaultkv.RekeyConfig{
+	rekey, err := v.client.Client.NewRekey(vaultkv.RekeyConfig{
 		Shares:    unsealKeyCount,
 		Threshold: numToUnseal,
 		PGPKeys:   pgpKeys,

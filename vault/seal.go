@@ -6,7 +6,7 @@ import (
 
 //SealKeys returns the threshold for unsealing the vault
 func (v *Vault) SealKeys() (int, error) {
-	state, err := v.client.SealStatus()
+	state, err := v.client.Client.SealStatus()
 	if err != nil {
 		return 0, err
 	}
@@ -15,7 +15,7 @@ func (v *Vault) SealKeys() (int, error) {
 }
 
 func (v *Vault) Seal() (bool, error) {
-	err := v.client.Seal()
+	err := v.client.Client.Seal()
 	ret := err == nil
 	if vaultkv.IsErrStandby(err) {
 		err = nil
@@ -25,13 +25,13 @@ func (v *Vault) Seal() (bool, error) {
 }
 
 func (v *Vault) Unseal(keys []string) error {
-	err := v.client.ResetUnseal()
+	err := v.client.Client.ResetUnseal()
 	if err != nil {
 		return err
 	}
 
 	for _, key := range keys {
-		state, err := v.client.Unseal(key)
+		state, err := v.client.Client.Unseal(key)
 		if err != nil {
 			return err
 		}

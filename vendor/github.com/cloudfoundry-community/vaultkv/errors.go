@@ -139,6 +139,23 @@ func IsTransport(err error) bool {
 	return is
 }
 
+//ErrKVUnsupported is returned by the KV object when the user requests an
+// operation that cannot be performed by the actual version of the KV backend
+// that the KV object is abstracting
+type ErrKVUnsupported struct {
+	message string
+}
+
+func (e *ErrKVUnsupported) Error() string {
+	return e.message
+}
+
+//IsErrKVUnsupported returns true if the error is an ErrKVUnsupported
+func IsErrKVUnsupported(err error) bool {
+	_, is := err.(*ErrKVUnsupported)
+	return is
+}
+
 type apiError struct {
 	Errors []string `json:"errors"`
 }
