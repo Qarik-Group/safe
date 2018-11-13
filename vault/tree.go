@@ -1,7 +1,6 @@
 package vault
 
 import (
-	"fmt"
 	"runtime"
 	"sort"
 	"strings"
@@ -306,8 +305,6 @@ func (t *Tree) pruneEmpty() {
 			t.Branches[i].pruneEmpty()
 			if t.Type == TreeTypeRoot || t.Branches[i].Type == TreeTypeKey || len(t.Branches[i].Branches) > 0 {
 				newBranches = append(newBranches, t.Branches[i])
-			} else {
-				fmt.Printf("Pruning %s\n", t.Branches[i].Name)
 			}
 		} else {
 			newBranches = append(newBranches, t.Branches[i])

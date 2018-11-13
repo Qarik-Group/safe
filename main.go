@@ -129,11 +129,13 @@ type Options struct {
 
 	Paths struct {
 		ShowKeys bool `cli:"--keys"`
+		Quick    bool `cli:"-q, --quick"`
 	} `cli:"paths"`
 
 	Tree struct {
 		ShowKeys   bool `cli:"--keys"`
 		HideLeaves bool `cli:"-d, --hide-leaves"`
+		Quick      bool `cli:"-q, --quick"`
 	} `cli:"tree"`
 
 	Target struct {
@@ -1490,13 +1492,17 @@ paths/keys.
 
 	r.Dispatch("tree", &Help{
 		Summary: "Print a tree listing of one or more paths",
-		Usage:   "safe tree [-d|--keys] [PATH ...]",
+		Usage:   "safe tree [-d|-q|--keys] [PATH ...]",
 		Type:    NonDestructiveCommand,
 		Description: `
 Walks the hierarchy of secrets stored underneath a given path, listing all
-reachable name/value pairs.  If '-d' is given, only the containing folders
-will be printed; this more concise output can be useful when you're trying
-to get your bearings.
+reachable name/value pairs and displaying them in a tree format.  If '-d' is
+given, only the containing folders will be printed; this more concise output
+can be useful when you're trying to get your bearings. If '-q' is given, safe
+will not inspect each key in a v1 v2 mount backend to see if it has been marked
+as deleted. This may cause keys which would 404 in an attempt to read them to
+appear in the tree, but is often considerably quicker for larger vaults. This
+flag does nothing for kv v1 mounts.
 `,
 	}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
@@ -1511,7 +1517,8 @@ to get your bearings.
 		v := connect(true)
 		for i, path := range args {
 			tree, err := v.ConstructTree(path, vault.TreeOpts{
-				FetchKeys: opt.Tree.ShowKeys,
+				FetchKeys:        opt.Tree.ShowKeys,
+				AllowDeletedKeys: opt.Tree.Quick,
 			})
 
 			if err != nil {
@@ -1536,23 +1543,25 @@ to get your bearings.
 
 	r.Dispatch("paths", &Help{
 		Summary: "Print all of the known paths, one per line",
-		Usage:   "safe paths [--keys] PATH [PATH ...]",
+		Usage:   "safe paths [-q|--keys] PATH [PATH ...]",
 		Type:    NonDestructiveCommand,
-	}, func(command string, args ...string) error {
+		Description: `
+Walks the hierarchy of secrets stored underneath a given path, listing all
+reachable name/value pairs and displaying them in a list. If '-q' is given,
+safe will not inspect each key in a v1 v2 mount backend to see if it has been
+marked as deleted. This may cause keys which would 404 in an attempt to read
+them to appear in the tree, but is often considerably quicker for larger
+vaults. This flag does nothing for kv v1 mounts.
+`}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
 		if len(args) < 1 {
 			args = append(args, "secret")
 		}
 		v := connect(true)
 		for _, path := range args {
-			//tree, err := v.Tree(path, vault.TreeOptions{
-			//UseANSI:      false,
-			//ShowKeys:     opt.Paths.ShowKeys,
-			//StripSlashes: true,
-			//})
-
 			tree, err := v.ConstructTree(path, vault.TreeOpts{
-				FetchKeys: opt.Paths.ShowKeys,
+				FetchKeys:        opt.Paths.ShowKeys,
+				AllowDeletedKeys: opt.Paths.Quick,
 			})
 			if err != nil {
 				return err
