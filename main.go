@@ -125,6 +125,7 @@ type Options struct {
 
 	List struct {
 		Single bool `cli:"-1"`
+		Quick  bool `cli:"-q, --quick"`
 	} `cli:"ls"`
 
 	Paths struct {
@@ -1423,10 +1424,11 @@ paths/keys.
 
 	r.Dispatch("ls", &Help{
 		Summary: "Print the keys and sub-directories at one or more paths",
-		Usage:   "safe ls [-1] [PATH ...]",
+		Usage:   "safe ls [-1|-q] [PATH ...]",
 		Type:    NonDestructiveCommand,
 		Description: `
-  Specifying the -1 flag will print one result per line.
+	Specifying the -1 flag will print one result per line.  
+	Specifying the -q flag will show secrets which have been marked as deleted.
 `,
 	}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
@@ -1477,12 +1479,39 @@ paths/keys.
 				}
 			}
 
-			sort.Strings(paths)
+			filteredPaths := []string{}
+			if !opt.List.Quick {
+				for i := range paths {
+					if !strings.HasSuffix(paths[i], "/") {
+						fullpath := path + "/" + paths[i]
+						mountVersion, err := v.MountVersion(fullpath)
+						if err != nil {
+							return err
+						}
+
+						if mountVersion == 2 {
+							_, err := v.Read(fullpath)
+							if err != nil {
+								if vault.IsNotFound(err) {
+									continue
+								}
+
+								return err
+							}
+						}
+					}
+					filteredPaths = append(filteredPaths, paths[i])
+				}
+			} else {
+				filteredPaths = paths
+			}
+
+			sort.Strings(filteredPaths)
 
 			if len(args) != 1 {
 				fmt.Printf("@C{%s}:\n", path)
 			}
-			display(paths)
+			display(filteredPaths)
 			if len(args) != 1 {
 				fmt.Printf("\n")
 			}
