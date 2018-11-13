@@ -146,6 +146,7 @@ type Options struct {
 	Delete struct {
 		Recurse bool `cli:"-R, -r, --recurse"`
 		Force   bool `cli:"-f, --force"`
+		Destroy bool `cli:"-d, --destroy"`
 	} `cli:"delete, rm"`
 
 	Export struct{} `cli:"export"`
@@ -1509,7 +1510,10 @@ to get your bearings.
 		r2, _ := regexp.Compile("^└")
 		v := connect(true)
 		for i, path := range args {
-			tree, err := v.ConstructTree(path, opt.Tree.ShowKeys)
+			tree, err := v.ConstructTree(path, vault.TreeOpts{
+				FetchKeys: opt.Tree.ShowKeys,
+			})
+
 			if err != nil {
 				return err
 			}
@@ -1547,7 +1551,9 @@ to get your bearings.
 			//StripSlashes: true,
 			//})
 
-			tree, err := v.ConstructTree(path, opt.Paths.ShowKeys)
+			tree, err := v.ConstructTree(path, vault.TreeOpts{
+				FetchKeys: opt.Paths.ShowKeys,
+			})
 			if err != nil {
 				return err
 			}
@@ -1576,11 +1582,11 @@ to get your bearings.
 				if !opt.Delete.Force && !recursively("delete", path) {
 					continue /* skip this command, process the next */
 				}
-				if err := v.DeleteTree(path); err != nil && !(vault.IsNotFound(err) && opt.Delete.Force) {
+				if err := v.DeleteTree(path, false); err != nil && !(vault.IsNotFound(err) && opt.Delete.Force) {
 					return err
 				}
 			} else {
-				if err := v.Delete(path); err != nil && !(vault.IsNotFound(err) && opt.Delete.Force) {
+				if err := v.Delete(path, false); err != nil && !(vault.IsNotFound(err) && opt.Delete.Force) {
 					return err
 				}
 			}
@@ -1600,7 +1606,9 @@ to get your bearings.
 		v := connect(true)
 		data := make(map[string]map[string]string)
 		for _, path := range args {
-			tree, err := v.ConstructTree(path, true)
+			tree, err := v.ConstructTree(path, vault.TreeOpts{
+				FetchKeys: true,
+			})
 			if err != nil {
 				return err
 			}

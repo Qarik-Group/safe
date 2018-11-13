@@ -1,7 +1,9 @@
 package vault
 
 import (
+	"fmt"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 
@@ -73,6 +75,7 @@ func (w *workQueue) Pop() (ret *workOrder, done bool) {
 func (w *workQueue) Push(o *workOrder) {
 	w.c.L.Lock()
 	if w.closed {
+		w.c.L.Unlock()
 		return
 	}
 
@@ -106,10 +109,11 @@ type workOrder struct {
 }
 
 type Tree struct {
-	Name     string
-	Branches []Tree
-	Type     int
-	Value    string
+	Name         string
+	Branches     []Tree
+	Type         int
+	MountVersion uint
+	Value        string
 }
 
 const (
@@ -128,7 +132,14 @@ const (
 	opTypeMounts
 )
 
-func (v *Vault) ConstructTree(path string, fetchKeys bool) (*Tree, error) {
+type TreeOpts struct {
+	//For tree/paths --keys
+	FetchKeys bool
+	//v2 backends show deleted keys in the list
+	AllowDeletedKeys bool
+}
+
+func (v *Vault) ConstructTree(path string, opts TreeOpts) (*Tree, error) {
 	//3 is what I found to be the fastest in testing. Seems dumb but... works, I guess.
 	numWorkers := runtime.NumCPU()
 	if numWorkers < 1 {
@@ -150,19 +161,22 @@ func (v *Vault) ConstructTree(path string, fetchKeys bool) (*Tree, error) {
 	if err != nil {
 		return nil, err
 	}
-
+	operation := ret.getWorkType(opts)
+	if err != nil {
+		return nil, err
+	}
 	queue.Push(&workOrder{
 		insertInto: &ret.Branches,
 		path:       ret.Name,
-		operation:  ret.getWorkType(fetchKeys),
+		operation:  operation,
 	})
 
 	for i := 0; i < numWorkers; i++ {
 		worker := treeWorker{
-			vault:     v,
-			orders:    queue,
-			errors:    errChan,
-			fetchKeys: fetchKeys,
+			vault:  v,
+			orders: queue,
+			errors: errChan,
+			opts:   opts,
 		}
 		go worker.work()
 	}
@@ -175,6 +189,17 @@ func (v *Vault) ConstructTree(path string, fetchKeys bool) (*Tree, error) {
 			err = thisErr
 		}
 	}
+
+	if !opts.AllowDeletedKeys {
+		ret.pruneEmpty()
+	}
+
+	if !opts.FetchKeys {
+		ret.pruneKeys()
+	}
+
+	//Make the output deterministic
+	ret.sort()
 
 	return ret, err
 }
@@ -210,8 +235,9 @@ func (t *Tree) populateNodeType(v *Vault) error {
 	return nil
 }
 
-func (t *Tree) getWorkType(fetchKeys bool) int {
+func (t *Tree) getWorkType(opts TreeOpts) int {
 	var ret int
+
 	switch t.Type {
 	case TreeTypeRoot:
 		ret = opTypeMounts
@@ -220,13 +246,13 @@ func (t *Tree) getWorkType(fetchKeys bool) int {
 		ret = opTypeList
 	case TreeTypeDirAndSecret:
 		ret = opTypeList
-		if fetchKeys {
+		if opts.FetchKeys || (t.MountVersion == 2 && !opts.AllowDeletedKeys) {
 			ret = opTypeListAndGet
 		}
 	case TreeTypeSecret:
 		ret = opTypeNone
-		if fetchKeys {
-			ret = opTypeGet
+		if opts.FetchKeys || (t.MountVersion == 2 && !opts.AllowDeletedKeys) {
+			ret = opTypeListAndGet
 		}
 	}
 
@@ -271,6 +297,43 @@ func (t *Tree) DepthFirstMap(fn func(*Tree)) {
 		fn(&t.Branches[i])
 		t.Branches[i].DepthFirstMap(fn)
 	}
+}
+
+func (t *Tree) pruneEmpty() {
+	newBranches := []Tree{}
+	for i := range t.Branches {
+		if t.Branches[i].MountVersion == 2 {
+			t.Branches[i].pruneEmpty()
+			if t.Type == TreeTypeRoot || t.Branches[i].Type == TreeTypeKey || len(t.Branches[i].Branches) > 0 {
+				newBranches = append(newBranches, t.Branches[i])
+			} else {
+				fmt.Printf("Pruning %s\n", t.Branches[i].Name)
+			}
+		} else {
+			newBranches = append(newBranches, t.Branches[i])
+		}
+	}
+
+	t.Branches = newBranches
+}
+
+func (t *Tree) pruneKeys() {
+	newBranches := []Tree{}
+	for i := range t.Branches {
+		t.Branches[i].pruneKeys()
+		if t.Branches[i].Type != TreeTypeKey {
+			newBranches = append(newBranches, t.Branches[i])
+		}
+	}
+
+	t.Branches = newBranches
+}
+
+func (t *Tree) sort() {
+	for i := range t.Branches {
+		t.Branches[i].sort()
+	}
+	sort.Slice(t.Branches, func(i, j int) bool { return t.Branches[i].Name < t.Branches[j].Name })
 }
 
 func (t Tree) Draw(color bool, leaves bool) string {
@@ -318,17 +381,25 @@ func (t Tree) printableTree(color, leaves, root bool) *tree.Node {
 }
 
 type treeWorker struct {
-	vault     *Vault
-	orders    *workQueue
-	errors    chan error
-	fetchKeys bool
+	vault  *Vault
+	orders *workQueue
+	errors chan error
+	opts   TreeOpts
 }
 
 func (w *treeWorker) work() {
+	var err error
+	handleError := func() {
+		w.orders.Close()
+		w.errors <- err
+		//This will decrement the awake counter and exit
+		//Doesn't actually Pop because we called Close
+		w.orders.Pop()
+	}
+
 	order, done := w.orders.Pop()
 	for !done {
 		var answer []Tree
-		var err error
 		switch order.operation {
 		case opTypeList:
 			answer, err = w.workList(order.path)
@@ -342,17 +413,24 @@ func (w *treeWorker) work() {
 
 			var listAnswer []Tree
 			listAnswer, err = w.workList(order.path + "/")
+			if err != nil {
+				break
+			}
 			answer = append(answer, listAnswer...)
 		case opTypeMounts:
 			answer, err = w.workMounts()
 		}
-
 		if err != nil {
-			w.orders.Close()
-			w.errors <- err
-			//This will decrement the awake counter and exit
-			w.orders.Pop()
+			handleError()
 			return
+		}
+
+		for i := range answer {
+			answer[i].MountVersion, err = w.vault.MountVersion(answer[i].Name)
+			if err != nil {
+				handleError()
+				return
+			}
 		}
 
 		*order.insertInto = append(*order.insertInto, answer...)
@@ -360,7 +438,7 @@ func (w *treeWorker) work() {
 			w.orders.Push(&workOrder{
 				insertInto: &(*order.insertInto)[i].Branches,
 				path:       node.Name,
-				operation:  node.getWorkType(w.fetchKeys),
+				operation:  node.getWorkType(w.opts),
 			})
 		}
 
@@ -373,6 +451,11 @@ func (w *treeWorker) work() {
 func (w *treeWorker) workList(path string) ([]Tree, error) {
 	list, err := w.vault.List(path)
 	if err != nil {
+		//This is most likely because a mount exists but has no secrets in it yet
+		// Probably shouldn't err
+		if IsNotFound(err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 
@@ -392,8 +475,18 @@ func (w *treeWorker) workList(path string) ([]Tree, error) {
 }
 
 func (w *treeWorker) workGet(path string) ([]Tree, error) {
+	mountVersion, err := w.vault.MountVersion(path)
+	if err != nil {
+		return nil, err
+	}
+
 	s, err := w.vault.Read(path)
 	if err != nil {
+		//List returns keys marked as deleted in KV v2 backends, such
+		// that Get would 404 on trying to follow the listing.
+		if IsNotFound(err) && mountVersion == 2 {
+			return nil, nil
+		}
 		return nil, err
 	}
 

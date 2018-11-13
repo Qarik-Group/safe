@@ -1,5 +1,7 @@
 package vaultkv
 
+import "sync"
+
 //KV provides an abstraction to the Vault tree which makes dealing with
 // the potential of both KV v1 and KV v2 backends easier to work with.
 // KV v1 backends are exposed through this interface much like KV v2
@@ -11,6 +13,7 @@ type KV struct {
 	Client *Client
 	//Map from mount name to [true if version 2. False otherwise]
 	mounts map[string]kvMount
+	lock   sync.RWMutex
 }
 
 type kvMount interface {
@@ -194,7 +197,16 @@ func (v *Client) NewKV() *KV {
 
 func (k *KV) mountForPath(path string) (ret kvMount, err error) {
 	mount, _ := SplitMount(path)
+	k.lock.RLock()
 	ret, found := k.mounts[mount]
+	k.lock.RUnlock()
+	if found {
+		return
+	}
+
+	k.lock.Lock()
+	defer k.lock.Unlock()
+	ret, found = k.mounts[mount]
 	if found {
 		return
 	}

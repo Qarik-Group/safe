@@ -86,6 +86,11 @@ func NewVault(u, token string, auth bool) (*Vault, error) {
 	}, nil
 }
 
+func (v *Vault) MountVersion(path string) (uint, error) {
+	path = Canonicalize(path)
+	return v.client.MountVersion(path)
+}
+
 func shouldDebug() bool {
 	d := strings.ToLower(os.Getenv("DEBUG"))
 	return d != "" && d != "false" && d != "0" && d != "no" && d != "off"
@@ -159,10 +164,8 @@ func (v *Vault) Write(path string, s *Secret) error {
 		return fmt.Errorf("cannot write to paths in /path:key notation")
 	}
 
-	//If our secret has become empty (through key deletion, most likely)
-	// make sure to clean up the secret
 	if s.Empty() {
-		return v.deleteIfPresent(path)
+		return v.deleteIfPresent(path, false)
 	}
 
 	_, err := v.client.Set(path, s.data, nil)
@@ -200,24 +203,24 @@ func (v *Vault) verifySecretExists(path string) error {
 
 //DeleteTree recursively deletes the leaf nodes beneath the given root until
 //the root has no children, and then deletes that.
-func (v *Vault) DeleteTree(root string) error {
+func (v *Vault) DeleteTree(root string, destroy bool) error {
 	root = Canonicalize(root)
 
-	tree, err := v.ConstructTree(root, false)
+	tree, err := v.ConstructTree(root, TreeOpts{FetchKeys: false})
 	if err != nil {
 		return err
 	}
 	for _, path := range tree.Paths() {
-		err = v.deleteEntireSecret(path)
+		err = v.deleteEntireSecret(path, destroy)
 		if err != nil {
 			return err
 		}
 	}
-	return v.deleteEntireSecret(root)
+	return v.deleteEntireSecret(root, destroy)
 }
 
 // Delete removes the secret or key stored at the specified path.
-func (v *Vault) Delete(path string) error {
+func (v *Vault) Delete(path string, destroy bool) error {
 	path = Canonicalize(path)
 
 	if err := v.verifySecretExists(path); err != nil {
@@ -226,37 +229,17 @@ func (v *Vault) Delete(path string) error {
 
 	secret, key := ParsePath(path)
 	if key == "" {
-		return v.deleteEntireSecret(path)
+		return v.deleteEntireSecret(path, destroy)
 	}
 	return v.deleteSpecificKey(secret, key)
 }
 
-func (v *Vault) deleteEntireSecret(path string) error {
-	toDelete := []uint{}
-	mv, err := v.client.MountVersion(path)
-	if err != nil {
-		return err
+func (v *Vault) deleteEntireSecret(path string, destroy bool) error {
+	if destroy {
+		return v.client.DestroyAll(path)
 	}
 
-	if mv == 1 {
-		toDelete = []uint{1}
-	} else {
-		versions, err := v.client.Versions(path)
-		if err != nil {
-			//Deleting a secret that doesn't exist should not err
-			if vaultkv.IsNotFound(err) {
-				return nil
-			}
-
-			return err
-		}
-
-		for i := range versions {
-			toDelete = append(toDelete, versions[i].Version)
-		}
-	}
-
-	return v.client.Delete(path, &vaultkv.KVDeleteOpts{Versions: toDelete, V1Destroy: true})
+	return v.client.Delete(path, &vaultkv.KVDeleteOpts{Versions: nil, V1Destroy: true})
 }
 
 func (v *Vault) deleteSpecificKey(path, key string) error {
@@ -274,7 +257,7 @@ func (v *Vault) deleteSpecificKey(path, key string) error {
 
 //deleteIfPresent first checks to see if there is a Secret at the given path,
 // and if so, it deletes it. Otherwise, no error is thrown
-func (v *Vault) deleteIfPresent(path string) error {
+func (v *Vault) deleteIfPresent(path string, destroy bool) error {
 	secretpath, _ := ParsePath(path)
 	if _, err := v.Read(secretpath); err != nil {
 		if IsSecretNotFound(err) {
@@ -283,7 +266,7 @@ func (v *Vault) deleteIfPresent(path string) error {
 		return err
 	}
 
-	err := v.Delete(path)
+	err := v.Delete(path, destroy)
 	if IsKeyNotFound(err) {
 		return nil
 	}
@@ -375,12 +358,12 @@ func (v *Vault) MoveCopyTree(oldRoot, newRoot string, f func(string, string, boo
 	oldRoot = Canonicalize(oldRoot)
 	newRoot = Canonicalize(newRoot)
 
-	tree, err := v.ConstructTree(oldRoot, false)
+	tree, err := v.ConstructTree(oldRoot, TreeOpts{FetchKeys: false})
 	if err != nil {
 		return err
 	}
 	if skipIfExists {
-		newTree, err := v.ConstructTree(newRoot, false)
+		newTree, err := v.ConstructTree(newRoot, TreeOpts{FetchKeys: false})
 		if err != nil && !IsNotFound(err) {
 			return err
 		}
@@ -434,7 +417,7 @@ func (v *Vault) Move(oldpath, newpath string, skipIfExists bool, quiet bool) err
 	if err != nil {
 		return err
 	}
-	err = v.Delete(oldpath)
+	err = v.Delete(oldpath, false)
 	if err != nil {
 		return err
 	}
