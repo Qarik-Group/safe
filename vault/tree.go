@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/cloudfoundry-community/vaultkv"
 	"github.com/jhunt/go-ansi"
 	"github.com/starkandwayne/goutils/tree"
 )
@@ -102,9 +103,8 @@ func (w *workQueue) Close() {
 }
 
 type workOrder struct {
-	insertInto *[]Tree
-	path       string
-	operation  int
+	insertInto *Tree
+	operation  uint
 }
 
 type Tree struct {
@@ -113,6 +113,8 @@ type Tree struct {
 	Type         int
 	MountVersion uint
 	Value        string
+	Version      uint
+	Deleted      bool
 }
 
 const (
@@ -121,21 +123,24 @@ const (
 	TreeTypeSecret
 	TreeTypeDirAndSecret
 	TreeTypeKey
+	TreeTypeVersion
 )
 
 const (
-	opTypeNone int = iota
-	opTypeList
+	opTypeNone uint = 0
+	opTypeList      = 1 << (iota - 1)
 	opTypeGet
-	opTypeListAndGet
 	opTypeMounts
+	opTypeVersions
 )
 
 type TreeOpts struct {
 	//For tree/paths --keys
 	FetchKeys bool
-	//v2 backends show deleted keys in the list
+	//v2 backends show deleted keys in the list by default
 	AllowDeletedKeys bool
+	//Whether to get all versions of keys in the tree
+	FetchAllVersions bool
 }
 
 func (v *Vault) ConstructTree(path string, opts TreeOpts) (*Tree, error) {
@@ -165,8 +170,7 @@ func (v *Vault) ConstructTree(path string, opts TreeOpts) (*Tree, error) {
 		return nil, err
 	}
 	queue.Push(&workOrder{
-		insertInto: &ret.Branches,
-		path:       ret.Name,
+		insertInto: ret,
 		operation:  operation,
 	})
 
@@ -212,7 +216,7 @@ func (t *Tree) populateNodeType(v *Vault) error {
 		return nil
 	}
 
-	_, err := v.Read(t.Name)
+	_, err := v.Read(t.Name, 0)
 	if err != nil {
 		if !IsNotFound(err) {
 			return err
@@ -234,8 +238,8 @@ func (t *Tree) populateNodeType(v *Vault) error {
 	return nil
 }
 
-func (t *Tree) getWorkType(opts TreeOpts) int {
-	var ret int
+func (t *Tree) getWorkType(opts TreeOpts) uint {
+	ret := opTypeNone
 
 	switch t.Type {
 	case TreeTypeRoot:
@@ -246,13 +250,16 @@ func (t *Tree) getWorkType(opts TreeOpts) int {
 	case TreeTypeDirAndSecret:
 		ret = opTypeList
 		if opts.FetchKeys || (t.MountVersion == 2 && !opts.AllowDeletedKeys) {
-			ret = opTypeListAndGet
+			ret = opTypeList | opTypeGet
 		}
 	case TreeTypeSecret:
-		ret = opTypeNone
-		if opts.FetchKeys || (t.MountVersion == 2 && !opts.AllowDeletedKeys) {
-			ret = opTypeListAndGet
+		if opts.FetchAllVersions {
+			ret = opTypeVersions
+		} else if opts.FetchKeys || (t.MountVersion == 2 && !opts.AllowDeletedKeys) {
+			ret = opTypeGet
 		}
+	case TreeTypeVersion:
+		ret = opTypeGet
 	}
 
 	return ret
@@ -330,7 +337,12 @@ func (t *Tree) sort() {
 	for i := range t.Branches {
 		t.Branches[i].sort()
 	}
-	sort.Slice(t.Branches, func(i, j int) bool { return t.Branches[i].Name < t.Branches[j].Name })
+	sort.Slice(t.Branches, func(i, j int) bool {
+		if t.Branches[i].Name == t.Branches[j].Name {
+			return t.Branches[i].Version < t.Branches[j].Version
+		}
+		return t.Branches[i].Name < t.Branches[j].Name
+	})
 }
 
 func (t Tree) Draw(color bool, leaves bool) string {
@@ -397,25 +409,24 @@ func (w *treeWorker) work() {
 	order, done := w.orders.Pop()
 	for !done {
 		var answer []Tree
-		switch order.operation {
-		case opTypeList:
-			answer, err = w.workList(order.path)
-		case opTypeGet:
-			answer, err = w.workGet(order.path)
-		case opTypeListAndGet:
-			answer, err = w.workGet(order.path)
+		var toAppend []Tree
+		for _, op := range []struct {
+			code uint
+			fn   func(Tree) ([]Tree, error)
+		}{
+			{opTypeGet, w.workGet},
+			{opTypeList, w.workList},
+			{opTypeMounts, w.workMounts},
+			{opTypeVersions, w.workVersions},
+		} {
+			if order.operation&op.code == 0 {
+				continue
+			}
+			toAppend, err = op.fn(*order.insertInto)
 			if err != nil {
 				break
 			}
-
-			var listAnswer []Tree
-			listAnswer, err = w.workList(order.path + "/")
-			if err != nil {
-				break
-			}
-			answer = append(answer, listAnswer...)
-		case opTypeMounts:
-			answer, err = w.workMounts()
+			answer = append(answer, toAppend...)
 		}
 		if err != nil {
 			handleError()
@@ -430,11 +441,10 @@ func (w *treeWorker) work() {
 			}
 		}
 
-		*order.insertInto = append(*order.insertInto, answer...)
-		for i, node := range *order.insertInto {
+		order.insertInto.Branches = append(order.insertInto.Branches, answer...)
+		for i, node := range order.insertInto.Branches {
 			w.orders.Push(&workOrder{
-				insertInto: &(*order.insertInto)[i].Branches,
-				path:       node.Name,
+				insertInto: &(order.insertInto.Branches[i]),
 				operation:  node.getWorkType(w.opts),
 			})
 		}
@@ -445,7 +455,8 @@ func (w *treeWorker) work() {
 	w.errors <- nil
 }
 
-func (w *treeWorker) workList(path string) ([]Tree, error) {
+func (w *treeWorker) workList(t Tree) ([]Tree, error) {
+	path := strings.TrimSuffix(t.Name, "/")
 	list, err := w.vault.List(path)
 	if err != nil {
 		//This is most likely because a mount exists but has no secrets in it yet
@@ -471,13 +482,22 @@ func (w *treeWorker) workList(path string) ([]Tree, error) {
 	return ret, nil
 }
 
-func (w *treeWorker) workGet(path string) ([]Tree, error) {
+func (w *treeWorker) workGet(t Tree) ([]Tree, error) {
+	path := t.Name
 	mountVersion, err := w.vault.MountVersion(path)
 	if err != nil {
 		return nil, err
 	}
 
-	s, err := w.vault.Read(path)
+	toggleDelete := t.Deleted && w.opts.FetchAllVersions
+	if toggleDelete {
+		err = w.vault.Undelete(path, t.Version)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	s, err := w.vault.Read(path, t.Version)
 	if err != nil {
 		//List returns keys marked as deleted in KV v2 backends, such
 		// that Get would 404 on trying to follow the listing.
@@ -487,19 +507,34 @@ func (w *treeWorker) workGet(path string) ([]Tree, error) {
 		return nil, err
 	}
 
+	if toggleDelete {
+		w.vault.client.Delete(path, &vaultkv.KVDeleteOpts{Versions: []uint{t.Version}})
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	version := t.Version
+	//If this is a v1 backend, the parent would be a secret node without a version
+	if version == 0 {
+		version = 1
+	}
+
 	ret := []Tree{}
 	for _, key := range s.Keys() {
 		ret = append(ret, Tree{
-			Name:  path + ":" + key,
-			Type:  TreeTypeKey,
-			Value: s.data[key],
+			Name:    path + ":" + key,
+			Type:    TreeTypeKey,
+			Value:   string(s.data[key]),
+			Version: version,
+			Deleted: t.Deleted,
 		})
 	}
 
 	return ret, nil
 }
 
-func (w *treeWorker) workMounts() ([]Tree, error) {
+func (w *treeWorker) workMounts(_ Tree) ([]Tree, error) {
 	generics, err := w.vault.Mounts("generic")
 	if err != nil {
 		return nil, err
@@ -520,5 +555,27 @@ func (w *treeWorker) workMounts() ([]Tree, error) {
 		})
 	}
 
+	return ret, nil
+}
+
+func (w *treeWorker) workVersions(t Tree) ([]Tree, error) {
+	path := t.Name
+	versions, err := w.vault.Versions(path)
+	if err != nil {
+		return nil, err
+	}
+
+	ret := []Tree{}
+	for i := range versions {
+		if versions[i].Destroyed {
+			continue
+		}
+		ret = append(ret, Tree{
+			Name:    t.Name,
+			Type:    TreeTypeVersion,
+			Version: versions[i].Version,
+			Deleted: versions[i].Deleted,
+		})
+	}
 	return ret, nil
 }

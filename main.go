@@ -22,6 +22,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cloudfoundry-community/vaultkv"
 	fmt "github.com/jhunt/go-ansi"
 	"github.com/jhunt/go-cli"
 	env "github.com/jhunt/go-envirotron"
@@ -1131,7 +1132,7 @@ written to STDOUT instead of STDERR to make it easier to consume.
 		}
 		v := connect(true)
 		path, args := args[0], args[1:]
-		s, err := v.Read(path)
+		s, err := v.Read(path, 0)
 		if err != nil && !vault.IsNotFound(err) {
 			return err
 		}
@@ -1263,7 +1264,7 @@ certificate validation failure, etc. occur, they will be printed as well.
 			r.ExitWithUsage("exists")
 		}
 		v := connect(true)
-		_, err := v.Read(args[0])
+		_, err := v.Read(args[0], 0)
 		if err != nil {
 			if vault.IsNotFound(err) {
 				os.Exit(1)
@@ -1320,7 +1321,7 @@ paths/keys.
 
 		// Recessive case of one path
 		if len(args) == 1 && !opt.Get.Yaml {
-			s, err := v.Read(args[0])
+			s, err := v.Read(args[0], 0)
 			if err != nil {
 				return err
 			}
@@ -1348,7 +1349,7 @@ paths/keys.
 		missing_keys := make(map[string][]string)
 		for _, path := range args {
 			p, k := vault.ParsePath(path)
-			s, err := v.Read(path)
+			s, err := v.Read(path, 0)
 
 			// Check if the desired path[:key] is found
 			if err != nil {
@@ -1490,7 +1491,7 @@ paths/keys.
 						}
 
 						if mountVersion == 2 {
-							_, err := v.Read(fullpath)
+							_, err := v.Read(fullpath, 0)
 							if err != nil {
 								if vault.IsNotFound(err) {
 									continue
@@ -1642,30 +1643,53 @@ vaults. This flag does nothing for kv v1 mounts.
 			args = append(args, "secret")
 		}
 		v := connect(true)
-		data := make(map[string]map[string]string)
-		for _, path := range args {
+		toExport := exportFormat{ExportVersion: 2, Data: map[string]map[uint]exportVersion{}, RequiresVersioning: map[string]bool{}}
+
+		v2Export := func(path string) error {
 			tree, err := v.ConstructTree(path, vault.TreeOpts{
-				FetchKeys: true,
+				FetchKeys:        true,
+				FetchAllVersions: true,
 			})
 			if err != nil {
 				return err
 			}
 
 			tree.DepthFirstMap(func(node *vault.Tree) {
-				if node.Type == vault.TreeTypeSecret || node.Type == vault.TreeTypeDirAndSecret {
-					toAdd := make(map[string]string, len(node.Branches))
-					for i := range node.Branches {
-						if node.Branches[i].Type == vault.TreeTypeKey {
-							toAdd[node.Branches[i].Basename()] = node.Branches[i].Value
+				if node.Type == vault.TreeTypeKey {
+					secretPath, secretKey := vault.ParsePath(node.Name)
+					if toExport.Data[secretPath] == nil {
+						toExport.Data[secretPath] = map[uint]exportVersion{}
+					} else {
+						//If we're here, then this secret may have multiple versions
+						mount, _ := vaultkv.SplitMount(secretPath)
+						if !toExport.RequiresVersioning[mount] {
+							for k, _ := range toExport.Data[secretPath] {
+								if k != node.Version {
+									toExport.RequiresVersioning[mount] = true
+								}
+							}
 						}
 					}
 
-					data[node.Name] = toAdd
+					if toExport.Data[secretPath][node.Version].Value == nil {
+						toExport.Data[secretPath][node.Version] = exportVersion{Deleted: node.Deleted, Value: map[string]string{}}
+					}
+
+					toExport.Data[secretPath][node.Version].Value[secretKey] = node.Value
 				}
 			})
+			return nil
 		}
 
-		b, err := json.Marshal(data)
+		for _, path := range args {
+			err := v2Export(path)
+			if err != nil {
+				return err
+			}
+		}
+
+		//Wrap export in array so that older versions of safe don't try to import this improperly.
+		b, err := json.Marshal(&[]exportFormat{toExport})
 		if err != nil {
 			return err
 		}
@@ -1684,8 +1708,6 @@ vaults. This flag does nothing for kv v1 mounts.
 		if err != nil {
 			return err
 		}
-		var data map[string]*vault.Secret
-		err = json.Unmarshal(b, &data)
 		if err != nil {
 			return err
 		}
@@ -1696,14 +1718,153 @@ vaults. This flag does nothing for kv v1 mounts.
 		}
 
 		v := connect(true)
-		for path, s := range data {
-			err = v.Write(path, s)
+
+		type importFunc func([]byte) error
+
+		v1Import := func(input []byte) error {
+			var data map[string]*vault.Secret
+			err := json.Unmarshal(input, &data)
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(os.Stderr, "wrote %s\n", path)
+			for path, s := range data {
+				err = v.Write(path, s)
+				if err != nil {
+					return err
+				}
+				fmt.Fprintf(os.Stderr, "wrote %s\n", path)
+			}
+			return nil
 		}
-		return nil
+
+		v2Import := func(input []byte) error {
+			var unmarshalTarget []exportFormat
+			err := json.Unmarshal(input, &unmarshalTarget)
+			if err != nil {
+				return fmt.Errorf("Could not interpret export file: %s", err)
+			}
+
+			if len(unmarshalTarget) != 1 {
+				return fmt.Errorf("Improperly formatted export file")
+			}
+
+			data := unmarshalTarget[0]
+
+			//Verify that the mounts that require versioning actually support it. We
+			//can't really detect if v1 mounts exist at this stage unless we assume
+			//the token given has mount listing privileges. Not a big deal, because
+			//it will become very apparent once we start trying to put secrets in it
+			for mount, needsVersioning := range data.RequiresVersioning {
+				if needsVersioning {
+					mountVersion, err := v.MountVersion(mount)
+					if err != nil {
+						return fmt.Errorf("Could not determine existing mount version: %s", err)
+					}
+
+					if mountVersion != 2 {
+						return fmt.Errorf("Export for mount `%s' has secrets with multiple versions, but the mount either\n"+
+							"does not exist or does not support versioning", mount)
+					}
+				}
+			}
+
+			type importVersion struct {
+				Destroy  bool
+				Contents exportVersion
+			}
+			//Put the secrets in the places, writing the versions in the correct order and deleting/destroying secrets that
+			// need to be deleted/destroyed.
+			for path, versions := range data.Data {
+				//Destroyed versions are not put into the export, so we need to identify the gaps in version numbers
+				var versionsExpanded []importVersion
+				for number, metadata := range versions {
+					for int(number) > len(versionsExpanded) {
+						versionsExpanded = append(versionsExpanded, importVersion{Destroy: true})
+					}
+
+					if !versionsExpanded[number-1].Destroy {
+						return fmt.Errorf("Malformed export file - duplicate version for path `%s`", path)
+					}
+
+					versionsExpanded[number-1] = importVersion{Destroy: false, Contents: metadata}
+				}
+
+				err = v.Client().DestroyAll(path)
+				if err != nil {
+					return fmt.Errorf("Problem when clearing existing secret: %s", err)
+				}
+
+				toDelete := []uint{}
+				toDestroy := []uint{}
+				for i := range versionsExpanded {
+					toWrite := map[string]string{}
+					shouldDelete, shouldDestroy := false, false
+					if versionsExpanded[i].Destroy {
+						//...then this is a version that was destroyed (or we're not tracking it)
+						// We can emulate this by just putting garbage in and destroying it
+						shouldDestroy = true
+						toWrite["SHOULD_DESTROY"] = "SHOULD_DESTROY"
+					} else {
+						if versionsExpanded[i].Contents.Deleted {
+							shouldDelete = true
+						}
+						for k, v := range versionsExpanded[i].Contents.Value {
+							toWrite[k] = v
+						}
+					}
+					setMeta, err := v.Client().Set(path, toWrite, nil)
+					if err != nil {
+						return fmt.Errorf("Could not write secret to path `%s': %s", path, err)
+					}
+
+					if shouldDelete {
+						toDelete = append(toDelete, setMeta.Version)
+					}
+					if shouldDestroy {
+						toDestroy = append(toDestroy, setMeta.Version)
+					}
+				}
+
+				if len(toDelete) > 0 {
+					err = v.DeleteVersions(path, toDelete)
+					if err != nil {
+						return fmt.Errorf("Error when marking versions %v deleted for path `%s': %s", toDelete, path, err)
+					}
+				}
+
+				if len(toDestroy) > 0 {
+					err = v.DestroyVersions(path, toDestroy)
+					if err != nil {
+						return fmt.Errorf("Error when destroying versions %v for path `%s': %s", toDestroy, path, err)
+					}
+				}
+			}
+			return nil
+		}
+
+		var fn importFunc
+		//determine which version of the export format this is
+		var typeTest interface{}
+		json.Unmarshal(b, &typeTest)
+		switch v := typeTest.(type) {
+		case map[string]interface{}:
+			fn = v1Import
+		case []interface{}:
+			if len(v) == 1 {
+				if meta, isMap := (v[0]).(map[string]interface{}); isMap {
+					version, isFloat64 := meta["export_version"].(float64)
+					if isFloat64 && version == 2 {
+						fn = v2Import
+					}
+				}
+			}
+		}
+
+		if fn == nil {
+			return fmt.Errorf("Unknown export file format - aborting")
+		}
+
+		return fn(b)
 	})
 
 	r.Dispatch("move", &Help{
@@ -1811,7 +1972,7 @@ The following options are recognized:
 				}
 				args = args[2:]
 			}
-			s, err := v.Read(path)
+			s, err := v.Read(path, 0)
 			if err != nil && !vault.IsNotFound(err) {
 				return err
 			}
@@ -1860,7 +2021,7 @@ public key, formatted for use in an SSH authorized_keys file, under 'public'.
 
 		v := connect(true)
 		for _, path := range args {
-			s, err := v.Read(path)
+			s, err := v.Read(path, 0)
 			if err != nil && !vault.IsNotFound(err) {
 				return err
 			}
@@ -1907,7 +2068,7 @@ be PEM-encoded.
 
 		v := connect(true)
 		for _, path := range args {
-			s, err := v.Read(path)
+			s, err := v.Read(path, 0)
 			if err != nil && !vault.IsNotFound(err) {
 				return err
 			}
@@ -1952,7 +2113,7 @@ NBITS defaults to 2048.
 
 		path := args[0]
 		v := connect(true)
-		s, err := v.Read(path)
+		s, err := v.Read(path, 0)
 		if err != nil && !vault.IsNotFound(err) {
 			return err
 		}
@@ -2128,7 +2289,7 @@ Supported formats:
 		newKey := args[3]
 
 		v := connect(true)
-		s, err := v.Read(path)
+		s, err := v.Read(path, 0)
 		if err != nil {
 			return err
 		}
@@ -2334,7 +2495,7 @@ The following options are recognized:
 
 		var ca *vault.X509
 		if opt.X509.Validate.SignedBy != "" {
-			s, err := v.Read(opt.X509.Validate.SignedBy)
+			s, err := v.Read(opt.X509.Validate.SignedBy, 0)
 			if err != nil {
 				return err
 			}
@@ -2345,7 +2506,7 @@ The following options are recognized:
 		}
 
 		for _, path := range args {
-			s, err := v.Read(path)
+			s, err := v.Read(path, 0)
 			if err != nil {
 				return err
 			}
@@ -2476,7 +2637,7 @@ The following options are recognized:
 
 		v := connect(true)
 		if opt.SkipIfExists {
-			if _, err := v.Read(args[0]); err == nil {
+			if _, err := v.Read(args[0], 0); err == nil {
 				if !opt.Quiet {
 					fmt.Fprintf(os.Stderr, "@R{Cowardly refusing to create a new certificate in} @C{%s} @R{as it is already present in Vault}\n", args[0])
 				}
@@ -2487,7 +2648,7 @@ The following options are recognized:
 		}
 
 		if opt.X509.Issue.SignedBy != "" {
-			secret, err := v.Read(opt.X509.Issue.SignedBy)
+			secret, err := v.Read(opt.X509.Issue.SignedBy, 0)
 			if err != nil {
 				return err
 			}
@@ -2583,7 +2744,7 @@ The following options are recognized:
 		v := connect(true)
 
 		/* find the Certificate that we want to renew */
-		s, err := v.Read(args[0])
+		s, err := v.Read(args[0], 0)
 		if err != nil {
 			return err
 		}
@@ -2695,7 +2856,7 @@ The following options are recognized:
 		v := connect(true)
 
 		/* find the Certificate that we want to renew */
-		s, err := v.Read(args[0])
+		s, err := v.Read(args[0], 0)
 		if err != nil {
 			return err
 		}
@@ -2770,7 +2931,7 @@ The following options are recognized:
 		v := connect(true)
 
 		/* find the CA */
-		s, err := v.Read(opt.X509.Revoke.SignedBy)
+		s, err := v.Read(opt.X509.Revoke.SignedBy, 0)
 		if err != nil {
 			return err
 		}
@@ -2780,7 +2941,7 @@ The following options are recognized:
 		}
 
 		/* find the Certificate */
-		s, err = v.Read(args[0])
+		s, err = v.Read(args[0], 0)
 		if err != nil {
 			return err
 		}
@@ -2828,7 +2989,7 @@ prints out information about a certificate, including:
 		v := connect(true)
 
 		for _, path := range args {
-			s, err := v.Read(args[0])
+			s, err := v.Read(args[0], 0)
 			if err != nil {
 				return err
 			}
@@ -3011,7 +3172,7 @@ Currently, only the --renew option is supported, and it is required:
 		rc.Apply(opt.UseTarget)
 		v := connect(true)
 
-		s, err := v.Read(args[0])
+		s, err := v.Read(args[0], 0)
 		if err != nil {
 			return err
 		}
@@ -3105,4 +3266,18 @@ func recursively(cmd string, args ...string) bool {
 	y := prompt.Normal("Recursively @R{%s} @C{%s} @Y{(y/n)} ", cmd, strings.Join(args, " "))
 	y = strings.TrimSpace(y)
 	return y == "y" || y == "yes"
+}
+
+//For versions of safe 0.10+
+// Older versions just use a map[string]map[string]string
+type exportFormat struct {
+	ExportVersion uint `json:"export_version"`
+	//map from path string to map from version number to version info
+	Data               map[string]map[uint]exportVersion `json:"data"`
+	RequiresVersioning map[string]bool                   `json:"requires_versioning"`
+}
+
+type exportVersion struct {
+	Deleted bool              `json:"deleted,omitempty"`
+	Value   map[string]string `json:"value"`
 }

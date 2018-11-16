@@ -86,9 +86,18 @@ func NewVault(u, token string, auth bool) (*Vault, error) {
 	}, nil
 }
 
+func (v *Vault) Client() *vaultkv.KV {
+	return v.client
+}
+
 func (v *Vault) MountVersion(path string) (uint, error) {
 	path = Canonicalize(path)
 	return v.client.MountVersion(path)
+}
+
+func (v *Vault) Versions(path string) ([]vaultkv.KVVersion, error) {
+	path = Canonicalize(path)
+	return v.client.Versions(path)
 }
 
 func shouldDebug() bool {
@@ -114,7 +123,7 @@ func (v *Vault) Curl(method string, path string, body []byte) (*http.Response, e
 // Read checks the Vault for a Secret at the specified path, and returns it.
 // If there is nothing at that path, a nil *Secret will be returned, with no
 // error.
-func (v *Vault) Read(path string) (secret *Secret, err error) {
+func (v *Vault) Read(path string, version uint) (secret *Secret, err error) {
 	path = Canonicalize(path)
 	//split at last colon, if present
 	path, key := ParsePath(path)
@@ -122,7 +131,7 @@ func (v *Vault) Read(path string) (secret *Secret, err error) {
 	secret = NewSecret()
 
 	raw := map[string]string{}
-	_, err = v.client.Get(path, &raw, nil)
+	_, err = v.client.Get(path, &raw, &vaultkv.KVGetOpts{Version: version})
 	if err != nil {
 		if vaultkv.IsNotFound(err) {
 			err = NewSecretNotFoundError(path)
@@ -192,7 +201,7 @@ func (v *Vault) errIfFolder(path, message string, args ...interface{}) error {
 func (v *Vault) verifySecretExists(path string) error {
 	path = Canonicalize(path)
 
-	_, err := v.Read(path)
+	_, err := v.Read(path, 0)
 	if err != nil && IsNotFound(err) { //if this was not a leaf node (secret)...
 		if folderErr := v.errIfFolder(path, "`%s` points to a folder, not a secret", path); folderErr != nil {
 			return folderErr
@@ -243,7 +252,7 @@ func (v *Vault) deleteEntireSecret(path string, destroy bool) error {
 }
 
 func (v *Vault) deleteSpecificKey(path, key string) error {
-	secret, err := v.Read(path)
+	secret, err := v.Read(path, 0)
 	if err != nil {
 		return err
 	}
@@ -255,11 +264,27 @@ func (v *Vault) deleteSpecificKey(path, key string) error {
 	return err
 }
 
+//DeleteVersions marks the given versions of the given secret as deleted for
+// a v2 backend or actually deletes it for a v1 backend.
+func (v *Vault) DeleteVersions(path string, versions []uint) error {
+	return v.client.Delete(path, &vaultkv.KVDeleteOpts{Versions: versions, V1Destroy: true})
+}
+
+//DestroyVersions irrevocably destroys the given versions of the given secret
+func (v *Vault) DestroyVersions(path string, versions []uint) error {
+	return v.client.Destroy(path, versions)
+}
+
+func (v *Vault) Undelete(path string, version uint) error {
+	path = Canonicalize(path)
+	return v.client.Undelete(path, []uint{version})
+}
+
 //deleteIfPresent first checks to see if there is a Secret at the given path,
 // and if so, it deletes it. Otherwise, no error is thrown
 func (v *Vault) deleteIfPresent(path string, destroy bool) error {
 	secretpath, _ := ParsePath(path)
-	if _, err := v.Read(secretpath); err != nil {
+	if _, err := v.Read(secretpath, 0); err != nil {
 		if IsSecretNotFound(err) {
 			return nil
 		}
@@ -286,7 +311,7 @@ func (v *Vault) Copy(oldpath, newpath string, skipIfExists bool, quiet bool) err
 		return err
 	}
 	if skipIfExists {
-		if _, err := v.Read(newpath); err == nil {
+		if _, err := v.Read(newpath, 0); err == nil {
 			if !quiet {
 				ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to copy/move data into} @C{%s}@R{, as that would clobber existing data}\n", newpath)
 			}
@@ -297,7 +322,7 @@ func (v *Vault) Copy(oldpath, newpath string, skipIfExists bool, quiet bool) err
 	}
 
 	srcPath, _ := ParsePath(oldpath)
-	srcSecret, err := v.Read(srcPath)
+	srcSecret, err := v.Read(srcPath, 0)
 	if err != nil {
 		return err
 	}
@@ -317,7 +342,7 @@ func (v *Vault) copyEntireSecret(oldpath, newpath string, src *Secret, skipIfExi
 		return fmt.Errorf("Cannot move full secret `%s` into specific key `%s`", oldpath, newpath)
 	}
 	if skipIfExists {
-		if _, err := v.Read(newpath); err == nil {
+		if _, err := v.Read(newpath, 0); err == nil {
 			return ansi.Errorf("@R{BUG: Tried to replace} @C{%s} @R{with} @C{%s}@R{, but it already exists}", oldpath, newpath)
 		} else if !IsNotFound(err) {
 			return err
@@ -337,7 +362,7 @@ func (v *Vault) copyKey(oldpath, newpath string, src *Secret, skipIfExists bool)
 	if dstKey == "" {
 		dstKey = srcKey
 	}
-	dst, err := v.Read(dstPath)
+	dst, err := v.Read(dstPath, 0)
 	if err != nil {
 		if !IsSecretNotFound(err) {
 			return err
@@ -396,7 +421,7 @@ func (v *Vault) MoveCopyTree(oldRoot, newRoot string, f func(string, string, boo
 		}
 	}
 
-	if _, err := v.Read(oldRoot); !IsNotFound(err) { // run through a copy unless we successfully got a 404 from this node
+	if _, err := v.Read(oldRoot, 0); !IsNotFound(err) { // run through a copy unless we successfully got a 404 from this node
 		return f(oldRoot, newRoot, skipIfExists, quiet)
 	}
 	return nil
@@ -655,7 +680,7 @@ func (v *Vault) CreateSignedCertificate(backend, role, path string, params CertO
 					return fmt.Errorf("Invalid data type for serial_number %s:\n%v\n", params.CN, data)
 				}
 
-				secret, err := v.Read(path)
+				secret, err := v.Read(path, 0)
 				if err != nil && !IsNotFound(err) {
 					return err
 				}
@@ -693,7 +718,7 @@ func (v *Vault) RevokeCertificate(backend, serial string) error {
 	}
 
 	if strings.ContainsRune(serial, '/') {
-		secret, err := v.Read(serial)
+		secret, err := v.Read(serial, 0)
 		if err != nil {
 			return err
 		}
@@ -740,7 +765,7 @@ func (v *Vault) FindSigningCA(cert *X509, certPath string, signPath string) (*X5
 		if certPath == signPath {
 			return cert, certPath, nil
 		} else {
-			s, err := v.Read(signPath)
+			s, err := v.Read(signPath, 0)
 			if err != nil {
 				return nil, "", err
 			}
@@ -763,7 +788,7 @@ func (v *Vault) FindSigningCA(cert *X509, certPath string, signPath string) (*X5
 		} else {
 			// Lets see if we can guess the CA if none was provided
 			caPath := certPath[0:strings.LastIndex(certPath, "/")] + "/ca"
-			s, err := v.Read(caPath)
+			s, err := v.Read(caPath, 0)
 			if err != nil {
 				return nil, "", fmt.Errorf("No signing authority provided and no 'ca' sibling found")
 			}
