@@ -124,6 +124,8 @@ type Options struct {
 		Yaml     bool `cli:"--yaml"`
 	} `cli:"get, read, cat"`
 
+	Versions struct{} `cli:"versions,revisions"`
+
 	List struct {
 		Single bool `cli:"-1"`
 		Quick  bool `cli:"-q, --quick"`
@@ -148,22 +150,27 @@ type Options struct {
 	} `cli:"target"`
 
 	Delete struct {
-		Recurse bool `cli:"-R, -r, --recurse"`
-		Force   bool `cli:"-f, --force"`
-		Destroy bool `cli:"-d, --destroy"`
+		Recurse  bool   `cli:"-R, -r, --recurse"`
+		Force    bool   `cli:"-f, --force"`
+		Destroy  bool   `cli:"-d, --destroy"`
+		Revision []uint `cli:"-x, --revision"`
 	} `cli:"delete, rm"`
 
 	Export struct{} `cli:"export"`
 	Import struct{} `cli:"import"`
 
 	Move struct {
-		Recurse bool `cli:"-R, -r, --recurse"`
-		Force   bool `cli:"-f, --force"`
+		Recurse   bool `cli:"-R, -r, --recurse"`
+		Force     bool `cli:"-f, --force"`
+		Deep      bool `cli:"-d, --deep"`
+		OnlyAlive bool `cli:"-a, --all"`
 	} `cli:"move, rename, mv"`
 
 	Copy struct {
-		Recurse bool `cli:"-R, -r, --recurse"`
-		Force   bool `cli:"-f, --force"`
+		Recurse   bool `cli:"-R, -r, --recurse"`
+		Force     bool `cli:"-f, --force"`
+		Deep      bool `cli:"-d, --deep"`
+		OnlyAlive bool `cli:"-a, --all"`
 	} `cli:"copy, cp"`
 
 	Gen struct {
@@ -1423,6 +1430,51 @@ paths/keys.
 		return nil
 	})
 
+	r.Dispatch("versions", &Help{
+		Summary: "Print information about the versions of the one or more paths",
+		Usage:   "safe versions PATH [PATHS...]",
+		Type:    NonDestructiveCommand,
+	}, func(command string, args ...string) error {
+		rc.Apply(opt.UseTarget)
+		v := connect(true)
+
+		if len(args) == 0 {
+			return fmt.Errorf("No paths given")
+		}
+
+		for i := range args {
+			versions, err := v.Client().Versions(args[i])
+			if vaultkv.IsNotFound(err) {
+				err = vault.NewSecretNotFoundError(args[i])
+			}
+			if err != nil {
+				return err
+			}
+
+			if len(args) > 1 {
+				fmt.Printf("@B{%s}:\n", args[i])
+			}
+
+			for j := range versions {
+				//Destroyed needs to be first because things can come back as both deleted _and_ destroyed.
+				// destroyed is objectively more interesting.
+				if versions[j].Destroyed {
+					fmt.Printf("%d\t@R{destroyed}\n", versions[j].Version)
+				} else if versions[j].Deleted {
+					fmt.Printf("%d\t@Y{deleted}\n", versions[j].Version)
+				} else {
+					fmt.Printf("%d\t@G{alive}\n", versions[j].Version)
+				}
+			}
+
+			if len(args) > 1 && i != len(args)-1 {
+				fmt.Printf("\n")
+			}
+		}
+
+		return nil
+	})
+
 	r.Dispatch("ls", &Help{
 		Summary: "Print the keys and sub-directories at one or more paths",
 		Usage:   "safe ls [-1|-q] [PATH ...]",
@@ -1546,7 +1598,7 @@ flag does nothing for kv v1 mounts.
 		r2, _ := regexp.Compile("^└")
 		v := connect(true)
 		for i, path := range args {
-			tree, err := v.ConstructTree(path, vault.TreeOpts{
+			secrets, err := v.ConstructSecrets(path, vault.TreeOpts{
 				FetchKeys:        opt.Tree.ShowKeys,
 				AllowDeletedKeys: opt.Tree.Quick,
 			})
@@ -1554,7 +1606,7 @@ flag does nothing for kv v1 mounts.
 			if err != nil {
 				return err
 			}
-			lines := strings.Split(tree.Draw(fmt.CanColorize(os.Stdout), !opt.Tree.HideLeaves), "\n")
+			lines := strings.Split(secrets.Draw(path, fmt.CanColorize(os.Stdout), !opt.Tree.HideLeaves), "\n")
 			if i > 0 {
 				lines = lines[1:] // Drop root '.' from subsequent paths
 			}
@@ -1589,7 +1641,7 @@ vaults. This flag does nothing for kv v1 mounts.
 		}
 		v := connect(true)
 		for _, path := range args {
-			tree, err := v.ConstructTree(path, vault.TreeOpts{
+			secrets, err := v.ConstructSecrets(path, vault.TreeOpts{
 				FetchKeys:        opt.Paths.ShowKeys,
 				AllowDeletedKeys: opt.Paths.Quick,
 			})
@@ -1597,7 +1649,7 @@ vaults. This flag does nothing for kv v1 mounts.
 				return err
 			}
 
-			fmt.Printf(strings.Join(tree.Paths(), "\n"))
+			fmt.Printf(strings.Join(secrets.Paths(), "\n"))
 			fmt.Printf("\n")
 		}
 		return nil
@@ -1605,28 +1657,53 @@ vaults. This flag does nothing for kv v1 mounts.
 
 	r.Dispatch("delete", &Help{
 		Summary: "Remove one or more path from the Vault",
-		Usage:   "safe delete [-rf] PATH [PATH ...]",
+		Usage:   "safe delete [-rfdx] PATH [PATH ...]",
 		Type:    DestructiveCommand,
-	}, func(command string, args ...string) error {
+		Description: `
+Specifying --revision (-x) will delete/destroy only the specified version(s).
+The -x flag can be specified multiple times to apply to multiple versions.
+`}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
 
 		if len(args) < 1 {
 			r.ExitWithUsage("delete")
 		}
 		v := connect(true)
+
+		verb := "delete"
+		if opt.Delete.Destroy {
+			verb = "destroy"
+		}
+		if opt.Delete.Recurse && len(opt.Delete.Revision) > 0 {
+			return fmt.Errorf("Refusing to recursively %s all of a specific revision", verb)
+		}
+
 		for _, path := range args {
 			_, key := vault.ParsePath(path)
+
 			//Ignore -r if path has a key because that makes no sense
 			if opt.Delete.Recurse && key == "" {
-				if !opt.Delete.Force && !recursively("delete", path) {
+				if !opt.Delete.Force && !recursively(verb, path) {
 					continue /* skip this command, process the next */
 				}
-				if err := v.DeleteTree(path, false); err != nil && !(vault.IsNotFound(err) && opt.Delete.Force) {
+				if err := v.DeleteTree(path, opt.Delete.Destroy); err != nil && !(vault.IsNotFound(err) && opt.Delete.Force) {
 					return err
 				}
 			} else {
-				if err := v.Delete(path, false); err != nil && !(vault.IsNotFound(err) && opt.Delete.Force) {
-					return err
+				if len(opt.Delete.Revision) > 0 {
+					var err error
+					if opt.Delete.Destroy {
+						err = v.DestroyVersions(path, opt.Delete.Revision)
+					} else {
+						err = v.DeleteVersions(path, opt.Delete.Revision)
+					}
+					if err != nil {
+						return err
+					}
+				} else {
+					if err := v.Delete(path, opt.Delete.Destroy); err != nil && !(vault.IsNotFound(err) && opt.Delete.Force) {
+						return err
+					}
 				}
 			}
 		}
@@ -1643,41 +1720,47 @@ vaults. This flag does nothing for kv v1 mounts.
 			args = append(args, "secret")
 		}
 		v := connect(true)
-		toExport := exportFormat{ExportVersion: 2, Data: map[string]map[uint]exportVersion{}, RequiresVersioning: map[string]bool{}}
+		toExport := exportFormat{ExportVersion: 2, Data: map[string]exportSecret{}, RequiresVersioning: map[string]bool{}}
 
 		v2Export := func(path string) error {
-			tree, err := v.ConstructTree(path, vault.TreeOpts{
+			secrets, err := v.ConstructSecrets(path, vault.TreeOpts{
 				FetchKeys:        true,
 				FetchAllVersions: true,
+				//TODO: Make this configurable
+				GetDeletedVersions: true,
 			})
 			if err != nil {
 				return err
 			}
 
-			tree.DepthFirstMap(func(node *vault.Tree) {
-				if node.Type == vault.TreeTypeKey {
-					secretPath, secretKey := vault.ParsePath(node.Name)
-					if toExport.Data[secretPath] == nil {
-						toExport.Data[secretPath] = map[uint]exportVersion{}
-					} else {
-						//If we're here, then this secret may have multiple versions
-						mount, _ := vaultkv.SplitMount(secretPath)
-						if !toExport.RequiresVersioning[mount] {
-							for k, _ := range toExport.Data[secretPath] {
-								if k != node.Version {
-									toExport.RequiresVersioning[mount] = true
-								}
-							}
-						}
-					}
-
-					if toExport.Data[secretPath][node.Version].Value == nil {
-						toExport.Data[secretPath][node.Version] = exportVersion{Deleted: node.Deleted, Value: map[string]string{}}
-					}
-
-					toExport.Data[secretPath][node.Version].Value[secretKey] = node.Value
+			for _, secret := range secrets {
+				if len(secret.Versions) > 1 {
+					mount, _ := vaultkv.SplitMount(secret.Path)
+					toExport.RequiresVersioning[mount] = true
 				}
-			})
+
+				thisSecret := exportSecret{FirstVersion: secret.Versions[0].Number}
+				//We want to omit the `first` key in the json if it's 1
+				if thisSecret.FirstVersion == 1 {
+					thisSecret.FirstVersion = 0
+				}
+
+				for _, version := range secret.Versions {
+					thisVersion := exportVersion{
+						Deleted:   version.State == vault.SecretStateDeleted,
+						Destroyed: version.State == vault.SecretStateDestroyed,
+						Value:     map[string]string{},
+					}
+
+					for _, key := range version.Data.Keys() {
+						thisVersion.Value[key] = version.Data.Get(key)
+					}
+
+					thisSecret.Versions = append(thisSecret.Versions, thisVersion)
+				}
+
+				toExport.Data[secret.Path] = thisSecret
+			}
 			return nil
 		}
 
@@ -1768,77 +1851,44 @@ vaults. This flag does nothing for kv v1 mounts.
 				}
 			}
 
-			type importVersion struct {
-				Destroy  bool
-				Contents exportVersion
-			}
 			//Put the secrets in the places, writing the versions in the correct order and deleting/destroying secrets that
 			// need to be deleted/destroyed.
-			for path, versions := range data.Data {
-				//Destroyed versions are not put into the export, so we need to identify the gaps in version numbers
-				var versionsExpanded []importVersion
-				for number, metadata := range versions {
-					for int(number) > len(versionsExpanded) {
-						versionsExpanded = append(versionsExpanded, importVersion{Destroy: true})
-					}
-
-					if !versionsExpanded[number-1].Destroy {
-						return fmt.Errorf("Malformed export file - duplicate version for path `%s`", path)
-					}
-
-					versionsExpanded[number-1] = importVersion{Destroy: false, Contents: metadata}
+			for path, secret := range data.Data {
+				s := vault.SecretEntry{
+					Path: path,
 				}
 
-				err = v.Client().DestroyAll(path)
+				firstVersion := secret.FirstVersion
+				if firstVersion == 0 {
+					firstVersion = 1
+				}
+				for i := range secret.Versions {
+					state := vault.SecretStateAlive
+					if secret.Versions[i].Destroyed {
+						state = vault.SecretStateDestroyed
+					} else if secret.Versions[i].Deleted {
+						state = vault.SecretStateDeleted
+					}
+					data := vault.NewSecret()
+					for k, v := range secret.Versions[i].Value {
+						data.Set(k, v, false)
+					}
+					s.Versions = append(s.Versions, vault.SecretVersion{
+						Number: firstVersion + uint(i),
+						State:  state,
+						Data:   data,
+					})
+				}
+
+				err := s.Copy(v, s.Path, vault.TreeCopyOpts{
+					Clear: true,
+					Pad:   true,
+				})
 				if err != nil {
-					return fmt.Errorf("Problem when clearing existing secret: %s", err)
-				}
-
-				toDelete := []uint{}
-				toDestroy := []uint{}
-				for i := range versionsExpanded {
-					toWrite := map[string]string{}
-					shouldDelete, shouldDestroy := false, false
-					if versionsExpanded[i].Destroy {
-						//...then this is a version that was destroyed (or we're not tracking it)
-						// We can emulate this by just putting garbage in and destroying it
-						shouldDestroy = true
-						toWrite["SHOULD_DESTROY"] = "SHOULD_DESTROY"
-					} else {
-						if versionsExpanded[i].Contents.Deleted {
-							shouldDelete = true
-						}
-						for k, v := range versionsExpanded[i].Contents.Value {
-							toWrite[k] = v
-						}
-					}
-					setMeta, err := v.Client().Set(path, toWrite, nil)
-					if err != nil {
-						return fmt.Errorf("Could not write secret to path `%s': %s", path, err)
-					}
-
-					if shouldDelete {
-						toDelete = append(toDelete, setMeta.Version)
-					}
-					if shouldDestroy {
-						toDestroy = append(toDestroy, setMeta.Version)
-					}
-				}
-
-				if len(toDelete) > 0 {
-					err = v.DeleteVersions(path, toDelete)
-					if err != nil {
-						return fmt.Errorf("Error when marking versions %v deleted for path `%s': %s", toDelete, path, err)
-					}
-				}
-
-				if len(toDestroy) > 0 {
-					err = v.DestroyVersions(path, toDestroy)
-					if err != nil {
-						return fmt.Errorf("Error when destroying versions %v for path `%s': %s", toDestroy, path, err)
-					}
+					return err
 				}
 			}
+
 			return nil
 		}
 
@@ -1869,9 +1919,13 @@ vaults. This flag does nothing for kv v1 mounts.
 
 	r.Dispatch("move", &Help{
 		Summary: "Move a secret from one path to another",
-		Usage:   "safe move [-rf] OLD-PATH NEW-PATH",
+		Usage:   "safe move [-rfda] OLD-PATH NEW-PATH",
 		Type:    DestructiveCommand,
-	}, func(command string, args ...string) error {
+		Description: `
+Specifying the --deep (-d) flag will cause all living versions to be grabbed from the source
+and overwrite all versions of the secret at the destination. The --all (-a) flag will cause
+all versions to be grabbed from the destination regardless of deletion/destruction status.
+`}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
 		if len(args) != 2 {
 			r.ExitWithUsage("move")
@@ -1885,11 +1939,13 @@ vaults. This flag does nothing for kv v1 mounts.
 			if !opt.Move.Force && !recursively("move", args...) {
 				return nil /* skip this command, process the next */
 			}
-			if err := v.MoveCopyTree(args[0], args[1], v.Move, opt.SkipIfExists, opt.Quiet); err != nil && !(vault.IsNotFound(err) && opt.Move.Force) {
+			err := v.MoveCopyTree(args[0], args[1], v.Move, vault.MoveCopyOpts{SkipIfExists: opt.SkipIfExists, Quiet: opt.Quiet})
+			if err != nil && !(vault.IsNotFound(err) && opt.Move.Force) {
 				return err
 			}
 		} else {
-			if err := v.Move(args[0], args[1], opt.SkipIfExists, opt.Quiet); err != nil && !(vault.IsNotFound(err) && opt.Move.Force) {
+			err := v.Move(args[0], args[1], vault.MoveCopyOpts{SkipIfExists: opt.SkipIfExists, Quiet: opt.Quiet})
+			if err != nil && !(vault.IsNotFound(err) && opt.Move.Force) {
 				return err
 			}
 		}
@@ -1898,9 +1954,13 @@ vaults. This flag does nothing for kv v1 mounts.
 
 	r.Dispatch("copy", &Help{
 		Summary: "Copy a secret from one path to another",
-		Usage:   "safe copy [-Rf] OLD-PATH NEW-PATH",
+		Usage:   "safe copy [-rfda] OLD-PATH NEW-PATH",
 		Type:    DestructiveCommand,
-	}, func(command string, args ...string) error {
+		Description: `
+Specifying the --deep (-d) flag will cause all living versions to be grabbed from the source
+and overwrite all versions of the secret at the destination. The --all (-a) flag will cause
+all versions to be grabbed from the destination regardless of deletion/destruction status.
+`}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
 
 		if len(args) != 2 {
@@ -1914,11 +1974,13 @@ vaults. This flag does nothing for kv v1 mounts.
 			if !opt.Copy.Force && !recursively("copy", args...) {
 				return nil /* skip this command, process the next */
 			}
-			if err := v.MoveCopyTree(args[0], args[1], v.Copy, opt.SkipIfExists, opt.Quiet); err != nil && !(vault.IsNotFound(err) && opt.Copy.Force) {
+			err := v.MoveCopyTree(args[0], args[1], v.Copy, vault.MoveCopyOpts{SkipIfExists: opt.SkipIfExists, Quiet: opt.Quiet})
+			if err != nil && !(vault.IsNotFound(err) && opt.Copy.Force) {
 				return err
 			}
 		} else {
-			if err := v.Copy(args[0], args[1], opt.SkipIfExists, opt.Quiet); err != nil && !(vault.IsNotFound(err) && opt.Copy.Force) {
+			err := v.Copy(args[0], args[1], vault.MoveCopyOpts{SkipIfExists: opt.SkipIfExists, Quiet: opt.Quiet})
+			if err != nil && !(vault.IsNotFound(err) && opt.Copy.Force) {
 				return err
 			}
 		}
@@ -3273,11 +3335,17 @@ func recursively(cmd string, args ...string) bool {
 type exportFormat struct {
 	ExportVersion uint `json:"export_version"`
 	//map from path string to map from version number to version info
-	Data               map[string]map[uint]exportVersion `json:"data"`
-	RequiresVersioning map[string]bool                   `json:"requires_versioning"`
+	Data               map[string]exportSecret `json:"data"`
+	RequiresVersioning map[string]bool         `json:"requires_versioning"`
+}
+
+type exportSecret struct {
+	FirstVersion uint            `json:"first,omitempty"`
+	Versions     []exportVersion `json:"versions"`
 }
 
 type exportVersion struct {
-	Deleted bool              `json:"deleted,omitempty"`
-	Value   map[string]string `json:"value"`
+	Deleted   bool              `json:"deleted,omitempty"`
+	Destroyed bool              `json:"destroyed,omitempty"`
+	Value     map[string]string `json:"value,omitempty"`
 }

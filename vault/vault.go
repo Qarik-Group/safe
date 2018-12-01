@@ -215,11 +215,11 @@ func (v *Vault) verifySecretExists(path string) error {
 func (v *Vault) DeleteTree(root string, destroy bool) error {
 	root = Canonicalize(root)
 
-	tree, err := v.ConstructTree(root, TreeOpts{FetchKeys: false})
+	secrets, err := v.ConstructSecrets(root, TreeOpts{FetchKeys: false})
 	if err != nil {
 		return err
 	}
-	for _, path := range tree.Paths() {
+	for _, path := range secrets.Paths() {
 		err = v.deleteEntireSecret(path, destroy)
 		if err != nil {
 			return err
@@ -298,21 +298,36 @@ func (v *Vault) deleteIfPresent(path string, destroy bool) error {
 	return err
 }
 
+type MoveCopyOpts struct {
+	SkipIfExists bool
+	Quiet        bool
+	//Deep copies all versions and overwrites all versions at the target location
+	Deep bool
+	//DeletedVersions undeletes, reads, and redeletes the deleted keys
+	// It also puts in dummy destroyed keys to dest to match destroyed keys from src
+	//Makes no sense without Deep
+	DeletedVersions bool
+}
+
 // Copy copies secrets from one path to another.
 // With a secret:key specified: key -> key is good.
 // key -> no-key is okay - we assume to keep old key name
 // no-key -> key is bad. That makes no sense and the user should feel bad.
 // Returns KeyNotFoundError if there is no such specified key in the secret at oldpath
-func (v *Vault) Copy(oldpath, newpath string, skipIfExists bool, quiet bool) error {
+func (v *Vault) Copy(oldpath, newpath string, opts MoveCopyOpts) error {
 	oldpath = Canonicalize(oldpath)
 	newpath = Canonicalize(newpath)
+
+	if opts.DeletedVersions && !opts.Deep {
+		panic("Gave DeletedVersions and not Deep")
+	}
 
 	if err := v.verifySecretExists(oldpath); err != nil {
 		return err
 	}
-	if skipIfExists {
+	if opts.SkipIfExists {
 		if _, err := v.Read(newpath, 0); err == nil {
-			if !quiet {
+			if !opts.Quiet {
 				ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to copy/move data into} @C{%s}@R{, as that would clobber existing data}\n", newpath)
 			}
 			return nil
@@ -321,74 +336,92 @@ func (v *Vault) Copy(oldpath, newpath string, skipIfExists bool, quiet bool) err
 		}
 	}
 
-	srcPath, _ := ParsePath(oldpath)
+	srcPath, srcKey := ParsePath(oldpath)
 	srcSecret, err := v.Read(srcPath, 0)
 	if err != nil {
 		return err
 	}
-
-	var copyFn func(string, string, *Secret, bool) error
-	if PathHasKey(oldpath) {
-		copyFn = v.copyKey
-	} else {
-		copyFn = v.copyEntireSecret
-	}
-
-	return copyFn(oldpath, newpath, srcSecret, skipIfExists)
-}
-
-func (v *Vault) copyEntireSecret(oldpath, newpath string, src *Secret, skipIfExists bool) (err error) {
-	if PathHasKey(newpath) {
-		return fmt.Errorf("Cannot move full secret `%s` into specific key `%s`", oldpath, newpath)
-	}
-	if skipIfExists {
-		if _, err := v.Read(newpath, 0); err == nil {
-			return ansi.Errorf("@R{BUG: Tried to replace} @C{%s} @R{with} @C{%s}@R{, but it already exists}", oldpath, newpath)
-		} else if !IsNotFound(err) {
-			return err
-		}
-	}
-	return v.Write(newpath, src)
-}
-
-func (v *Vault) copyKey(oldpath, newpath string, src *Secret, skipIfExists bool) (err error) {
-	_, srcKey := ParsePath(oldpath)
-	if !src.Has(srcKey) {
-		return NewKeyNotFoundError(oldpath, srcKey)
-	}
-
 	dstPath, dstKey := ParsePath(newpath)
-	//If destination has no key, then assume to give it the same key as the src
-	if dstKey == "" {
-		dstKey = srcKey
-	}
-	dst, err := v.Read(dstPath, 0)
-	if err != nil {
-		if !IsSecretNotFound(err) {
+
+	var toWrite []*Secret
+	if srcKey != "" { //No versioning. Just a single key.
+		if opts.Deep {
+			return fmt.Errorf("Cannot take deep copy of a specific key")
+		}
+
+		if !srcSecret.Has(srcKey) {
+			return NewKeyNotFoundError(oldpath, srcKey)
+		}
+
+		if dstKey == "" {
+			dstKey = srcKey
+		}
+
+		dstOrig, err := v.Read(dstPath, 0)
+		if err != nil {
 			return err
 		}
-		dst = NewSecret() //If no secret is already at the dst, initialize a new one
+
+		toWrite = append(toWrite, dstOrig)
+		toWrite[0].Set(dstKey, srcSecret.Get(srcKey), false)
+	} else {
+		if dstKey != "" {
+			return fmt.Errorf("Cannot move full secret `%s` into specific key `%s`", oldpath, newpath)
+		}
+		if opts.Deep {
+			t, err := v.ConstructSecrets(srcPath, TreeOpts{
+				FetchKeys:          true,
+				FetchAllVersions:   true,
+				GetDeletedVersions: opts.DeletedVersions,
+				GetOnly:            true,
+			})
+
+			if err != nil {
+				return err
+			}
+
+			err = t[0].Copy(v, dstPath, TreeCopyOpts{Clear: true, Pad: true})
+			if err != nil {
+				return err
+			}
+		} else {
+			t, err := v.ConstructSecrets(srcPath, TreeOpts{
+				FetchKeys: true,
+				GetOnly:   true,
+			})
+			if err != nil {
+				return err
+			}
+			err = t[0].Copy(v, dstPath, TreeCopyOpts{})
+			if err != nil {
+				return err
+			}
+		}
 	}
-	err = dst.Set(dstKey, src.Get(srcKey), skipIfExists)
-	if err != nil {
-		return err
+
+	for i := range toWrite {
+		err := v.Write(dstPath, toWrite[i])
+		if err != nil {
+			return err
+		}
 	}
-	return v.Write(dstPath, dst)
+
+	return nil
 }
 
 //MoveCopyTree will recursively copy all nodes from the root to the new location.
 // This function will get confused about 'secret:key' syntax, so don't let those
 // get routed here - they don't make sense for a recursion anyway.
-func (v *Vault) MoveCopyTree(oldRoot, newRoot string, f func(string, string, bool, bool) error, skipIfExists bool, quiet bool) error {
+func (v *Vault) MoveCopyTree(oldRoot, newRoot string, f func(string, string, MoveCopyOpts) error, opts MoveCopyOpts) error {
 	oldRoot = Canonicalize(oldRoot)
 	newRoot = Canonicalize(newRoot)
 
-	tree, err := v.ConstructTree(oldRoot, TreeOpts{FetchKeys: false})
+	tree, err := v.ConstructSecrets(oldRoot, TreeOpts{FetchKeys: false})
 	if err != nil {
 		return err
 	}
-	if skipIfExists {
-		newTree, err := v.ConstructTree(newRoot, TreeOpts{FetchKeys: false})
+	if opts.SkipIfExists {
+		newTree, err := v.ConstructSecrets(newRoot, TreeOpts{FetchKeys: false})
 		if err != nil && !IsNotFound(err) {
 			return err
 		}
@@ -404,7 +437,7 @@ func (v *Vault) MoveCopyTree(oldRoot, newRoot string, f func(string, string, boo
 			}
 		}
 		if len(existingPaths) > 0 {
-			if !quiet {
+			if !opts.Quiet {
 				ansi.Fprintf(os.Stderr, "@R{Cowardly refusing to copy/move data into} @C{%s}@R{, as the following paths would be clobbered:}\n", newRoot)
 				for _, path := range existingPaths {
 					ansi.Fprintf(os.Stderr, "@R{- }@C{%s}\n", path)
@@ -415,14 +448,14 @@ func (v *Vault) MoveCopyTree(oldRoot, newRoot string, f func(string, string, boo
 	}
 	for _, path := range tree.Paths() {
 		newPath := strings.Replace(path, oldRoot, newRoot, 1)
-		err = f(path, newPath, skipIfExists, quiet)
+		err = f(path, newPath, opts)
 		if err != nil {
 			return err
 		}
 	}
 
 	if _, err := v.Read(oldRoot, 0); !IsNotFound(err) { // run through a copy unless we successfully got a 404 from this node
-		return f(oldRoot, newRoot, skipIfExists, quiet)
+		return f(oldRoot, newRoot, opts)
 	}
 	return nil
 }
@@ -430,7 +463,7 @@ func (v *Vault) MoveCopyTree(oldRoot, newRoot string, f func(string, string, boo
 // Move moves secrets from one path to another.
 // A move is semantically a copy and then a deletion of the original item. For
 // more information on the behavior of Move pertaining to keys, look at Copy.
-func (v *Vault) Move(oldpath, newpath string, skipIfExists bool, quiet bool) error {
+func (v *Vault) Move(oldpath, newpath string, opts MoveCopyOpts) error {
 	oldpath = Canonicalize(oldpath)
 	newpath = Canonicalize(newpath)
 
@@ -438,7 +471,7 @@ func (v *Vault) Move(oldpath, newpath string, skipIfExists bool, quiet bool) err
 		return err
 	}
 
-	err := v.Copy(oldpath, newpath, skipIfExists, quiet)
+	err := v.Copy(oldpath, newpath, opts)
 	if err != nil {
 		return err
 	}

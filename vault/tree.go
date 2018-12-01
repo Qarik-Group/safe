@@ -1,6 +1,7 @@
 package vault
 
 import (
+	"fmt"
 	"runtime"
 	"sort"
 	"strings"
@@ -103,36 +104,140 @@ func (w *workQueue) Close() {
 }
 
 type workOrder struct {
-	insertInto *Tree
-	operation  uint
+	insertInto *secretTree
+	operation  uint16
 }
 
-type Tree struct {
+type secretTree struct {
 	Name         string
-	Branches     []Tree
-	Type         int
+	Branches     []secretTree
+	Type         uint
 	MountVersion uint
 	Value        string
 	Version      uint
 	Deleted      bool
+	Destroyed    bool
+}
+
+func (v *Vault) ConstructSecrets(path string, opts TreeOpts) (s Secrets, err error) {
+	t, err := v.constructTree(path, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	ret := t.convertToSecrets()
+	ret.Sort()
+	return ret, nil
+}
+
+func PathLessThan(left, right string) bool {
+	leftSplit := strings.Split(Canonicalize(left), "/")
+	rightSplit := strings.Split(Canonicalize(right), "/")
+
+	minLen := len(leftSplit)
+	if len(rightSplit) < minLen {
+		minLen = len(rightSplit)
+	}
+
+	for i := 0; i < minLen; i++ {
+		if left[i] < right[i] {
+			return true
+		} else if left[i] > right[i] {
+			return false
+		}
+	}
+
+	if len(left) < len(right) {
+		return true
+	} else if len(left) > len(right) {
+		return false
+	}
+
+	return !strings.HasSuffix(left, "/")
+}
+
+func (s Secrets) Sort() {
+	sort.Slice(s, func(i, j int) bool { return PathLessThan(s[i].Path, s[j].Path) })
+}
+
+func (t secretTree) convertToSecrets() Secrets {
+	var ret Secrets
+	t.DepthFirstMap(func(t *secretTree) {
+		if t.Type == treeTypeSecret || t.Type == treeTypeDirAndSecret {
+			thisEntry := SecretEntry{
+				Path: Canonicalize(t.Name),
+			}
+
+			for _, version := range t.Branches {
+				if version.Type != treeTypeVersion {
+					continue
+				}
+
+				thisVersion := SecretVersion{
+					Data:   NewSecret(),
+					Number: version.Version,
+					State:  SecretStateAlive,
+				}
+
+				if version.Destroyed {
+					thisVersion.State = SecretStateDestroyed
+				} else if version.Deleted {
+					thisVersion.State = SecretStateDeleted
+				}
+
+				for _, key := range version.Branches {
+					thisVersion.Data.Set(key.Basename(), key.Value, false)
+				}
+
+				thisEntry.Versions = append(thisEntry.Versions, thisVersion)
+			}
+
+			ret = append(ret, thisEntry)
+		}
+	})
+
+	return ret
 }
 
 const (
-	TreeTypeRoot int = iota
-	TreeTypeDir
-	TreeTypeSecret
-	TreeTypeDirAndSecret
-	TreeTypeKey
-	TreeTypeVersion
+	treeTypeRoot uint = iota
+	treeTypeDir
+	treeTypeSecret
+	treeTypeDirAndSecret
+	treeTypeKey
+	treeTypeVersion
 )
 
 const (
-	opTypeNone uint = 0
-	opTypeList      = 1 << (iota - 1)
+	opTypeNone uint16 = 0
+	opTypeList        = 1 << (iota - 1)
 	opTypeGet
 	opTypeMounts
 	opTypeVersions
 )
+
+type Secrets []SecretEntry
+
+func (s *Secrets) Append(e SecretEntry) {
+	*s = append(*s, e)
+}
+
+type SecretEntry struct {
+	Path     string
+	Versions []SecretVersion
+}
+
+const (
+	SecretStateAlive uint = iota
+	SecretStateDeleted
+	SecretStateDestroyed
+)
+
+type SecretVersion struct {
+	Data   *Secret
+	Number uint
+	State  uint
+}
 
 type TreeOpts struct {
 	//For tree/paths --keys
@@ -141,9 +246,14 @@ type TreeOpts struct {
 	AllowDeletedKeys bool
 	//Whether to get all versions of keys in the tree
 	FetchAllVersions bool
+	//GetDeletedVersions tells the workers to temporarily undelete deleted
+	// keys to fetch their value, then delete them again
+	GetDeletedVersions bool
+	//Only perform gets. If the target is not a secret, then an error is returned
+	GetOnly bool
 }
 
-func (v *Vault) ConstructTree(path string, opts TreeOpts) (*Tree, error) {
+func (v *Vault) constructTree(path string, opts TreeOpts) (*secretTree, error) {
 	//3 is what I found to be the fastest in testing. Seems dumb but... works, I guess.
 	numWorkers := runtime.NumCPU()
 	if numWorkers < 1 {
@@ -160,10 +270,13 @@ func (v *Vault) ConstructTree(path string, opts TreeOpts) (*Tree, error) {
 	if path == "" {
 		path = "/"
 	}
-	ret := &Tree{Name: path}
+	ret := &secretTree{Name: path}
 	err := ret.populateNodeType(v)
 	if err != nil {
 		return nil, err
+	}
+	if opts.GetOnly && !(ret.Type == treeTypeSecret || ret.Type == treeTypeDirAndSecret) {
+		return nil, fmt.Errorf("`%s' is not a secret", path)
 	}
 	operation := ret.getWorkType(opts)
 	if err != nil {
@@ -192,17 +305,20 @@ func (v *Vault) ConstructTree(path string, opts TreeOpts) (*Tree, error) {
 			err = thisErr
 		}
 	}
-
-	if !opts.AllowDeletedKeys {
-		ret.pruneEmpty()
-	}
-
-	if !opts.FetchKeys {
-		ret.pruneKeys()
+	if err != nil {
+		return nil, err
 	}
 
 	//Make the output deterministic
 	ret.sort()
+
+	if !opts.GetDeletedVersions && !opts.AllowDeletedKeys {
+		ret.pruneDeleted()
+	}
+
+	if !opts.FetchKeys {
+		ret.pruneVersions()
+	}
 
 	return ret, err
 }
@@ -210,25 +326,35 @@ func (v *Vault) ConstructTree(path string, opts TreeOpts) (*Tree, error) {
 //Only use this for the base for the initial node of the tree. You can infer
 // type much faster than this if you know the operation that retrieved it in the
 // first place.
-func (t *Tree) populateNodeType(v *Vault) error {
+func (t *secretTree) populateNodeType(v *Vault) error {
 	if t.Name == "/" {
-		t.Type = TreeTypeRoot
+		t.Type = treeTypeRoot
 		return nil
 	}
 
-	_, err := v.Read(t.Name, 0)
+	var err error
+	t.MountVersion, err = v.MountVersion(t.Name)
+	if err != nil {
+		return err
+	}
+
+	_, err = v.Read(t.Name, 0)
 	if err != nil {
 		if !IsNotFound(err) {
 			return err
 		}
 
-		t.Type = TreeTypeDir
+		_, err := v.List(t.Name)
+		if err != nil {
+			return err
+		}
+		t.Type = treeTypeDir
 	} else {
-		t.Type = TreeTypeSecret
+		t.Type = treeTypeSecret
 
 		_, err := v.List(t.Name)
 		if err == nil {
-			t.Type = TreeTypeDirAndSecret
+			t.Type = treeTypeDirAndSecret
 		}
 		if err != nil && !IsNotFound(err) {
 			return err
@@ -238,59 +364,129 @@ func (t *Tree) populateNodeType(v *Vault) error {
 	return nil
 }
 
-func (t *Tree) getWorkType(opts TreeOpts) uint {
+func (t *secretTree) getWorkType(opts TreeOpts) uint16 {
 	ret := opTypeNone
 
 	switch t.Type {
-	case TreeTypeRoot:
+	case treeTypeRoot:
 		ret = opTypeMounts
-	case TreeTypeDir:
+	case treeTypeDir:
 		t.Name = strings.TrimRight(t.Name, "/") + "/"
 		ret = opTypeList
-	case TreeTypeDirAndSecret:
+	case treeTypeDirAndSecret:
 		ret = opTypeList
 		if opts.FetchKeys || (t.MountVersion == 2 && !opts.AllowDeletedKeys) {
-			ret = opTypeList | opTypeGet
+			ret |= opTypeVersions
 		}
-	case TreeTypeSecret:
-		if opts.FetchAllVersions {
-			ret = opTypeVersions
-		} else if opts.FetchKeys || (t.MountVersion == 2 && !opts.AllowDeletedKeys) {
+	case treeTypeSecret:
+		if opts.FetchKeys || (t.MountVersion == 2 && !opts.AllowDeletedKeys) {
+			ret |= opTypeVersions
+		}
+	case treeTypeVersion:
+		if opts.FetchKeys {
 			ret = opTypeGet
 		}
-	case TreeTypeVersion:
-		ret = opTypeGet
+	}
+
+	if opts.GetOnly {
+		ret &= (opTypeList ^ 0xFFFF)
 	}
 
 	return ret
 }
 
-func (t Tree) Paths() []string {
+func (s Secrets) Paths() []string {
 	ret := make([]string, 0, 0)
 
-	if len(t.Branches) == 0 {
-		ret = append(ret, t.Name)
-	} else {
-		for _, branch := range t.Branches {
-			ret = append(ret, branch.Paths()...)
+	for i := range s {
+		if len(s[i].Versions) > 0 {
+			for _, key := range s[i].Versions[len(s[i].Versions)-1].Data.Keys() {
+				ret = append(ret, fmt.Sprintf("%s:%s", s[i].Path, key))
+			}
+		} else {
+			ret = append(ret, s[i].Path)
 		}
 	}
 
 	return ret
 }
 
-func (t Tree) Basename() string {
+type TreeCopyOpts struct {
+	//Clear will wipe the secret in place
+	Clear bool
+	//Pad will insert dummy versions that have been truncated by Vault
+	Pad bool
+}
+
+func (s SecretEntry) Copy(v *Vault, dst string, opts TreeCopyOpts) error {
+	if opts.Clear {
+		err := v.Client().DestroyAll(dst)
+		if err != nil {
+			return fmt.Errorf("Could not wipe existing secret at path `%s': %s", dst, err)
+		}
+	}
+
+	var toDelete, toDestroy []uint
+
+	if opts.Pad && len(s.Versions) > 0 {
+		for i := uint(1); i < s.Versions[0].Number; i++ {
+			setMeta, err := v.Client().Set(dst, map[string]string{"TO_DESTROY": "TO_DESTROY"}, nil)
+			if err != nil {
+				return fmt.Errorf("Could not write secret to path `%s': %s", dst, err)
+			}
+
+			toDestroy = append(toDestroy, setMeta.Version)
+		}
+	}
+
+	for _, version := range s.Versions {
+		var toWrite map[string]string
+		if version.State == SecretStateDestroyed {
+			toWrite = map[string]string{"TO_DESTROY": "TO_DESTROY"}
+		} else {
+			toWrite = version.Data.data
+		}
+
+		setMeta, err := v.Client().Set(dst, toWrite, nil)
+		if err != nil {
+			return fmt.Errorf("Could not write secret to path `%s': %s", dst, err)
+		}
+
+		if version.State == SecretStateDestroyed {
+			toDestroy = append(toDestroy, setMeta.Version)
+		} else if version.State == SecretStateDeleted {
+			toDelete = append(toDelete, setMeta.Version)
+		}
+	}
+
+	if len(toDestroy) > 0 {
+		err := v.Client().Destroy(dst, toDestroy)
+		if err != nil {
+			return fmt.Errorf("Could not destroy versions %+v at path `%s': %s", toDestroy, dst, err)
+		}
+	}
+	if len(toDelete) > 0 {
+		err := v.DeleteVersions(dst, toDelete)
+		if err != nil {
+			return fmt.Errorf("Could not delete versions %+v at path `%s': %s", toDelete, dst, err)
+		}
+	}
+
+	return nil
+}
+
+func (t secretTree) Basename() string {
 	var ret string
 	switch t.Type {
-	case TreeTypeRoot:
+	case treeTypeRoot:
 		ret = "/"
-	case TreeTypeDir:
+	case treeTypeDir:
 		splits := strings.Split(strings.TrimRight(t.Name, "/"), "/")
 		ret = splits[len(splits)-1] + "/"
-	case TreeTypeSecret, TreeTypeDirAndSecret:
+	case treeTypeSecret, treeTypeDirAndSecret:
 		splits := strings.Split(strings.TrimRight(t.Name, "/"), "/")
 		ret = splits[len(splits)-1]
-	case TreeTypeKey:
+	case treeTypeKey:
 		splits := strings.Split(t.Name, ":")
 		ret = splits[len(splits)-1]
 	}
@@ -298,42 +494,76 @@ func (t Tree) Basename() string {
 	return ret
 }
 
-func (t *Tree) DepthFirstMap(fn func(*Tree)) {
+func (t *secretTree) DepthFirstMap(fn func(*secretTree)) {
+	fn(t)
 	for i := range t.Branches {
-		fn(&t.Branches[i])
-		t.Branches[i].DepthFirstMap(fn)
+		(&t.Branches[i]).DepthFirstMap(fn)
 	}
 }
 
-func (t *Tree) pruneEmpty() {
-	newBranches := []Tree{}
-	for i := range t.Branches {
-		if t.Branches[i].MountVersion == 2 {
-			t.Branches[i].pruneEmpty()
-			if t.Type == TreeTypeRoot || t.Branches[i].Type == TreeTypeKey || len(t.Branches[i].Branches) > 0 {
-				newBranches = append(newBranches, t.Branches[i])
+func (s SecretEntry) Basename() string {
+	parts := strings.Split(s.Path, "/")
+	return parts[len(parts)-1]
+}
+
+func (t *secretTree) pruneDeleted() bool {
+	if (t.Type == treeTypeSecret || t.Type == treeTypeDirAndSecret) && t.MountVersion == 2 {
+		var lastVersion secretTree
+		for i := len(t.Branches) - 1; i >= 0; i-- {
+			if t.Branches[i].Type == treeTypeVersion {
+				lastVersion = t.Branches[i]
+				break
 			}
-		} else {
-			newBranches = append(newBranches, t.Branches[i])
+		}
+		//If we didn't find a version, this would lead to a bug here, but that would probably
+		// be the result of a bug in and of itself
+		if lastVersion.Deleted || lastVersion.Destroyed {
+			if t.Type == treeTypeSecret {
+				return true
+			} else {
+				t.Type = treeTypeDir
+				newBranches := []secretTree{}
+				for _, branch := range t.Branches {
+					if branch.Type != treeTypeVersion {
+						newBranches = append(newBranches, branch)
+					}
+				}
+				t.Branches = newBranches
+			}
 		}
 	}
 
-	t.Branches = newBranches
-}
-
-func (t *Tree) pruneKeys() {
-	newBranches := []Tree{}
+	newBranches := []secretTree{}
 	for i := range t.Branches {
-		t.Branches[i].pruneKeys()
-		if t.Branches[i].Type != TreeTypeKey {
-			newBranches = append(newBranches, t.Branches[i])
+		if t.Branches[i].MountVersion == 2 && t.Branches[i].Type != treeTypeVersion && t.Branches[i].pruneDeleted() {
+			continue
 		}
+		newBranches = append(newBranches, t.Branches[i])
+	}
+	if len(newBranches) == 0 {
+		return true
 	}
 
 	t.Branches = newBranches
+	return false
 }
 
-func (t *Tree) sort() {
+func (t *secretTree) pruneVersions() {
+	t.DepthFirstMap(func(t *secretTree) {
+		if t.Type == treeTypeSecret || t.Type == treeTypeDirAndSecret {
+			newBranches := []secretTree{}
+			for _, branch := range t.Branches {
+				if branch.Type != treeTypeVersion {
+					newBranches = append(newBranches, branch)
+				}
+			}
+
+			t.Branches = newBranches
+		}
+	})
+}
+
+func (t *secretTree) sort() {
 	for i := range t.Branches {
 		t.Branches[i].sort()
 	}
@@ -345,45 +575,75 @@ func (t *Tree) sort() {
 	})
 }
 
-func (t Tree) Draw(color bool, leaves bool) string {
-	printTree := t.printableTree(color, leaves, true)
+func (s Secrets) Draw(root string, color, secrets bool) string {
+	root = strings.TrimSuffix(Canonicalize(root), "/")
+	var index int
+	if len(root) > 0 {
+		index = len(strings.Split(root, "/"))
+	}
+
+	printTree := s.printableTree(color, secrets, index)
 	return printTree.Draw()
 }
 
-func (t Tree) printableTree(color, leaves, root bool) *tree.Node {
-	if t.Type == TreeTypeSecret && !leaves {
+func (s Secrets) printableTree(color, secrets bool, index int) *tree.Node {
+	if len(s) == 0 {
 		return nil
 	}
 
-	name := t.Name
-	if !root {
-		name = t.Basename()
-		if t.Type == TreeTypeKey {
-			name = ":" + name
-		}
+	//The leading slash is to simulate a root node
+	firstSplit := strings.Split("/"+s[0].Path, "/")
+	thisName := firstSplit[index]
+	if index == 0 {
+		thisName = "/"
 	}
+	isSecret := index == len(firstSplit)-1
 
 	const dirFmt, secFmt, keyFmt = "@B{%s}", "@G{%s}", "@Y{%s}"
 	if color {
-		switch t.Type {
-		case TreeTypeDir, TreeTypeRoot:
-			name = ansi.Sprintf(dirFmt, name)
-		case TreeTypeSecret, TreeTypeDirAndSecret:
-			name = ansi.Sprintf(secFmt, name)
-		case TreeTypeKey:
-			name = ansi.Sprintf(keyFmt, name)
+		if isSecret {
+			thisName = ansi.Sprintf(secFmt, thisName)
+		} else {
+			thisName = ansi.Sprintf(dirFmt, thisName)
 		}
 	}
 
 	ret := &tree.Node{
-		Name: name,
+		Name: thisName,
 	}
 
-	for i := range t.Branches {
-		toAdd := t.Branches[i].printableTree(color, leaves, false)
+	if isSecret {
+		if len(s[0].Versions) > 0 {
+			for _, k := range s[0].Versions[len(s[0].Versions)-1].Data.Keys() {
+				ret.Append(tree.Node{Name: ansi.Sprintf(keyFmt, k)})
+			}
+		}
+	}
+
+	//Now we need to simulate walking the "tree" by treating groups of the same
+	// directory as "nodes in a tree" and thus grouping them into the next recursive call
+	startIndex := 0
+	if isSecret {
+		startIndex = 1
+	}
+	for startIndex < len(s) {
+		endIndex := startIndex + 1
+		thisSplit := strings.Split("/"+s[startIndex].Path, "/")
+		groupWord := thisSplit[index+1]
+		//Determine end of this "branch"
+		for ; endIndex < len(s); endIndex++ {
+			thisSplit := strings.Split("/"+s[endIndex].Path, "/")
+			if thisSplit[index+1] != groupWord {
+				break
+			}
+		}
+
+		toAdd := s[startIndex:endIndex].printableTree(color, secrets, index+1)
 		if toAdd != nil {
 			ret.Append(*toAdd)
 		}
+
+		startIndex = endIndex
 	}
 
 	return ret
@@ -408,25 +668,28 @@ func (w *treeWorker) work() {
 
 	order, done := w.orders.Pop()
 	for !done {
-		var answer []Tree
-		var toAppend []Tree
+		var answer []secretTree
+		var toAppend []secretTree
 		for _, op := range []struct {
-			code uint
-			fn   func(Tree) ([]Tree, error)
+			code uint16
+			fn   func(secretTree) ([]secretTree, error)
 		}{
 			{opTypeGet, w.workGet},
 			{opTypeList, w.workList},
 			{opTypeMounts, w.workMounts},
 			{opTypeVersions, w.workVersions},
 		} {
-			if order.operation&op.code == 0 {
+			if order.operation&op.code == opTypeNone {
 				continue
 			}
 			toAppend, err = op.fn(*order.insertInto)
 			if err != nil {
 				break
 			}
-			answer = append(answer, toAppend...)
+			//toAppend can be nil if a get was issued on a destroyed node
+			if toAppend != nil {
+				answer = append(answer, toAppend...)
+			}
 		}
 		if err != nil {
 			handleError()
@@ -455,7 +718,7 @@ func (w *treeWorker) work() {
 	w.errors <- nil
 }
 
-func (w *treeWorker) workList(t Tree) ([]Tree, error) {
+func (w *treeWorker) workList(t secretTree) ([]secretTree, error) {
 	path := strings.TrimSuffix(t.Name, "/")
 	list, err := w.vault.List(path)
 	if err != nil {
@@ -467,13 +730,13 @@ func (w *treeWorker) workList(t Tree) ([]Tree, error) {
 		return nil, err
 	}
 
-	ret := []Tree{}
+	ret := []secretTree{}
 	for _, l := range list {
-		t := TreeTypeSecret
+		t := treeTypeSecret
 		if strings.HasSuffix(l, "/") {
-			t = TreeTypeDir
+			t = treeTypeDir
 		}
-		ret = append(ret, Tree{
+		ret = append(ret, secretTree{
 			Name: strings.TrimRight(path, "/") + "/" + l,
 			Type: t,
 		})
@@ -482,15 +745,20 @@ func (w *treeWorker) workList(t Tree) ([]Tree, error) {
 	return ret, nil
 }
 
-func (w *treeWorker) workGet(t Tree) ([]Tree, error) {
+func (w *treeWorker) workGet(t secretTree) ([]secretTree, error) {
+	if t.Destroyed {
+		return nil, nil
+	}
 	path := t.Name
 	mountVersion, err := w.vault.MountVersion(path)
 	if err != nil {
 		return nil, err
 	}
 
-	toggleDelete := t.Deleted && w.opts.FetchAllVersions
-	if toggleDelete {
+	if t.Deleted && !w.opts.GetDeletedVersions {
+		return nil, nil
+	}
+	if t.Deleted {
 		err = w.vault.Undelete(path, t.Version)
 		if err != nil {
 			return nil, err
@@ -501,13 +769,13 @@ func (w *treeWorker) workGet(t Tree) ([]Tree, error) {
 	if err != nil {
 		//List returns keys marked as deleted in KV v2 backends, such
 		// that Get would 404 on trying to follow the listing.
-		if IsNotFound(err) && mountVersion == 2 {
+		if IsNotFound(err) && mountVersion == 2 && w.opts.AllowDeletedKeys {
 			return nil, nil
 		}
 		return nil, err
 	}
 
-	if toggleDelete {
+	if t.Deleted {
 		w.vault.client.Delete(path, &vaultkv.KVDeleteOpts{Versions: []uint{t.Version}})
 		if err != nil {
 			return nil, err
@@ -520,11 +788,11 @@ func (w *treeWorker) workGet(t Tree) ([]Tree, error) {
 		version = 1
 	}
 
-	ret := []Tree{}
+	ret := []secretTree{}
 	for _, key := range s.Keys() {
-		ret = append(ret, Tree{
+		ret = append(ret, secretTree{
 			Name:    path + ":" + key,
-			Type:    TreeTypeKey,
+			Type:    treeTypeKey,
 			Value:   string(s.data[key]),
 			Version: version,
 			Deleted: t.Deleted,
@@ -534,7 +802,7 @@ func (w *treeWorker) workGet(t Tree) ([]Tree, error) {
 	return ret, nil
 }
 
-func (w *treeWorker) workMounts(_ Tree) ([]Tree, error) {
+func (w *treeWorker) workMounts(_ secretTree) ([]secretTree, error) {
 	generics, err := w.vault.Mounts("generic")
 	if err != nil {
 		return nil, err
@@ -547,35 +815,65 @@ func (w *treeWorker) workMounts(_ Tree) ([]Tree, error) {
 
 	mounts := append(kvs, generics...)
 
-	ret := []Tree{}
+	ret := []secretTree{}
 	for _, mount := range mounts {
-		ret = append(ret, Tree{
+		ret = append(ret, secretTree{
 			Name: mount + "/",
-			Type: TreeTypeDir,
+			Type: treeTypeDir,
 		})
 	}
 
 	return ret, nil
 }
 
-func (w *treeWorker) workVersions(t Tree) ([]Tree, error) {
+func (w *treeWorker) workVersions(t secretTree) ([]secretTree, error) {
 	path := t.Name
+	if t.MountVersion != 2 {
+		return []secretTree{
+			{
+				Name:    t.Name,
+				Type:    treeTypeVersion,
+				Version: 1,
+			},
+		}, nil
+	}
+
+	if !w.opts.FetchAllVersions && w.opts.AllowDeletedKeys {
+		return []secretTree{
+			{
+				Name:    t.Name,
+				Type:    treeTypeVersion,
+				Version: 0,
+			},
+		}, nil
+	}
+
 	versions, err := w.vault.Versions(path)
 	if err != nil {
 		return nil, err
 	}
 
-	ret := []Tree{}
-	for i := range versions {
-		if versions[i].Destroyed {
-			continue
+	ret := []secretTree{}
+	if w.opts.FetchAllVersions {
+		for i := range versions {
+			ret = append(ret, secretTree{
+				Name:      t.Name,
+				Type:      treeTypeVersion,
+				Version:   versions[i].Version,
+				Deleted:   versions[i].Deleted,
+				Destroyed: versions[i].Destroyed,
+			})
 		}
-		ret = append(ret, Tree{
-			Name:    t.Name,
-			Type:    TreeTypeVersion,
-			Version: versions[i].Version,
-			Deleted: versions[i].Deleted,
+	} else {
+		lastVersion := versions[len(versions)-1]
+		ret = append(ret, secretTree{
+			Name:      t.Name,
+			Type:      treeTypeVersion,
+			Version:   lastVersion.Version,
+			Deleted:   lastVersion.Deleted,
+			Destroyed: lastVersion.Destroyed,
 		})
 	}
+
 	return ret, nil
 }
