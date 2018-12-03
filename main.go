@@ -343,7 +343,12 @@ func main() {
 		Usage:   "safe [-k] target [URL] [ALIAS] | safe target -i",
 		Type:    AdministrativeCommand,
 	}, func(command string, args ...string) error {
-		cfg := rc.Apply(opt.UseTarget)
+		var cfg rc.Config
+		if !opt.Target.Interactive && len(args) == 0 {
+			cfg = rc.Apply(opt.UseTarget)
+		} else {
+			cfg = rc.Read()
+		}
 		skipverify := false
 		if os.Getenv("SAFE_SKIP_VERIFY") == "1" {
 			skipverify = true
