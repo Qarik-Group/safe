@@ -358,8 +358,12 @@ func (v *Vault) Copy(oldpath, newpath string, opts MoveCopyOpts) error {
 		}
 
 		dstOrig, err := v.Read(dstPath, 0)
-		if err != nil {
+		if err != nil && !IsSecretNotFound(err) {
 			return err
+		}
+
+		if IsSecretNotFound(err) {
+			dstOrig = NewSecret()
 		}
 
 		toWrite = append(toWrite, dstOrig)
