@@ -1932,10 +1932,19 @@ all versions to be grabbed from the destination regardless of deletion/destructi
 		}
 
 		v := connect(true)
+		if vault.PathHasKey(args[0]) || vault.PathHasKey(args[1]) {
+			if opt.Move.Recurse {
+				return fmt.Errorf("Cannot recursively move a specific key")
+			}
+
+			if opt.Move.Deep {
+				return fmt.Errorf("Cannot deep copy a specific key")
+			}
+		}
 
 		//Don't try to recurse if operating on a key
 		// args[0] is the source path. args[1] is the destination path.
-		if opt.Move.Recurse && !vault.PathHasKey(args[0]) && !vault.PathHasKey(args[1]) {
+		if opt.Move.Recurse {
 			if !opt.Move.Force && !recursively("move", args...) {
 				return nil /* skip this command, process the next */
 			}
@@ -1944,7 +1953,7 @@ all versions to be grabbed from the destination regardless of deletion/destructi
 				return err
 			}
 		} else {
-			err := v.Move(args[0], args[1], vault.MoveCopyOpts{SkipIfExists: opt.SkipIfExists, Quiet: opt.Quiet})
+			err := v.Move(args[0], args[1], vault.MoveCopyOpts{SkipIfExists: opt.SkipIfExists, Quiet: opt.Quiet, Deep: opt.Move.Deep})
 			if err != nil && !(vault.IsNotFound(err) && opt.Move.Force) {
 				return err
 			}
@@ -1968,9 +1977,19 @@ all versions to be grabbed from the destination regardless of deletion/destructi
 		}
 		v := connect(true)
 
+		if vault.PathHasKey(args[0]) || vault.PathHasKey(args[1]) {
+			if opt.Copy.Recurse {
+				return fmt.Errorf("Cannot recursively move a specific key")
+			}
+
+			if opt.Copy.Deep {
+				return fmt.Errorf("Cannot deep copy a specific key")
+			}
+		}
+
 		//Don't try to recurse if operating on a key
 		// args[0] is the source path. args[1] is the destination path.
-		if opt.Copy.Recurse && !vault.PathHasKey(args[0]) && !vault.PathHasKey(args[1]) {
+		if opt.Copy.Recurse {
 			if !opt.Copy.Force && !recursively("copy", args...) {
 				return nil /* skip this command, process the next */
 			}
@@ -1979,7 +1998,7 @@ all versions to be grabbed from the destination regardless of deletion/destructi
 				return err
 			}
 		} else {
-			err := v.Copy(args[0], args[1], vault.MoveCopyOpts{SkipIfExists: opt.SkipIfExists, Quiet: opt.Quiet})
+			err := v.Copy(args[0], args[1], vault.MoveCopyOpts{SkipIfExists: opt.SkipIfExists, Quiet: opt.Quiet, Deep: opt.Copy.Deep})
 			if err != nil && !(vault.IsNotFound(err) && opt.Copy.Force) {
 				return err
 			}

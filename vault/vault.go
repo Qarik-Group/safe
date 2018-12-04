@@ -229,6 +229,7 @@ func (v *Vault) DeleteTree(root string, destroy bool) error {
 }
 
 // Delete removes the secret or key stored at the specified path.
+// If destroy is true and the mount is v2, the latest version is destroyed instead
 func (v *Vault) Delete(path string, destroy bool) error {
 	path = Canonicalize(path)
 
@@ -479,6 +480,7 @@ func (v *Vault) Move(oldpath, newpath string, opts MoveCopyOpts) error {
 	if err != nil {
 		return err
 	}
+
 	err = v.Delete(oldpath, false)
 	if err != nil {
 		return err
