@@ -150,10 +150,9 @@ type Options struct {
 	} `cli:"target"`
 
 	Delete struct {
-		Recurse  bool   `cli:"-R, -r, --recurse"`
-		Force    bool   `cli:"-f, --force"`
-		Destroy  bool   `cli:"-d, --destroy"`
-		Revision []uint `cli:"-x, --revision"`
+		Recurse bool `cli:"-R, -r, --recurse"`
+		Force   bool `cli:"-f, --force"`
+		Destroy bool `cli:"-d, --destroy"`
 	} `cli:"delete, rm"`
 
 	Export struct{} `cli:"export"`
@@ -1139,7 +1138,7 @@ written to STDOUT instead of STDERR to make it easier to consume.
 		}
 		v := connect(true)
 		path, args := args[0], args[1:]
-		s, err := v.Read(path, 0)
+		s, err := v.Read(path)
 		if err != nil && !vault.IsNotFound(err) {
 			return err
 		}
@@ -1271,7 +1270,7 @@ certificate validation failure, etc. occur, they will be printed as well.
 			r.ExitWithUsage("exists")
 		}
 		v := connect(true)
-		_, err := v.Read(args[0], 0)
+		_, err := v.Read(args[0])
 		if err != nil {
 			if vault.IsNotFound(err) {
 				os.Exit(1)
@@ -1328,7 +1327,7 @@ paths/keys.
 
 		// Recessive case of one path
 		if len(args) == 1 && !opt.Get.Yaml {
-			s, err := v.Read(args[0], 0)
+			s, err := v.Read(args[0])
 			if err != nil {
 				return err
 			}
@@ -1338,7 +1337,7 @@ paths/keys.
 				for _, key := range keys {
 					fmt.Printf("%s\n", key)
 				}
-			} else if _, key := vault.ParsePath(args[0]); key != "" {
+			} else if _, key, _ := vault.ParsePath(args[0]); key != "" {
 				value, err := s.SingleValue()
 				if err != nil {
 					return err
@@ -1355,8 +1354,8 @@ paths/keys.
 		results := make(map[string]map[string]string, 0)
 		missing_keys := make(map[string][]string)
 		for _, path := range args {
-			p, k := vault.ParsePath(path)
-			s, err := v.Read(path, 0)
+			p, k, _ := vault.ParsePath(path)
+			s, err := v.Read(path)
 
 			// Check if the desired path[:key] is found
 			if err != nil {
@@ -1403,7 +1402,7 @@ paths/keys.
 		if opt.Get.KeysOnly {
 			printed_paths := make(map[string]bool, 0)
 			for _, path := range args {
-				p, _ := vault.ParsePath(path)
+				p, _, _ := vault.ParsePath(path)
 				if printed, _ := printed_paths[p]; printed {
 					continue
 				}
@@ -1543,7 +1542,7 @@ paths/keys.
 						}
 
 						if mountVersion == 2 {
-							_, err := v.Read(fullpath, 0)
+							_, err := v.Read(fullpath)
 							if err != nil {
 								if vault.IsNotFound(err) {
 									continue
@@ -1657,12 +1656,9 @@ vaults. This flag does nothing for kv v1 mounts.
 
 	r.Dispatch("delete", &Help{
 		Summary: "Remove one or more path from the Vault",
-		Usage:   "safe delete [-rfdx] PATH [PATH ...]",
+		Usage:   "safe delete [-rfd] PATH [PATH ...]",
 		Type:    DestructiveCommand,
-		Description: `
-Specifying --revision (-x) will delete/destroy only the specified version(s).
-The -x flag can be specified multiple times to apply to multiple versions.
-`}, func(command string, args ...string) error {
+	}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
 
 		if len(args) < 1 {
@@ -1674,15 +1670,12 @@ The -x flag can be specified multiple times to apply to multiple versions.
 		if opt.Delete.Destroy {
 			verb = "destroy"
 		}
-		if opt.Delete.Recurse && len(opt.Delete.Revision) > 0 {
-			return fmt.Errorf("Refusing to recursively %s all of a specific revision", verb)
-		}
 
 		for _, path := range args {
-			_, key := vault.ParsePath(path)
+			_, key, version := vault.ParsePath(path)
 
-			//Ignore -r if path has a key because that makes no sense
-			if opt.Delete.Recurse && key == "" {
+			//Ignore -r if path has a version or key because that seems like a mistake
+			if opt.Delete.Recurse && (key == "" || version > 0) {
 				if !opt.Delete.Force && !recursively(verb, path) {
 					continue /* skip this command, process the next */
 				}
@@ -1690,20 +1683,8 @@ The -x flag can be specified multiple times to apply to multiple versions.
 					return err
 				}
 			} else {
-				if len(opt.Delete.Revision) > 0 {
-					var err error
-					if opt.Delete.Destroy {
-						err = v.DestroyVersions(path, opt.Delete.Revision)
-					} else {
-						err = v.DeleteVersions(path, opt.Delete.Revision)
-					}
-					if err != nil {
-						return err
-					}
-				} else {
-					if err := v.Delete(path, opt.Delete.Destroy); err != nil && !(vault.IsNotFound(err) && opt.Delete.Force) {
-						return err
-					}
+				if err := v.Delete(path, opt.Delete.Destroy); err != nil && !(vault.IsNotFound(err) && opt.Delete.Force) {
+					return err
 				}
 			}
 		}
@@ -2039,7 +2020,7 @@ The following options are recognized:
 		for len(args) > 0 {
 			var path, key string
 			if vault.PathHasKey(args[0]) {
-				path, key = vault.ParsePath(args[0])
+				path, key, _ = vault.ParsePath(args[0])
 				args = args[1:]
 			} else {
 				if len(args) < 2 {
@@ -2053,7 +2034,7 @@ The following options are recognized:
 				}
 				args = args[2:]
 			}
-			s, err := v.Read(path, 0)
+			s, err := v.Read(path)
 			if err != nil && !vault.IsNotFound(err) {
 				return err
 			}
@@ -2102,7 +2083,7 @@ public key, formatted for use in an SSH authorized_keys file, under 'public'.
 
 		v := connect(true)
 		for _, path := range args {
-			s, err := v.Read(path, 0)
+			s, err := v.Read(path)
 			if err != nil && !vault.IsNotFound(err) {
 				return err
 			}
@@ -2149,7 +2130,7 @@ be PEM-encoded.
 
 		v := connect(true)
 		for _, path := range args {
-			s, err := v.Read(path, 0)
+			s, err := v.Read(path)
 			if err != nil && !vault.IsNotFound(err) {
 				return err
 			}
@@ -2194,7 +2175,7 @@ NBITS defaults to 2048.
 
 		path := args[0]
 		v := connect(true)
-		s, err := v.Read(path, 0)
+		s, err := v.Read(path)
 		if err != nil && !vault.IsNotFound(err) {
 			return err
 		}
@@ -2370,7 +2351,7 @@ Supported formats:
 		newKey := args[3]
 
 		v := connect(true)
-		s, err := v.Read(path, 0)
+		s, err := v.Read(path)
 		if err != nil {
 			return err
 		}
@@ -2576,7 +2557,7 @@ The following options are recognized:
 
 		var ca *vault.X509
 		if opt.X509.Validate.SignedBy != "" {
-			s, err := v.Read(opt.X509.Validate.SignedBy, 0)
+			s, err := v.Read(opt.X509.Validate.SignedBy)
 			if err != nil {
 				return err
 			}
@@ -2587,7 +2568,7 @@ The following options are recognized:
 		}
 
 		for _, path := range args {
-			s, err := v.Read(path, 0)
+			s, err := v.Read(path)
 			if err != nil {
 				return err
 			}
@@ -2718,7 +2699,7 @@ The following options are recognized:
 
 		v := connect(true)
 		if opt.SkipIfExists {
-			if _, err := v.Read(args[0], 0); err == nil {
+			if _, err := v.Read(args[0]); err == nil {
 				if !opt.Quiet {
 					fmt.Fprintf(os.Stderr, "@R{Cowardly refusing to create a new certificate in} @C{%s} @R{as it is already present in Vault}\n", args[0])
 				}
@@ -2729,7 +2710,7 @@ The following options are recognized:
 		}
 
 		if opt.X509.Issue.SignedBy != "" {
-			secret, err := v.Read(opt.X509.Issue.SignedBy, 0)
+			secret, err := v.Read(opt.X509.Issue.SignedBy)
 			if err != nil {
 				return err
 			}
@@ -2825,7 +2806,7 @@ The following options are recognized:
 		v := connect(true)
 
 		/* find the Certificate that we want to renew */
-		s, err := v.Read(args[0], 0)
+		s, err := v.Read(args[0])
 		if err != nil {
 			return err
 		}
@@ -2937,7 +2918,7 @@ The following options are recognized:
 		v := connect(true)
 
 		/* find the Certificate that we want to renew */
-		s, err := v.Read(args[0], 0)
+		s, err := v.Read(args[0])
 		if err != nil {
 			return err
 		}
@@ -3012,7 +2993,7 @@ The following options are recognized:
 		v := connect(true)
 
 		/* find the CA */
-		s, err := v.Read(opt.X509.Revoke.SignedBy, 0)
+		s, err := v.Read(opt.X509.Revoke.SignedBy)
 		if err != nil {
 			return err
 		}
@@ -3022,7 +3003,7 @@ The following options are recognized:
 		}
 
 		/* find the Certificate */
-		s, err = v.Read(args[0], 0)
+		s, err = v.Read(args[0])
 		if err != nil {
 			return err
 		}
@@ -3070,7 +3051,7 @@ prints out information about a certificate, including:
 		v := connect(true)
 
 		for _, path := range args {
-			s, err := v.Read(args[0], 0)
+			s, err := v.Read(args[0])
 			if err != nil {
 				return err
 			}
@@ -3253,7 +3234,7 @@ Currently, only the --renew option is supported, and it is required:
 		rc.Apply(opt.UseTarget)
 		v := connect(true)
 
-		s, err := v.Read(args[0], 0)
+		s, err := v.Read(args[0])
 		if err != nil {
 			return err
 		}

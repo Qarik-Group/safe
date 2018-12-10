@@ -338,7 +338,7 @@ func (t *secretTree) populateNodeType(v *Vault) error {
 		return err
 	}
 
-	_, err = v.Read(t.Name, 0)
+	_, err = v.Read(t.Name)
 	if err != nil {
 		if !IsNotFound(err) {
 			return err
@@ -765,7 +765,7 @@ func (w *treeWorker) workGet(t secretTree) ([]secretTree, error) {
 		}
 	}
 
-	s, err := w.vault.Read(path, t.Version)
+	s, err := w.vault.Read(path)
 	if err != nil {
 		//List returns keys marked as deleted in KV v2 backends, such
 		// that Get would 404 on trying to follow the listing.
