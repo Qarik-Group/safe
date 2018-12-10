@@ -250,10 +250,22 @@ func (v *Vault) Delete(path string, destroy bool) error {
 
 func (v *Vault) deleteEntireSecret(path string, destroy bool) error {
 	path, _, version := ParsePath(path)
-	if destroy {
-		return v.client.Destroy(path, []uint{uint(version)})
+	var versions []uint
+	if version != 0 {
+		versions = []uint{uint(version)}
 	}
-	return v.client.Delete(path, &vaultkv.KVDeleteOpts{Versions: []uint{uint(version)}, V1Destroy: true})
+	if destroy {
+		if len(versions) == 0 {
+			allVersions, err := v.Versions(path)
+			if err != nil {
+				return err
+			}
+
+			versions = []uint{allVersions[len(allVersions)-1].Version}
+		}
+		return v.client.Destroy(path, versions)
+	}
+	return v.client.Delete(path, &vaultkv.KVDeleteOpts{Versions: versions, V1Destroy: true})
 }
 
 func (v *Vault) deleteSpecificKey(path, key string) error {
