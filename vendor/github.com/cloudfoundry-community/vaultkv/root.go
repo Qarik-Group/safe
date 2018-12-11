@@ -54,11 +54,11 @@ func (v *Client) NewGenerateRoot() (*GenerateRoot, error) {
 
 	err = v.doRequest("PUT", "/sys/generate-root/attempt",
 		map[string]string{"otp": string(base64OTP)}, &ret.state)
-	if err != nil {
+	if err != nil && !IsBadRequest(err) {
 		return nil, err
 	}
 
-	if ret.state.OTPLength != 0 {
+	if ret.state.OTPLength != 0 || IsBadRequest(err) {
 		//Then we need to let the API generate the root token
 		err = ret.Cancel()
 		if err != nil {
@@ -168,24 +168,25 @@ func (g *GenerateRoot) RootToken() (string, error) {
 		rawTok = g.state.EncodedRootToken
 	}
 
-	tokBase64 := []byte(rawTok)
-	tok := make([]byte, base64.StdEncoding.DecodedLen(len(tokBase64)))
+	for len(rawTok)%4 != 0 {
+		rawTok += "="
+	}
 
-	tokenLen, err := base64.StdEncoding.Decode(tok, tokBase64)
+	tok, err := base64.StdEncoding.DecodeString(rawTok)
 	if err != nil {
 		return "", fmt.Errorf("Could not decode base64 token: %s", err)
 	}
-	if tokenLen != len(g.otp) {
-		return "", fmt.Errorf("token length / one-time password length mismatch (%d/%d)", tokenLen, len(g.otp))
+
+	if len(tok) != len(g.otp) {
+		return "", fmt.Errorf("token length / one-time password length mismatch (%d/%d)", len(tok), len(g.otp))
 	}
-	tok = tok[:tokenLen]
 	for i := 0; i < len(g.otp); i++ {
 		tok[i] ^= g.otp[i]
 	}
 
 	ret := string(tok)
 	if !g.shouldNotUUIDify {
-		tokHex := make([]byte, hex.EncodedLen(tokenLen))
+		tokHex := make([]byte, hex.EncodedLen(len(tok)))
 		hex.Encode(tokHex, tok)
 		ret = fmt.Sprintf("%s-%s-%s-%s-%s",
 			tokHex[0:8], tokHex[8:12], tokHex[12:16], tokHex[16:20], tokHex[20:])

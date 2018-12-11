@@ -307,11 +307,19 @@ type v2MetadataAPI struct {
 //V2Version object , if present. If no version with that number is present, an
 //error is returned.
 func (m V2Metadata) Version(number uint) (version V2Version, err error) {
-	if number > uint(len(m.Versions)) || number < 1 {
+	if len(m.Versions) == 0 {
 		err = fmt.Errorf("That version does not exist in the metadata")
 		return
 	}
-	version = m.Versions[number-1]
+
+	firstVersion := m.Versions[0]
+	index := int(number) - int(firstVersion.Version)
+	if index < 0 || index > len(m.Versions) {
+		err = fmt.Errorf("That version does not exist in the metadata")
+		return
+	}
+
+	version = m.Versions[index]
 	return
 }
 
