@@ -174,7 +174,7 @@ func (v *Vault) Write(path string, s *Secret) error {
 	}
 
 	if s.Empty() {
-		return v.deleteIfPresent(path, false)
+		return v.deleteIfPresent(path, DeleteOpts{})
 	}
 
 	_, err := v.client.Set(path, s.data, nil)
@@ -210,9 +210,44 @@ func (v *Vault) verifySecretExists(path string) error {
 	return err
 }
 
+func (v *Vault) verifySecretUndestroyed(path string) error {
+	path = Canonicalize(path)
+	path, _, version := ParsePath(path)
+	allVersions, err := v.Client().Versions(path)
+	if err != nil {
+		return err
+	}
+
+	destroyedErr := fmt.Errorf("`%s' is already destroyed")
+
+	if version == 0 {
+		if allVersions[len(allVersions)-1].Destroyed {
+			return destroyedErr
+		}
+
+		return nil
+	}
+
+	firstVersion := allVersions[0].Version
+	if uint(version) < firstVersion {
+		return destroyedErr
+	}
+
+	idx := int(uint(version) - firstVersion)
+	if idx >= len(allVersions) {
+		return fmt.Errorf("version %d of `%s' does not yet exist", version, path)
+	}
+
+	if allVersions[idx].Destroyed {
+		return destroyedErr
+	}
+
+	return nil
+}
+
 //DeleteTree recursively deletes the leaf nodes beneath the given root until
 //the root has no children, and then deletes that.
-func (v *Vault) DeleteTree(root string, destroy bool) error {
+func (v *Vault) DeleteTree(root string, opts DeleteOpts) error {
 	root = Canonicalize(root)
 
 	secrets, err := v.ConstructSecrets(root, TreeOpts{FetchKeys: false})
@@ -220,26 +255,39 @@ func (v *Vault) DeleteTree(root string, destroy bool) error {
 		return err
 	}
 	for _, path := range secrets.Paths() {
-		err = v.deleteEntireSecret(path, destroy)
+		err = v.deleteEntireSecret(path, opts.Destroy, opts.All)
 		if err != nil {
 			return err
 		}
 	}
-	return v.deleteEntireSecret(root, destroy)
+	return v.deleteEntireSecret(root, opts.Destroy, opts.All)
+}
+
+type DeleteOpts struct {
+	Destroy bool
+	All     bool
 }
 
 // Delete removes the secret or key stored at the specified path.
 // If destroy is true and the mount is v2, the latest version is destroyed instead
-func (v *Vault) Delete(path string, destroy bool) error {
+func (v *Vault) Delete(path string, opts DeleteOpts) error {
 	path = Canonicalize(path)
 
-	if err := v.verifySecretExists(path); err != nil {
+	var err error
+	if !opts.Destroy {
+		err = v.verifySecretExists(path)
+	} else if opts.Destroy && !opts.All {
+		//If you were trying to destroy a secret but safe didn't let you because it
+		// was already (only) deleted, that would be annoying
+		err = v.verifySecretUndestroyed(path)
+	}
+	if err != nil {
 		return err
 	}
 
 	secret, key, version := ParsePath(path)
 	if key == "" {
-		return v.deleteEntireSecret(path, destroy)
+		return v.deleteEntireSecret(path, opts.Destroy, opts.All)
 	}
 
 	if version != 0 {
@@ -248,13 +296,21 @@ func (v *Vault) Delete(path string, destroy bool) error {
 	return v.deleteSpecificKey(secret, key)
 }
 
-func (v *Vault) deleteEntireSecret(path string, destroy bool) error {
+func (v *Vault) deleteEntireSecret(path string, destroy bool, all bool) error {
 	path, _, version := ParsePath(path)
+
+	if destroy && all {
+		return v.client.DestroyAll(path)
+	}
+
 	var versions []uint
 	if version != 0 {
 		versions = []uint{uint(version)}
 	}
+
 	if destroy {
+		//Need to populate latest version to a Destroy call if the
+		// version is not explicitly given
 		if len(versions) == 0 {
 			allVersions, err := v.Versions(path)
 			if err != nil {
@@ -265,6 +321,20 @@ func (v *Vault) deleteEntireSecret(path string, destroy bool) error {
 		}
 		return v.client.Destroy(path, versions)
 	}
+
+	if all {
+		allVersions, err := v.Versions(path)
+		if err != nil {
+			return err
+		}
+
+		versions = make([]uint, 0, len(allVersions))
+		for i := range allVersions {
+			versions = append(versions, allVersions[i].Version)
+		}
+
+	}
+
 	return v.client.Delete(path, &vaultkv.KVDeleteOpts{Versions: versions, V1Destroy: true})
 }
 
@@ -299,7 +369,7 @@ func (v *Vault) Undelete(path string, version uint) error {
 
 //deleteIfPresent first checks to see if there is a Secret at the given path,
 // and if so, it deletes it. Otherwise, no error is thrown
-func (v *Vault) deleteIfPresent(path string, destroy bool) error {
+func (v *Vault) deleteIfPresent(path string, opts DeleteOpts) error {
 	secretpath, _, _ := ParsePath(path)
 	if _, err := v.Read(secretpath); err != nil {
 		if IsSecretNotFound(err) {
@@ -308,7 +378,7 @@ func (v *Vault) deleteIfPresent(path string, destroy bool) error {
 		return err
 	}
 
-	err := v.Delete(path, destroy)
+	err := v.Delete(path, opts)
 	if IsKeyNotFound(err) {
 		return nil
 	}
@@ -497,7 +567,7 @@ func (v *Vault) Move(oldpath, newpath string, opts MoveCopyOpts) error {
 		return err
 	}
 
-	err = v.Delete(oldpath, false)
+	err = v.Delete(oldpath, DeleteOpts{})
 	if err != nil {
 		return err
 	}

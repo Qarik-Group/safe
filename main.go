@@ -153,6 +153,7 @@ type Options struct {
 		Recurse bool `cli:"-R, -r, --recurse"`
 		Force   bool `cli:"-f, --force"`
 		Destroy bool `cli:"-d, --destroy"`
+		All     bool `cli:"-a, --all"`
 	} `cli:"delete, rm"`
 
 	Export struct{} `cli:"export"`
@@ -1656,9 +1657,14 @@ vaults. This flag does nothing for kv v1 mounts.
 
 	r.Dispatch("delete", &Help{
 		Summary: "Remove one or more path from the Vault",
-		Usage:   "safe delete [-rfd] PATH [PATH ...]",
+		Usage:   "safe delete [-rfda] PATH [PATH ...]",
 		Type:    DestructiveCommand,
-	}, func(command string, args ...string) error {
+		Description: `
+-d (--destroy) will cause KV v2 secrets to be destroyed instead of
+being marked as deleted. For KV v1 backends, this would do nothing.
+-a (--all) will delete (or destroy) all versions of the secret instead
+of just the specified (or latest if unspecified) version.
+`}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
 
 		if len(args) < 1 {
@@ -1679,11 +1685,17 @@ vaults. This flag does nothing for kv v1 mounts.
 				if !opt.Delete.Force && !recursively(verb, path) {
 					continue /* skip this command, process the next */
 				}
-				if err := v.DeleteTree(path, opt.Delete.Destroy); err != nil && !(vault.IsNotFound(err) && opt.Delete.Force) {
+				if err := v.DeleteTree(path, vault.DeleteOpts{
+					Destroy: opt.Delete.Destroy,
+					All:     opt.Delete.All,
+				}); err != nil && !(vault.IsNotFound(err) && opt.Delete.Force) {
 					return err
 				}
 			} else {
-				if err := v.Delete(path, opt.Delete.Destroy); err != nil && !(vault.IsNotFound(err) && opt.Delete.Force) {
+				if err := v.Delete(path, vault.DeleteOpts{
+					Destroy: opt.Delete.Destroy,
+					All:     opt.Delete.All,
+				}); err != nil && !(vault.IsNotFound(err) && opt.Delete.Force) {
 					return err
 				}
 			}
