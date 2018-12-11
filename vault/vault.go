@@ -267,6 +267,15 @@ type DeleteOpts struct {
 	All     bool
 }
 
+func (v *Vault) canSemanticallyDelete(path string) error {
+	_, key, version := ParsePath(path)
+	if key != "" && version != 0 {
+		return fmt.Errorf("Cannot delete specific key of specific version")
+	}
+
+	return nil
+}
+
 // Delete removes the secret or key stored at the specified path.
 // If destroy is true and the mount is v2, the latest version is destroyed instead
 func (v *Vault) Delete(path string, opts DeleteOpts) error {
@@ -284,14 +293,16 @@ func (v *Vault) Delete(path string, opts DeleteOpts) error {
 		return err
 	}
 
-	secret, key, version := ParsePath(path)
+	err = v.canSemanticallyDelete(path)
+	if err != nil {
+		return err
+	}
+
+	secret, key, _ := ParsePath(path)
 	if key == "" {
 		return v.deleteEntireSecret(path, opts.Destroy, opts.All)
 	}
 
-	if version != 0 {
-		return fmt.Errorf("Cannot delete specific key of specific version")
-	}
 	return v.deleteSpecificKey(secret, key)
 }
 
@@ -557,11 +568,20 @@ func (v *Vault) Move(oldpath, newpath string, opts MoveCopyOpts) error {
 	oldpath = Canonicalize(oldpath)
 	newpath = Canonicalize(newpath)
 
-	if err := v.verifySecretExists(oldpath); err != nil {
+	err := v.canSemanticallyDelete(oldpath)
+	if err != nil {
+		return fmt.Errorf("Can't move `%s': %s. Did you mean cp?", oldpath, err)
+	}
+	if opts.DeletedVersions {
+		err = v.verifySecretUndestroyed(oldpath)
+	} else {
+		err = v.verifySecretExists(oldpath)
+	}
+	if err != nil {
 		return err
 	}
 
-	err := v.Copy(oldpath, newpath, opts)
+	err = v.Copy(oldpath, newpath, opts)
 	if err != nil {
 		return err
 	}
