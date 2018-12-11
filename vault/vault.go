@@ -125,7 +125,6 @@ func (v *Vault) Curl(method string, path string, body []byte) (*http.Response, e
 // error.
 func (v *Vault) Read(path string) (secret *Secret, err error) {
 	path = Canonicalize(path)
-	//split at last colon, if present
 	path, key, version := ParsePath(path)
 
 	secret = NewSecret()
@@ -424,7 +423,7 @@ func (v *Vault) Copy(oldpath, newpath string, opts MoveCopyOpts) error {
 	}
 
 	srcPath, srcKey, _ := ParsePath(oldpath)
-	srcSecret, err := v.Read(srcPath)
+	srcSecret, err := v.Read(oldpath)
 	if err != nil {
 		return err
 	}
