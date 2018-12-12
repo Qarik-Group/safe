@@ -268,9 +268,27 @@ type DeleteOpts struct {
 }
 
 func (v *Vault) canSemanticallyDelete(path string) error {
-	_, key, version := ParsePath(path)
-	if key != "" && version != 0 {
-		return fmt.Errorf("Cannot delete specific key of specific version")
+	justSecret, key, version := ParsePath(path)
+	if key == "" || version == 0 {
+		return nil
+	}
+
+	versions, err := v.Versions(justSecret)
+	if err != nil {
+		return err
+	}
+
+	if versions[len(versions)-1].Version == uint(version) {
+		return nil
+	}
+
+	s, err := v.Read(path)
+	if err != nil {
+		return err
+	}
+
+	if len(s.data) != 1 || !s.Has(key) {
+		return fmt.Errorf("Cannot delete specific non-isolated key of non-latest version")
 	}
 
 	return nil
@@ -298,12 +316,11 @@ func (v *Vault) Delete(path string, opts DeleteOpts) error {
 		return err
 	}
 
-	secret, key, _ := ParsePath(path)
-	if key == "" {
+	if !PathHasKey(path) {
 		return v.deleteEntireSecret(path, opts.Destroy, opts.All)
 	}
 
-	return v.deleteSpecificKey(secret, key)
+	return v.deleteSpecificKey(path)
 }
 
 func (v *Vault) deleteEntireSecret(path string, destroy bool, all bool) error {
@@ -348,7 +365,8 @@ func (v *Vault) deleteEntireSecret(path string, destroy bool, all bool) error {
 	return v.client.Delete(path, &vaultkv.KVDeleteOpts{Versions: versions, V1Destroy: true})
 }
 
-func (v *Vault) deleteSpecificKey(path, key string) error {
+func (v *Vault) deleteSpecificKey(path string) error {
+	_, key, _ := ParsePath(path)
 	secret, err := v.Read(path)
 	if err != nil {
 		return err
@@ -357,8 +375,16 @@ func (v *Vault) deleteSpecificKey(path, key string) error {
 	if !deleted {
 		return NewKeyNotFoundError(path, key)
 	}
-	err = v.Write(path, secret)
-	return err
+	if secret.Empty() {
+		//Gotta avoid call to Write because Write ignores version information (with good reason)
+		// We can only be here and not be on the latest version if this was the only key remaining
+		// and we're just trying to nuke the secret
+		//
+		//At some point, we should probably get Destroy routed into here so that we can destroy
+		// secrets through specifying keys
+		return v.deleteEntireSecret(path, false, false)
+	}
+	return v.Write(path, secret)
 }
 
 //DeleteVersions marks the given versions of the given secret as deleted for
