@@ -156,6 +156,10 @@ type Options struct {
 		All     bool `cli:"-a, --all"`
 	} `cli:"delete, rm"`
 
+	Undelete struct {
+		All bool `cli:"-a, --all"`
+	} `cli:"undelete, unrm, urm"`
+
 	Export struct{} `cli:"export"`
 	Import struct{} `cli:"import"`
 
@@ -1700,6 +1704,59 @@ of just the specified (or latest if unspecified) version.
 				}
 			}
 		}
+		return nil
+	})
+
+	r.Dispatch("undelete", &Help{
+		Summary: "Undelete a soft-deleted secret from a V2 backend",
+		Usage:   "safe undelete PATH [PATH ...]",
+		Type:    DestructiveCommand,
+		Description: `
+If no version is specified, this attempts to undelete the newest version of the secret
+This does not error if the specified version exists but is not deleted
+This errors if the secret or version does not exist, of if the particular version has
+been irrevocably destroyed. An error also occurs if a key is specified.
+
+-a (--all) undeletes all versions of the given secret.
+`}, func(command string, args ...string) error {
+		rc.Apply(opt.UseTarget)
+
+		if len(args) < 1 {
+			r.ExitWithUsage("undelete")
+		}
+		v := connect(true)
+
+		for _, path := range args {
+			var err error
+			if opt.Undelete.All {
+				secret, key, version := vault.ParsePath(path)
+				if key != "" {
+					return fmt.Errorf("Cannot undelete specific key (%s)", path)
+				}
+
+				if version > 0 {
+					return fmt.Errorf("--all given but path (%s) has version specified", path)
+				}
+
+				respVersions, err := v.Versions(secret)
+				if err != nil {
+					return err
+				}
+
+				versions := make([]uint, 0, len(respVersions))
+				for _, v := range respVersions {
+					versions = append(versions, v.Version)
+				}
+
+				err = v.Client().Undelete(path, versions)
+			} else {
+				err = v.Undelete(path)
+			}
+			if err != nil {
+				return err
+			}
+		}
+
 		return nil
 	})
 

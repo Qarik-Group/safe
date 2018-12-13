@@ -759,7 +759,7 @@ func (w *treeWorker) workGet(t secretTree) ([]secretTree, error) {
 		return nil, nil
 	}
 	if t.Deleted {
-		err = w.vault.Undelete(path, t.Version)
+		err = w.vault.Undelete(EncodePath(path, "", uint64(t.Version)))
 		if err != nil {
 			return nil, err
 		}

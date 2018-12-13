@@ -211,13 +211,13 @@ func (v *Vault) verifySecretExists(path string) error {
 
 func (v *Vault) verifySecretUndestroyed(path string) error {
 	path = Canonicalize(path)
-	path, _, version := ParsePath(path)
-	allVersions, err := v.Client().Versions(path)
+	secret, _, version := ParsePath(path)
+	allVersions, err := v.Client().Versions(secret)
 	if err != nil {
 		return err
 	}
 
-	destroyedErr := fmt.Errorf("`%s' is already destroyed")
+	destroyedErr := fmt.Errorf("`%s' is destroyed", path)
 
 	if version == 0 {
 		if allVersions[len(allVersions)-1].Destroyed {
@@ -234,7 +234,7 @@ func (v *Vault) verifySecretUndestroyed(path string) error {
 
 	idx := int(uint(version) - firstVersion)
 	if idx >= len(allVersions) {
-		return fmt.Errorf("version %d of `%s' does not yet exist", version, path)
+		return fmt.Errorf("version %d of `%s' does not yet exist", version, secret)
 	}
 
 	if allVersions[idx].Destroyed {
@@ -398,9 +398,18 @@ func (v *Vault) DestroyVersions(path string, versions []uint) error {
 	return v.client.Destroy(path, versions)
 }
 
-func (v *Vault) Undelete(path string, version uint) error {
-	path = Canonicalize(path)
-	return v.client.Undelete(path, []uint{version})
+func (v *Vault) Undelete(path string) error {
+	secret, key, version := ParsePath(path)
+	if key != "" {
+		return fmt.Errorf("Cannot undelete specific key (%s)", path)
+	}
+
+	err := v.verifySecretUndestroyed(path)
+	if err != nil {
+		return err
+	}
+
+	return v.Client().Undelete(secret, []uint{uint(version)})
 }
 
 //deleteIfPresent first checks to see if there is a Secret at the given path,
