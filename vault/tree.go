@@ -765,7 +765,7 @@ func (w *treeWorker) workGet(t secretTree) ([]secretTree, error) {
 		}
 	}
 
-	s, err := w.vault.Read(path)
+	s, err := w.vault.Read(EncodePath(path, "", uint64(t.Version)))
 	if err != nil {
 		//List returns keys marked as deleted in KV v2 backends, such
 		// that Get would 404 on trying to follow the listing.
