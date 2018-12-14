@@ -160,6 +160,10 @@ type Options struct {
 		All bool `cli:"-a, --all"`
 	} `cli:"undelete, unrm, urm"`
 
+	Revert struct {
+		Deleted bool `cli:"-d, --deleted"`
+	} `cli:"revert"`
+
 	Export struct{} `cli:"export"`
 	Import struct{} `cli:"import"`
 
@@ -1752,6 +1756,93 @@ been irrevocably destroyed. An error also occurs if a key is specified.
 			} else {
 				err = v.Undelete(path)
 			}
+			if err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+
+	r.Dispatch("revert", &Help{
+		Summary: "Revert a secret to a previous version",
+		Usage:   "safe revert PATH VERSION",
+		Type:    DestructiveCommand,
+		Description: `
+-d (--deleted) will handle deleted versions by undeleting them, reading them, and then
+redeleting them.	
+`}, func(command string, args ...string) error {
+		rc.Apply(opt.UseTarget)
+		if len(args) != 2 {
+			r.ExitWithUsage("revert")
+		}
+		v := connect(true)
+
+		secret, key, version := vault.ParsePath(args[0])
+		if key != "" {
+			return fmt.Errorf("Cannot call revert with path containing key")
+		}
+
+		if version > 0 {
+			return fmt.Errorf("Cannot call revert with path containing version")
+		}
+
+		targetVersion, err := strconv.ParseUint(args[1], 10, 64)
+		if err != nil {
+			return fmt.Errorf("VERSION must be a positive integer")
+		}
+
+		if targetVersion == 0 {
+			return nil
+		}
+
+		//Check what the most recent version is to avoid setting the latest version if unnecessary.
+		// This should also catch if the secret is non-existent, or if we're targeting a destroyed,
+		// deleted, or non-existent version.
+		allVersions, err := v.Versions(args[0])
+		if err != nil {
+			return err
+		}
+
+		destroyedErr := fmt.Errorf("Version %d of secret `%s' is destroyed", targetVersion, secret)
+		if targetVersion < uint64(allVersions[0].Version) {
+			return destroyedErr
+		}
+
+		if targetVersion >= uint64(allVersions[0].Version)+uint64(len(allVersions)) {
+			return fmt.Errorf("Version %d of secret `%s' does not exist", targetVersion, secret)
+		}
+
+		versionObject := allVersions[targetVersion-uint64(allVersions[0].Version)]
+		if versionObject.Destroyed {
+			return destroyedErr
+		}
+
+		if versionObject.Deleted {
+			if !opt.Revert.Deleted {
+				return fmt.Errorf("Version %d of secret `%s' is deleted. To force a read, specify --deleted", targetVersion, secret)
+			}
+
+			err = v.Undelete(vault.EncodePath(secret, "", targetVersion))
+			if err != nil {
+				return err
+			}
+		}
+
+		toWrite, err := v.Read(vault.EncodePath(secret, "", targetVersion))
+		if err != nil {
+			return err
+		}
+
+		err = v.Write(secret, toWrite)
+		if err != nil {
+			return err
+		}
+
+		//If we got this far and this is set, we must have undeleted a thing.
+		// Clean up after ourselves
+		if versionObject.Deleted {
+			err = v.Delete(vault.EncodePath(secret, "", targetVersion), vault.DeleteOpts{})
 			if err != nil {
 				return err
 			}
