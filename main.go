@@ -1906,7 +1906,16 @@ redeleting them.
 		}
 
 		for _, path := range args {
-			err := v2Export(path)
+			secret, key, version := vault.ParsePath(path)
+			if key != "" {
+				return fmt.Errorf("Cannot export path with key (%s)", path)
+			}
+
+			if version > 0 {
+				return fmt.Errorf("Cannot export path with version (%s)", path)
+			}
+
+			err := v2Export(secret)
 			if err != nil {
 				return err
 			}
