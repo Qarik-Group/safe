@@ -856,23 +856,27 @@ func (w *treeWorker) workVersions(t secretTree) ([]secretTree, error) {
 	ret := []secretTree{}
 	if w.opts.FetchAllVersions {
 		for i := range versions {
-			ret = append(ret, secretTree{
-				Name:      t.Name,
-				Type:      treeTypeVersion,
-				Version:   versions[i].Version,
-				Deleted:   versions[i].Deleted,
-				Destroyed: versions[i].Destroyed,
-			})
+			if w.opts.GetDeletedVersions || !(versions[i].Deleted || versions[i].Destroyed) {
+				ret = append(ret, secretTree{
+					Name:      t.Name,
+					Type:      treeTypeVersion,
+					Version:   versions[i].Version,
+					Deleted:   versions[i].Deleted,
+					Destroyed: versions[i].Destroyed,
+				})
+			}
 		}
 	} else {
 		lastVersion := versions[len(versions)-1]
-		ret = append(ret, secretTree{
-			Name:      t.Name,
-			Type:      treeTypeVersion,
-			Version:   lastVersion.Version,
-			Deleted:   lastVersion.Deleted,
-			Destroyed: lastVersion.Destroyed,
-		})
+		if w.opts.GetDeletedVersions || !(lastVersion.Deleted || lastVersion.Destroyed) {
+			ret = append(ret, secretTree{
+				Name:      t.Name,
+				Type:      treeTypeVersion,
+				Version:   lastVersion.Version,
+				Deleted:   lastVersion.Deleted,
+				Destroyed: lastVersion.Destroyed,
+			})
+		}
 	}
 
 	return ret, nil

@@ -164,21 +164,24 @@ type Options struct {
 		Deleted bool `cli:"-d, --deleted"`
 	} `cli:"revert"`
 
-	Export struct{} `cli:"export"`
+	Export struct {
+		OnlyAlive bool `cli:"-o, --only-alive"`
+		Shallow   bool `cli:"-s, --shallow"`
+	} `cli:"export"`
 	Import struct{} `cli:"import"`
 
 	Move struct {
-		Recurse   bool `cli:"-R, -r, --recurse"`
-		Force     bool `cli:"-f, --force"`
-		Deep      bool `cli:"-d, --deep"`
-		OnlyAlive bool `cli:"-a, --all"`
+		Recurse bool `cli:"-R, -r, --recurse"`
+		Force   bool `cli:"-f, --force"`
+		Deep    bool `cli:"-d, --deep"`
+		All     bool `cli:"-a, --all"`
 	} `cli:"move, rename, mv"`
 
 	Copy struct {
-		Recurse   bool `cli:"-R, -r, --recurse"`
-		Force     bool `cli:"-f, --force"`
-		Deep      bool `cli:"-d, --deep"`
-		OnlyAlive bool `cli:"-a, --all"`
+		Recurse bool `cli:"-R, -r, --recurse"`
+		Force   bool `cli:"-f, --force"`
+		Deep    bool `cli:"-d, --deep"`
+		All     bool `cli:"-a, --all"`
 	} `cli:"copy, cp"`
 
 	Gen struct {
@@ -1865,10 +1868,9 @@ redeleting them.
 
 		v2Export := func(path string) error {
 			secrets, err := v.ConstructSecrets(path, vault.TreeOpts{
-				FetchKeys:        true,
-				FetchAllVersions: true,
-				//TODO: Make this configurable
-				GetDeletedVersions: true,
+				FetchKeys:          true,
+				FetchAllVersions:   !opt.Export.Shallow,
+				GetDeletedVersions: !opt.Export.OnlyAlive,
 			})
 			if err != nil {
 				return err
@@ -2098,7 +2100,7 @@ all versions to be grabbed from the destination regardless of deletion/destructi
 			if !opt.Move.Force && !recursively("move", args...) {
 				return nil /* skip this command, process the next */
 			}
-			err := v.MoveCopyTree(args[0], args[1], v.Move, vault.MoveCopyOpts{SkipIfExists: opt.SkipIfExists, Quiet: opt.Quiet})
+			err := v.MoveCopyTree(args[0], args[1], v.Move, vault.MoveCopyOpts{SkipIfExists: opt.SkipIfExists, Quiet: opt.Quiet, Deep: opt.Move.Deep})
 			if err != nil && !(vault.IsNotFound(err) && opt.Move.Force) {
 				return err
 			}
@@ -2143,7 +2145,7 @@ all versions to be grabbed from the destination regardless of deletion/destructi
 			if !opt.Copy.Force && !recursively("copy", args...) {
 				return nil /* skip this command, process the next */
 			}
-			err := v.MoveCopyTree(args[0], args[1], v.Copy, vault.MoveCopyOpts{SkipIfExists: opt.SkipIfExists, Quiet: opt.Quiet})
+			err := v.MoveCopyTree(args[0], args[1], v.Copy, vault.MoveCopyOpts{SkipIfExists: opt.SkipIfExists, Quiet: opt.Quiet, Deep: opt.Copy.Deep})
 			if err != nil && !(vault.IsNotFound(err) && opt.Copy.Force) {
 				return err
 			}
