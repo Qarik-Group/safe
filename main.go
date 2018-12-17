@@ -2099,10 +2099,6 @@ and overwrite all versions of the secret at the destination.
 
 		v := connect(true)
 		if vault.PathHasKey(args[0]) || vault.PathHasKey(args[1]) {
-			if opt.Move.Recurse {
-				return fmt.Errorf("Cannot recursively move a specific key")
-			}
-
 			if opt.Move.Deep {
 				return fmt.Errorf("Cannot deep copy a specific key")
 			}
@@ -2143,10 +2139,6 @@ and overwrite all versions of the secret at the destination.
 		v := connect(true)
 
 		if vault.PathHasKey(args[0]) || vault.PathHasKey(args[1]) {
-			if opt.Copy.Recurse {
-				return fmt.Errorf("Cannot recursively move a specific key")
-			}
-
 			if opt.Copy.Deep {
 				return fmt.Errorf("Cannot deep copy a specific key")
 			}
