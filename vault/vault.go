@@ -366,14 +366,14 @@ func (v *Vault) deleteEntireSecret(path string, destroy bool, all bool) error {
 }
 
 func (v *Vault) deleteSpecificKey(path string) error {
-	_, key, _ := ParsePath(path)
-	secret, err := v.Read(path)
+	secretPath, key, _ := ParsePath(path)
+	secret, err := v.Read(secretPath)
 	if err != nil {
 		return err
 	}
 	deleted := secret.Delete(key)
 	if !deleted {
-		return NewKeyNotFoundError(path, key)
+		return NewKeyNotFoundError(secretPath, key)
 	}
 	if secret.Empty() {
 		//Gotta avoid call to Write because Write ignores version information (with good reason)
@@ -382,9 +382,9 @@ func (v *Vault) deleteSpecificKey(path string) error {
 		//
 		//At some point, we should probably get Destroy routed into here so that we can destroy
 		// secrets through specifying keys
-		return v.deleteEntireSecret(path, false, false)
+		return v.deleteEntireSecret(secretPath, false, false)
 	}
-	return v.Write(path, secret)
+	return v.Write(secretPath, secret)
 }
 
 //DeleteVersions marks the given versions of the given secret as deleted for
