@@ -179,14 +179,12 @@ type Options struct {
 		Recurse bool `cli:"-R, -r, --recurse"`
 		Force   bool `cli:"-f, --force"`
 		Deep    bool `cli:"-d, --deep"`
-		All     bool `cli:"-a, --all"`
 	} `cli:"move, rename, mv"`
 
 	Copy struct {
 		Recurse bool `cli:"-R, -r, --recurse"`
 		Force   bool `cli:"-f, --force"`
 		Deep    bool `cli:"-d, --deep"`
-		All     bool `cli:"-a, --all"`
 	} `cli:"copy, cp"`
 
 	Gen struct {
@@ -2088,12 +2086,11 @@ redeleting them.
 
 	r.Dispatch("move", &Help{
 		Summary: "Move a secret from one path to another",
-		Usage:   "safe move [-rfda] OLD-PATH NEW-PATH",
+		Usage:   "safe move [-rfd] OLD-PATH NEW-PATH",
 		Type:    DestructiveCommand,
 		Description: `
 Specifying the --deep (-d) flag will cause all living versions to be grabbed from the source
-and overwrite all versions of the secret at the destination. The --all (-a) flag will cause
-all versions to be grabbed from the destination regardless of deletion/destruction status.
+and overwrite all versions of the secret at the destination.
 `}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
 		if len(args) != 2 {
@@ -2132,12 +2129,11 @@ all versions to be grabbed from the destination regardless of deletion/destructi
 
 	r.Dispatch("copy", &Help{
 		Summary: "Copy a secret from one path to another",
-		Usage:   "safe copy [-rfda] OLD-PATH NEW-PATH",
+		Usage:   "safe copy [-rfd] OLD-PATH NEW-PATH",
 		Type:    DestructiveCommand,
 		Description: `
 Specifying the --deep (-d) flag will cause all living versions to be grabbed from the source
-and overwrite all versions of the secret at the destination. The --all (-a) flag will cause
-all versions to be grabbed from the destination regardless of deletion/destruction status.
+and overwrite all versions of the secret at the destination. 
 `}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
 
