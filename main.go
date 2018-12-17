@@ -168,7 +168,12 @@ type Options struct {
 		OnlyAlive bool `cli:"-o, --only-alive"`
 		Shallow   bool `cli:"-s, --shallow"`
 	} `cli:"export"`
-	Import struct{} `cli:"import"`
+
+	Import struct {
+		IgnoreDestroyed bool `cli:"-I, --ignore-destroyed"`
+		IgnoreDeleted   bool `cli:"-i, --ignore-deleted"`
+		Shallow         bool `cli:"-s, --shallow"`
+	} `cli:"import"`
 
 	Move struct {
 		Recurse bool `cli:"-R, -r, --recurse"`
@@ -1985,20 +1990,22 @@ redeleting them.
 
 			data := unmarshalTarget[0]
 
-			//Verify that the mounts that require versioning actually support it. We
-			//can't really detect if v1 mounts exist at this stage unless we assume
-			//the token given has mount listing privileges. Not a big deal, because
-			//it will become very apparent once we start trying to put secrets in it
-			for mount, needsVersioning := range data.RequiresVersioning {
-				if needsVersioning {
-					mountVersion, err := v.MountVersion(mount)
-					if err != nil {
-						return fmt.Errorf("Could not determine existing mount version: %s", err)
-					}
+			if !opt.Import.Shallow {
+				//Verify that the mounts that require versioning actually support it. We
+				//can't really detect if v1 mounts exist at this stage unless we assume
+				//the token given has mount listing privileges. Not a big deal, because
+				//it will become very apparent once we start trying to put secrets in it
+				for mount, needsVersioning := range data.RequiresVersioning {
+					if needsVersioning {
+						mountVersion, err := v.MountVersion(mount)
+						if err != nil {
+							return fmt.Errorf("Could not determine existing mount version: %s", err)
+						}
 
-					if mountVersion != 2 {
-						return fmt.Errorf("Export for mount `%s' has secrets with multiple versions, but the mount either\n"+
-							"does not exist or does not support versioning", mount)
+						if mountVersion != 2 {
+							return fmt.Errorf("Export for mount `%s' has secrets with multiple versions, but the mount either\n"+
+								"does not exist or does not support versioning", mount)
+						}
 					}
 				}
 			}
@@ -2014,11 +2021,21 @@ redeleting them.
 				if firstVersion == 0 {
 					firstVersion = 1
 				}
+
+				if opt.Import.Shallow {
+					secret.Versions = secret.Versions[len(secret.Versions)-1:]
+				}
 				for i := range secret.Versions {
 					state := vault.SecretStateAlive
 					if secret.Versions[i].Destroyed {
+						if opt.Import.IgnoreDestroyed {
+							continue
+						}
 						state = vault.SecretStateDestroyed
 					} else if secret.Versions[i].Deleted {
+						if opt.Import.IgnoreDeleted {
+							continue
+						}
 						state = vault.SecretStateDeleted
 					}
 					data := vault.NewSecret()
@@ -2034,7 +2051,7 @@ redeleting them.
 
 				err := s.Copy(v, s.Path, vault.TreeCopyOpts{
 					Clear: true,
-					Pad:   true,
+					Pad:   !(opt.Import.IgnoreDestroyed || opt.Import.Shallow),
 				})
 				if err != nil {
 					return err
