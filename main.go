@@ -2637,7 +2637,7 @@ Here are the supported commands:
 
   @G{x509 revoke} [OPTIONS] path/to/cert
 
-    Revokes an X.509 certificate that was issues by one of our CAs.
+    Revokes an X.509 certificate that was issued by one of our CAs.
 
 
   @G{x509 crl} [OPTIONS] path/to/ca
@@ -2658,6 +2658,13 @@ Here are the supported commands:
     including its subject name, issuer (CA), expiration and lifetime,
     and what domains, email addresses, and IP addresses it represents.
 
+  @G{x509 reissue} [OPTIONS] path/to/certificate
+
+    Regenerate the certificate and key at the given path.
+
+  @G{x509 renew} [OPTIONS] path/to/certificate
+
+    Renew the certificate at the given path
 `,
 	}, func(command string, args ...string) error {
 		r.Help(os.Stdout, "x509")
