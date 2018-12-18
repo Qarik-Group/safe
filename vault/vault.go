@@ -129,7 +129,7 @@ func (v *Vault) Read(path string) (secret *Secret, err error) {
 
 	secret = NewSecret()
 
-	raw := map[string]string{}
+	raw := map[string]interface{}{}
 	_, err = v.client.Get(path, &raw, &vaultkv.KVGetOpts{Version: uint(version)})
 	if err != nil {
 		if vaultkv.IsNotFound(err) {
@@ -143,9 +143,22 @@ func (v *Vault) Read(path string) (secret *Secret, err error) {
 		if !found {
 			return nil, NewKeyNotFoundError(path, key)
 		}
-		secret.data[key] = val
-	} else {
-		secret.data = raw
+		raw = map[string]interface{}{key: val}
+	}
+
+	for k, v := range raw {
+		if (key != "" && k == key) || key == "" {
+			if s, ok := v.(string); ok {
+				secret.data[k] = s
+			} else {
+				var b []byte
+				b, err = json.Marshal(v)
+				if err != nil {
+					return
+				}
+				secret.data[k] = string(b)
+			}
+		}
 	}
 
 	return
