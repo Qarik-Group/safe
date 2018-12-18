@@ -10,21 +10,36 @@ import (
 	"time"
 )
 
+//Use some heuristics to determine what is the most likely mount path if Vault won't
+// tell us with its old, crusty version
+func mountPathDefault(path string) string {
+	path = strings.TrimLeft(path, "/")
+	var prefix string
+	if strings.HasPrefix(path, "auth/") {
+		path = strings.TrimPrefix(path, "auth/")
+		prefix = "auth/"
+	}
+
+	return fmt.Sprintf("%s%s", prefix, strings.Split(path, "/")[0])
+}
+
 //IsKVv2Mount returns true if the mount is a version 2 KV mount and false
 //otherwise. This will also simply return false if no mount exists at the given
 //mount point or if the Vault is too old to have the API endpoint to look for
 //the mount. If a different API error occurs, it will be propagated out.
-func (c *Client) IsKVv2Mount(path string) (bool, error) {
+func (c *Client) IsKVv2Mount(path string) (mountPath string, isV2 bool, err error) {
+	path = strings.TrimPrefix(path, "/")
 	output := struct {
 		Data struct {
 			Type    string `json:"type"`
+			Path    string `json:"path"`
 			Options struct {
 				Version string `json:"version"`
 			} `json:"options"`
 		} `json:"data"`
 	}{}
 
-	err := c.doRequest(
+	err = c.doRequest(
 		"GET",
 		fmt.Sprintf("/sys/internal/ui/mounts/%s", strings.TrimLeft(path, "/")),
 		nil, &output)
@@ -32,21 +47,31 @@ func (c *Client) IsKVv2Mount(path string) (bool, error) {
 		//If we got a 404, either the mount doesn't exist or this version of Vault
 		// is too old to possibly have a v2 backend
 		if _, is404 := err.(*ErrNotFound); is404 {
-			return false, nil
+			err = nil
 		}
-		return false, err
+
+		mountPath = strings.Trim(mountPathDefault(path), "/")
+		return
 	}
 
+	var prefix string
+	if strings.HasPrefix(path, "auth/") {
+		prefix = "auth/"
+	}
+
+	mountPath = strings.Trim(fmt.Sprintf("%s%s", prefix, output.Data.Path), "/")
+
 	if output.Data.Type != "kv" {
-		return false, nil
+		return
 	}
 
 	version, err := strconv.ParseUint(output.Data.Options.Version, 10, 64)
 	if err != nil {
-		return false, nil
+		return
 	}
 
-	return version == 2, nil
+	isV2 = version == 2
+	return
 }
 
 //SplitMount takes the given path and splits it into the respective mount name
@@ -110,7 +135,7 @@ type V2GetOpts struct {
 //should be "foo/bar". The response will be decoded into the item pointed to
 //by output using encoding/json.Unmarshal semantics. The version to retrieve
 //can be selected by setting Version in the V2GetOpts struct at opts.
-func (c *Client) V2Get(path string, output interface{}, opts *V2GetOpts) (meta V2Version, err error) {
+func (c *Client) V2Get(mount, subpath string, output interface{}, opts *V2GetOpts) (meta V2Version, err error) {
 	if output != nil &&
 		reflect.ValueOf(output).Kind() != reflect.Ptr {
 		err = fmt.Errorf("V2Get output target must be a pointer if non-nil")
@@ -136,8 +161,7 @@ func (c *Client) V2Get(path string, output interface{}, opts *V2GetOpts) (meta V
 		query.Add("version", strconv.FormatUint(uint64(opts.Version), 10))
 	}
 
-	mount, subpath := SplitMount(path)
-	path = fmt.Sprintf("%s/data%s", mount, subpath)
+	path := fmt.Sprintf("%s/data/%s", strings.Trim(mount, "/"), strings.Trim(subpath, "/"))
 	err = c.doRequest("GET", path, query, unmarshalInto)
 	if err != nil {
 		return
@@ -153,10 +177,9 @@ func (c *Client) V2Get(path string, output interface{}, opts *V2GetOpts) (meta V
 //"directory". The Vault must be unsealed and initialized for this endpoint to
 //work. No assumptions are made about the mounting point of your Key/Value
 //backend.
-func (v *Client) V2List(path string) ([]string, error) {
+func (v *Client) V2List(mount, subpath string) ([]string, error) {
 	ret := []string{}
-	mount, subpath := SplitMount(path)
-	path = fmt.Sprintf("%s/metadata%s", mount, subpath)
+	path := fmt.Sprintf("%s/metadata/%s", strings.Trim(mount, "/"), strings.Trim(subpath, "/"))
 
 	err := v.doRequest("LIST", path, nil, &vaultResponse{
 		Data: &struct {
@@ -198,7 +221,7 @@ func (s V2SetOpts) WithCAS(i uint) *V2SetOpts {
 // the secret as JSON, and writes it to the path given. Populate ops to use the
 // check-and-set functionality. Returns the metadata about the written secret
 // if the write is successful.
-func (c *Client) V2Set(path string, values interface{}, opts *V2SetOpts) (meta V2Version, err error) {
+func (c *Client) V2Set(mount, subpath string, values interface{}, opts *V2SetOpts) (meta V2Version, err error) {
 	input := struct {
 		Options *V2SetOpts  `json:"options,omitempty"`
 		Data    interface{} `json:"data"`
@@ -213,8 +236,7 @@ func (c *Client) V2Set(path string, values interface{}, opts *V2SetOpts) (meta V
 		Data: v2VersionAPI{},
 	}
 
-	mount, subpath := SplitMount(path)
-	path = fmt.Sprintf("%s/data%s", mount, subpath)
+	path := fmt.Sprintf("%s/data/%s", strings.Trim(mount, "/"), strings.Trim(subpath, "/"))
 
 	err = c.doRequest("PUT", path, &input, &output)
 	if err != nil {
@@ -234,14 +256,13 @@ type V2DeleteOpts struct {
 // provided or the Versions slice therein is left nil, the latest version is
 // deleted. Otherwise, the specified versions are deleted. Note that the deleted
 // data from this call is recoverable from a call to V2Undelete.
-func (c *Client) V2Delete(path string, opts *V2DeleteOpts) error {
+func (c *Client) V2Delete(mount, subpath string, opts *V2DeleteOpts) error {
 	method := "DELETE"
-	mount, subpath := SplitMount(path)
-	path = fmt.Sprintf("%s/data%s", mount, subpath)
+	path := fmt.Sprintf("%s/data/%s", strings.Trim(mount, "/"), strings.Trim(subpath, "/"))
 
 	if opts != nil && len(opts.Versions) > 0 {
 		method = "POST"
-		path = fmt.Sprintf("%s/delete%s", mount, subpath)
+		path = fmt.Sprintf("%s/delete/%s", strings.Trim(mount, "/"), strings.Trim(subpath, "/"))
 	} else {
 		opts = nil
 	}
@@ -250,9 +271,8 @@ func (c *Client) V2Delete(path string, opts *V2DeleteOpts) error {
 }
 
 //V2Undelete marks the specified versions at the specified paths as not deleted.
-func (c *Client) V2Undelete(path string, versions []uint) error {
-	mount, subpath := SplitMount(path)
-	path = fmt.Sprintf("%s/undelete%s", mount, subpath)
+func (c *Client) V2Undelete(mount, subpath string, versions []uint) error {
+	path := fmt.Sprintf("%s/undelete/%s", strings.Trim(mount, "/"), strings.Trim(subpath, "/"))
 	return c.doRequest("POST", path, struct {
 		Versions []uint `json:"versions"`
 	}{
@@ -261,9 +281,8 @@ func (c *Client) V2Undelete(path string, versions []uint) error {
 }
 
 //V2Destroy permanently deletes the specified versions at the specified path.
-func (c *Client) V2Destroy(path string, versions []uint) error {
-	mount, subpath := SplitMount(path)
-	path = fmt.Sprintf("%s/destroy%s", mount, subpath)
+func (c *Client) V2Destroy(mount, subpath string, versions []uint) error {
+	path := fmt.Sprintf("%s/destroy/%s", strings.Trim(mount, "/"), strings.Trim(subpath, "/"))
 	return c.doRequest("POST", path, struct {
 		Versions []uint `json:"versions"`
 	}{
@@ -273,9 +292,8 @@ func (c *Client) V2Destroy(path string, versions []uint) error {
 
 //V2DestroyMetadata permanently destroys all secret versions and all metadata
 // associated with the secret at the specified path.
-func (c *Client) V2DestroyMetadata(path string) error {
-	mount, subpath := SplitMount(path)
-	path = fmt.Sprintf("%s/metadata%s", mount, subpath)
+func (c *Client) V2DestroyMetadata(mount, subpath string) error {
+	path := fmt.Sprintf("%s/metadata/%s", strings.Trim(mount, "/"), strings.Trim(subpath, "/"))
 	return c.doRequest("DELETE", path, nil, nil)
 }
 
@@ -349,9 +367,8 @@ func (m v2MetadataAPI) Parse() V2Metadata {
 
 //V2GetMetadata gets the metadata associated with the secret at the specified
 // path.
-func (c *Client) V2GetMetadata(path string) (meta V2Metadata, err error) {
-	mount, subpath := SplitMount(path)
-	path = fmt.Sprintf("%s/metadata%s", mount, subpath)
+func (c *Client) V2GetMetadata(mount, subpath string) (meta V2Metadata, err error) {
+	path := fmt.Sprintf("%s/metadata/%s", strings.Trim(mount, "/"), strings.Trim(subpath, "/"))
 	output := v2MetadataAPI{}
 	err = c.doRequest("GET", path, nil, &output)
 	if err != nil {

@@ -1,6 +1,10 @@
 package vaultkv
 
-import "sync"
+import (
+	"fmt"
+	"strings"
+	"sync"
+)
 
 //KV provides an abstraction to the Vault tree which makes dealing with
 // the potential of both KV v1 and KV v2 backends easier to work with.
@@ -17,14 +21,14 @@ type KV struct {
 }
 
 type kvMount interface {
-	Get(path string, output interface{}, opts *KVGetOpts) (meta KVVersion, err error)
-	Set(path string, values map[string]string, opts *KVSetOpts) (meta KVVersion, err error)
-	List(path string) (paths []string, err error)
-	Delete(path string, opts *KVDeleteOpts) (err error)
-	Undelete(path string, versions []uint) (err error)
-	Destroy(path string, versions []uint) (err error)
-	DestroyAll(path string) (err error)
-	Versions(path string) (ret []KVVersion, err error)
+	Get(mount, subpath string, output interface{}, opts *KVGetOpts) (meta KVVersion, err error)
+	Set(mount, subpath string, values map[string]string, opts *KVSetOpts) (meta KVVersion, err error)
+	List(mount, subpath string) (paths []string, err error)
+	Delete(mount, subpath string, opts *KVDeleteOpts) (err error)
+	Undelete(mount, subpath string, versions []uint) (err error)
+	Destroy(mount, subpath string, versions []uint) (err error)
+	DestroyAll(mount, subpath string) (err error)
+	Versions(mount, subpath string) (ret []KVVersion, err error)
 	MountVersion() (version uint)
 }
 
@@ -35,12 +39,23 @@ type kvv1Mount struct {
 	client *Client
 }
 
-func (k kvv1Mount) Get(path string, output interface{}, opts *KVGetOpts) (meta KVVersion, err error) {
+func v1ConstructPath(mount, path string) string {
+	mount = strings.Trim(mount, "/")
+	path = strings.Trim(path, "/")
+	if mount == path {
+		return mount
+	}
+
+	return fmt.Sprintf("%s/%s", mount, strings.Trim(strings.TrimPrefix(path, mount), "/"))
+}
+
+func (k kvv1Mount) Get(mount, subpath string, output interface{}, opts *KVGetOpts) (meta KVVersion, err error) {
 	if opts != nil && opts.Version > 1 {
 		err = &ErrNotFound{"No versions greater than one in KV v1 backend"}
 		return
 	}
 
+	path := v1ConstructPath(mount, subpath)
 	err = k.client.Get(path, output)
 	if err == nil {
 		meta.Version = 1
@@ -48,11 +63,13 @@ func (k kvv1Mount) Get(path string, output interface{}, opts *KVGetOpts) (meta K
 	return
 }
 
-func (k kvv1Mount) List(path string) (paths []string, err error) {
+func (k kvv1Mount) List(mount, subpath string) (paths []string, err error) {
+	path := v1ConstructPath(mount, subpath)
 	return k.client.List(path)
 }
 
-func (k kvv1Mount) Set(path string, values map[string]string, opts *KVSetOpts) (meta KVVersion, err error) {
+func (k kvv1Mount) Set(mount, subpath string, values map[string]string, opts *KVSetOpts) (meta KVVersion, err error) {
+	path := v1ConstructPath(mount, subpath)
 	err = k.client.Set(path, values)
 	if err == nil {
 		meta.Version = 1
@@ -60,7 +77,7 @@ func (k kvv1Mount) Set(path string, values map[string]string, opts *KVSetOpts) (
 	return
 }
 
-func (k kvv1Mount) Delete(path string, opts *KVDeleteOpts) (err error) {
+func (k kvv1Mount) Delete(mount, subpath string, opts *KVDeleteOpts) (err error) {
 	if opts == nil || !opts.V1Destroy {
 		return &ErrKVUnsupported{"Refusing to destroy KV v1 value from delete call"}
 	}
@@ -70,14 +87,14 @@ func (k kvv1Mount) Delete(path string, opts *KVDeleteOpts) (err error) {
 		versions = opts.Versions
 	}
 
-	return k.Destroy(path, versions)
+	return k.Destroy(mount, subpath, versions)
 }
 
-func (k kvv1Mount) Undelete(path string, versions []uint) (err error) {
+func (k kvv1Mount) Undelete(mount, subpath string, versions []uint) (err error) {
 	return &ErrKVUnsupported{"Cannot undelete secret in KV v1 backend"}
 }
 
-func (k kvv1Mount) Destroy(path string, versions []uint) (err error) {
+func (k kvv1Mount) Destroy(mount, subpath string, versions []uint) (err error) {
 	shouldDelete := len(versions) == 0
 	for _, v := range versions {
 		if v <= 1 {
@@ -86,16 +103,19 @@ func (k kvv1Mount) Destroy(path string, versions []uint) (err error) {
 	}
 
 	if shouldDelete {
+		path := v1ConstructPath(mount, subpath)
 		err = k.client.Delete(path)
 	}
 	return err
 }
 
-func (k kvv1Mount) DestroyAll(path string) (err error) {
+func (k kvv1Mount) DestroyAll(mount, subpath string) (err error) {
+	path := v1ConstructPath(mount, subpath)
 	return k.client.Delete(path)
 }
 
-func (k kvv1Mount) Versions(path string) (ret []KVVersion, err error) {
+func (k kvv1Mount) Versions(mount, subpath string) (ret []KVVersion, err error) {
+	path := v1ConstructPath(mount, subpath)
 	err = k.client.Get(path, nil)
 	if err != nil {
 		return nil, err
@@ -115,7 +135,7 @@ type kvv2Mount struct {
 	client *Client
 }
 
-func (k kvv2Mount) Get(path string, output interface{}, opts *KVGetOpts) (meta KVVersion, err error) {
+func (k kvv2Mount) Get(mount, subpath string, output interface{}, opts *KVGetOpts) (meta KVVersion, err error) {
 	var o *V2GetOpts
 	if opts != nil {
 		o = &V2GetOpts{
@@ -124,7 +144,7 @@ func (k kvv2Mount) Get(path string, output interface{}, opts *KVGetOpts) (meta K
 	}
 
 	var m V2Version
-	m, err = k.client.V2Get(path, output, o)
+	m, err = k.client.V2Get(mount, subpath, output, o)
 	if err == nil {
 		meta.Deleted = m.DeletedAt != nil
 		meta.Destroyed = m.Destroyed
@@ -133,42 +153,42 @@ func (k kvv2Mount) Get(path string, output interface{}, opts *KVGetOpts) (meta K
 	return
 }
 
-func (k kvv2Mount) List(path string) (paths []string, err error) {
-	return k.client.V2List(path)
+func (k kvv2Mount) List(mount, subpath string) (paths []string, err error) {
+	return k.client.V2List(mount, subpath)
 }
 
-func (k kvv2Mount) Set(path string, values map[string]string, opts *KVSetOpts) (meta KVVersion, err error) {
+func (k kvv2Mount) Set(mount, subpath string, values map[string]string, opts *KVSetOpts) (meta KVVersion, err error) {
 	var m V2Version
-	m, err = k.client.V2Set(path, values, nil)
+	m, err = k.client.V2Set(mount, subpath, values, nil)
 	if err == nil {
 		meta.Version = m.Version
 	}
 	return
 }
 
-func (k kvv2Mount) Delete(path string, opts *KVDeleteOpts) (err error) {
+func (k kvv2Mount) Delete(mount, subpath string, opts *KVDeleteOpts) (err error) {
 	versions := []uint{}
 	if opts != nil {
 		versions = opts.Versions
 	}
-	return k.client.V2Delete(path, &V2DeleteOpts{Versions: versions})
+	return k.client.V2Delete(mount, subpath, &V2DeleteOpts{Versions: versions})
 }
 
-func (k kvv2Mount) Undelete(path string, versions []uint) (err error) {
-	return k.client.V2Undelete(path, versions)
+func (k kvv2Mount) Undelete(mount, subpath string, versions []uint) (err error) {
+	return k.client.V2Undelete(mount, subpath, versions)
 }
 
-func (k kvv2Mount) Destroy(path string, versions []uint) (err error) {
-	return k.client.V2Destroy(path, versions)
+func (k kvv2Mount) Destroy(mount, subpath string, versions []uint) (err error) {
+	return k.client.V2Destroy(mount, subpath, versions)
 }
 
-func (k kvv2Mount) DestroyAll(path string) (err error) {
-	return k.client.V2DestroyMetadata(path)
+func (k kvv2Mount) DestroyAll(mount, subpath string) (err error) {
+	return k.client.V2DestroyMetadata(mount, subpath)
 }
 
-func (k kvv2Mount) Versions(path string) (ret []KVVersion, err error) {
+func (k kvv2Mount) Versions(mount, subpath string) (ret []KVVersion, err error) {
 	var meta V2Metadata
-	meta, err = k.client.V2GetMetadata(path)
+	meta, err = k.client.V2GetMetadata(mount, subpath)
 	if err != nil {
 		return nil, err
 	}
@@ -195,10 +215,17 @@ func (v *Client) NewKV() *KV {
 	return &KV{Client: v, mounts: map[string]kvMount{}}
 }
 
-func (k *KV) mountForPath(path string) (ret kvMount, err error) {
-	mount, _ := SplitMount(path)
+func (k *KV) mountForPath(path string) (mountPath string, ret kvMount, err error) {
+	pathParts := strings.Split(strings.Trim(path, "/"), "/")
+	var found bool
 	k.lock.RLock()
-	ret, found := k.mounts[mount]
+	for i := 1; i <= len(pathParts); i++ {
+		mountPath = strings.Join(pathParts[:i], "/")
+		ret, found = k.mounts[path]
+		if found {
+			break
+		}
+	}
 	k.lock.RUnlock()
 	if found {
 		return
@@ -206,12 +233,18 @@ func (k *KV) mountForPath(path string) (ret kvMount, err error) {
 
 	k.lock.Lock()
 	defer k.lock.Unlock()
-	ret, found = k.mounts[mount]
+	for i := 1; i <= len(pathParts); i++ {
+		mountPath = strings.Join(pathParts[:i], "/")
+		ret, found = k.mounts[path]
+		if found {
+			break
+		}
+	}
 	if found {
 		return
 	}
 
-	isV2, err := k.Client.IsKVv2Mount(mount)
+	mountPath, isV2, err := k.Client.IsKVv2Mount(path)
 	if err != nil {
 		return
 	}
@@ -221,7 +254,7 @@ func (k *KV) mountForPath(path string) (ret kvMount, err error) {
 		ret = kvv2Mount{k.Client}
 	}
 
-	k.mounts[mount] = ret
+	k.mounts[mountPath] = ret
 
 	return
 }
@@ -244,24 +277,24 @@ type KVVersion struct {
 //semantics of Client.Get or Client.V2Get, chosen based on the backend mounted
 //at the path given.
 func (k *KV) Get(path string, output interface{}, opts *KVGetOpts) (meta KVVersion, err error) {
-	mount, err := k.mountForPath(path)
+	mountPath, mount, err := k.mountForPath(path)
 	if err != nil {
 		return
 	}
 
-	return mount.Get(path, output, opts)
+	return mount.Get(mountPath, path, output, opts)
 }
 
 //List retrieves the paths under the given path. If the path does not exist or
 //it is not a folder, ErrNotFound is thrown. Results ending with a slash are
 //folders.
 func (k *KV) List(path string) (paths []string, err error) {
-	mount, err := k.mountForPath(path)
+	mountPath, mount, err := k.mountForPath(path)
 	if err != nil {
 		return
 	}
 
-	return mount.List(path)
+	return mount.List(mountPath, path)
 }
 
 //KVSetOpts are the options for a set call to the KV.Set() call. Currently there
@@ -272,12 +305,12 @@ type KVSetOpts struct{}
 //Set puts the values given at the path given. If KV v1, the previous value, if
 //any, is overwritten.  If KV v2, a new version is created.
 func (k *KV) Set(path string, values map[string]string, opts *KVSetOpts) (meta KVVersion, err error) {
-	mount, err := k.mountForPath(path)
+	mountPath, mount, err := k.mountForPath(path)
 	if err != nil {
 		return
 	}
 
-	return mount.Set(path, values, opts)
+	return mount.Set(mountPath, path, values, opts)
 }
 
 //KVDeleteOpts are options applicable to KV.Delete
@@ -296,66 +329,66 @@ type KVDeleteOpts struct {
 // For KV v1, temporarily deleting a secret is not possible. Use the V1Destroy
 // option as a way to safeguard against unwanted destruction of secrets.
 func (k *KV) Delete(path string, opts *KVDeleteOpts) (err error) {
-	mount, err := k.mountForPath(path)
+	mountPath, mount, err := k.mountForPath(path)
 	if err != nil {
 		return
 	}
 
-	return mount.Delete(path, opts)
+	return mount.Delete(mountPath, path, opts)
 }
 
 //Undelete attempts to unmark deletion on a previously deleted version.
 // KV v1 backends cannot do this, and so if the backend is KV v1, this
 // returns an ErrKVUnsupported.
 func (k *KV) Undelete(path string, versions []uint) (err error) {
-	mount, err := k.mountForPath(path)
+	mountPath, mount, err := k.mountForPath(path)
 	if err != nil {
 		return
 	}
 
-	return mount.Undelete(path, versions)
+	return mount.Undelete(mountPath, path, versions)
 }
 
 //Destroy attempts to irrevocably delete the given versions at the given
 // path. For KV v1 backends, this is a call to Client.Delete. for KV v2
 // backends, this is a call to Client.V2Destroy
 func (k *KV) Destroy(path string, versions []uint) (err error) {
-	mount, err := k.mountForPath(path)
+	mountPath, mount, err := k.mountForPath(path)
 	if err != nil {
 		return
 	}
 
-	return mount.Destroy(path, versions)
+	return mount.Destroy(mountPath, path, versions)
 }
 
 //DestroyAll attempts to irrevocably delete all versions of the secret
 // at the given path. For KV v1 backends, this is a call to Client.Delete.
 // For v2 backends, this is a call to Client.V2DestroyMetadata
 func (k *KV) DestroyAll(path string) (err error) {
-	mount, err := k.mountForPath(path)
+	mountPath, mount, err := k.mountForPath(path)
 	if err != nil {
 		return
 	}
 
-	return mount.DestroyAll(path)
+	return mount.DestroyAll(mountPath, path)
 }
 
 //Versions returns the versions of the secret available. If no secret
 // exists at this path, ErrNotFound is returned. If the secret exists
 // and this is a KV v1 backend, one version is returned.
 func (k *KV) Versions(path string) (ret []KVVersion, err error) {
-	mount, err := k.mountForPath(path)
+	mountPath, mount, err := k.mountForPath(path)
 	if err != nil {
 		return
 	}
 
-	return mount.Versions(path)
+	return mount.Versions(mountPath, path)
 }
 
 //MountVersion returns the KV version of the mount for the given path.
 // v1 mounts return 1; v2 mounts return 2.
 func (k *KV) MountVersion(mount string) (version uint, err error) {
-	m, err := k.mountForPath(mount)
+	_, m, err := k.mountForPath(mount)
 	if err != nil {
 		return
 	}
