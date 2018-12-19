@@ -39,14 +39,10 @@ type kvv1Mount struct {
 	client *Client
 }
 
-func v1ConstructPath(mount, path string) string {
+func v1ConstructPath(mount, subpath string) string {
 	mount = strings.Trim(mount, "/")
-	path = strings.Trim(path, "/")
-	if mount == path {
-		return mount
-	}
-
-	return fmt.Sprintf("%s/%s", mount, strings.Trim(strings.TrimPrefix(path, mount), "/"))
+	subpath = strings.Trim(subpath, "/")
+	return strings.Trim(fmt.Sprintf("%s/%s", mount, subpath), "/")
 }
 
 func (k kvv1Mount) Get(mount, subpath string, output interface{}, opts *KVGetOpts) (meta KVVersion, err error) {
@@ -259,6 +255,16 @@ func (k *KV) mountForPath(path string) (mountPath string, ret kvMount, err error
 	return
 }
 
+func subtractMount(mount string, path string) string {
+	mount = strings.Trim(mount, "/")
+	path = strings.Trim(path, "/")
+	var ret string
+	if mount != path {
+		ret = strings.Trim(strings.TrimPrefix(path, mount), "/")
+	}
+	return ret
+}
+
 //KVGetOpts are options applicable to KV.Get
 type KVGetOpts struct {
 	// Version is the version of the resource to retrieve. Setting this to zero (or
@@ -282,6 +288,7 @@ func (k *KV) Get(path string, output interface{}, opts *KVGetOpts) (meta KVVersi
 		return
 	}
 
+	path = subtractMount(mountPath, path)
 	return mount.Get(mountPath, path, output, opts)
 }
 
@@ -294,6 +301,7 @@ func (k *KV) List(path string) (paths []string, err error) {
 		return
 	}
 
+	path = subtractMount(mountPath, path)
 	return mount.List(mountPath, path)
 }
 
@@ -310,6 +318,7 @@ func (k *KV) Set(path string, values map[string]string, opts *KVSetOpts) (meta K
 		return
 	}
 
+	path = subtractMount(mountPath, path)
 	return mount.Set(mountPath, path, values, opts)
 }
 
@@ -334,6 +343,7 @@ func (k *KV) Delete(path string, opts *KVDeleteOpts) (err error) {
 		return
 	}
 
+	path = subtractMount(mountPath, path)
 	return mount.Delete(mountPath, path, opts)
 }
 
@@ -346,6 +356,7 @@ func (k *KV) Undelete(path string, versions []uint) (err error) {
 		return
 	}
 
+	path = subtractMount(mountPath, path)
 	return mount.Undelete(mountPath, path, versions)
 }
 
@@ -358,6 +369,7 @@ func (k *KV) Destroy(path string, versions []uint) (err error) {
 		return
 	}
 
+	path = subtractMount(mountPath, path)
 	return mount.Destroy(mountPath, path, versions)
 }
 
@@ -370,6 +382,7 @@ func (k *KV) DestroyAll(path string) (err error) {
 		return
 	}
 
+	path = subtractMount(mountPath, path)
 	return mount.DestroyAll(mountPath, path)
 }
 
@@ -382,6 +395,7 @@ func (k *KV) Versions(path string) (ret []KVVersion, err error) {
 		return
 	}
 
+	path = subtractMount(mountPath, path)
 	return mount.Versions(mountPath, path)
 }
 
