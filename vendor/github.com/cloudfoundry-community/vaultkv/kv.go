@@ -221,7 +221,7 @@ func (k *KV) mountForPath(path string) (mountPath string, ret kvMount, err error
 	k.lock.RLock()
 	for i := 1; i <= len(pathParts); i++ {
 		mountPath = strings.Join(pathParts[:i], "/")
-		ret, found = k.mounts[path]
+		ret, found = k.mounts[mountPath]
 		if found {
 			break
 		}
@@ -235,7 +235,7 @@ func (k *KV) mountForPath(path string) (mountPath string, ret kvMount, err error
 	defer k.lock.Unlock()
 	for i := 1; i <= len(pathParts); i++ {
 		mountPath = strings.Join(pathParts[:i], "/")
-		ret, found = k.mounts[path]
+		ret, found = k.mounts[mountPath]
 		if found {
 			break
 		}
