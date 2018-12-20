@@ -315,9 +315,7 @@ for version in "${versions[@]}"; do
   killall vault-${platform}-${version} >/dev/null 2>&1 || true
 done
 for version in "${versions[@]}"; do
-#TODO: Test kvv1 again
-#for kvversion in 1 2; do
-for kvversion in 2; do
+for kvversion in 1 2; do
   # KV v2 was introduced in 0.10
   if [[ kvversion -eq 2 && $version =~ ^0\.[6-9].* ]]; then
     continue
@@ -2095,10 +2093,10 @@ EOF
   (run; ./safe x509 issue --ca        secret/reissue/ca --name test.ca   && \
         ./safe x509 issue --signed-by secret/reissue/ca --name test.cert \
                           --bits 2048 secret/reissue/cert); exitok $? 0
-  serial1=$(safe read secret/reissue/ca:serial)
+  serial1=$(./safe read secret/reissue/ca:serial)
 
   now reissuing the certificate
-  safe cp secret/reissue/cert/ secret/reissue/orig
+  ./safe cp secret/reissue/cert/ secret/reissue/orig
   (run; ./safe x509 reissue secret/reissue/cert); exitok $? 0
 
   now checking that reissue changed the private key
@@ -2106,7 +2104,7 @@ EOF
       "$(./safe read secret/reissue/cert:key)"
 
   now checking that reissue bumps the CA serial number
-  serial2=$(safe read secret/reissue/ca:serial)
+  serial2=$(./safe read secret/reissue/ca:serial)
   eq $(( $serial1 + 1 )) $serial2
 
   now checking that reissue does not change certificate attributes
@@ -2131,10 +2129,10 @@ EOF
   (run; ./safe x509 issue --ca        secret/renew/ca --name test.ca   && \
         ./safe x509 issue --signed-by secret/renew/ca --name test.cert \
                           --bits 2048 secret/renew/cert); exitok $? 0
-  serial1=$(safe read secret/renew/ca:serial)
+  serial1=$(./safe read secret/renew/ca:serial)
 
   now renewing the certificate
-  safe cp secret/renew/cert/ secret/renew/orig
+  ./safe cp secret/renew/cert/ secret/renew/orig
   (run; ./safe x509 renew secret/renew/cert); exitok $? 0
 
   now checking that renew did not change the private key
@@ -2142,7 +2140,7 @@ EOF
       "$(./safe read secret/renew/cert:key)"
 
   now checking that renew bumps the CA serial number
-  serial2=$(safe read secret/renew/ca:serial)
+  serial2=$(./safe read secret/renew/ca:serial)
   eq $(( $serial1 + 1 )) $serial2
 
   now checking that renew does not change certificate attributes
