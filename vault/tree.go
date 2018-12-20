@@ -140,9 +140,9 @@ func PathLessThan(left, right string) bool {
 	}
 
 	for i := 0; i < minLen; i++ {
-		if left[i] < right[i] {
+		if leftSplit[i] < rightSplit[i] {
 			return true
-		} else if left[i] > right[i] {
+		} else if leftSplit[i] > rightSplit[i] {
 			return false
 		}
 	}
@@ -576,13 +576,26 @@ func (t *secretTree) sort() {
 }
 
 func (s Secrets) Draw(root string, color, secrets bool) string {
-	root = strings.TrimSuffix(Canonicalize(root), "/")
+	if len(s) == 0 {
+		return ""
+	}
+
+	root = strings.Trim(Canonicalize(root), "/")
 	var index int
 	if len(root) > 0 {
 		index = len(strings.Split(root, "/"))
 	}
 
 	printTree := s.printableTree(color, secrets, index)
+
+	root = strings.Trim(root, "/")
+	if root != strings.Trim(s[0].Path, "/") {
+		root = strings.TrimSuffix(root, "/") + "/"
+	}
+	if color {
+		root = ansi.Sprintf("@C{%s}", root)
+	}
+	printTree.Name = root
 	return printTree.Draw()
 }
 
@@ -599,13 +612,15 @@ func (s Secrets) printableTree(color, secrets bool, index int) *tree.Node {
 	}
 	isSecret := index == len(firstSplit)-1
 
-	const dirFmt, secFmt, keyFmt = "@B{%s}", "@G{%s}", "@Y{%s}"
+	var dirFmt, secFmt, keyFmt = "%s/", "%s", ":%s"
 	if color {
-		if isSecret {
-			thisName = ansi.Sprintf(secFmt, thisName)
-		} else {
-			thisName = ansi.Sprintf(dirFmt, thisName)
-		}
+		dirFmt, secFmt, keyFmt = "@B{%s/}", "@G{%s}", "@Y{:%s}"
+	}
+
+	if isSecret {
+		thisName = ansi.Sprintf(secFmt, thisName)
+	} else {
+		thisName = ansi.Sprintf(dirFmt, thisName)
 	}
 
 	ret := &tree.Node{
@@ -627,9 +642,22 @@ func (s Secrets) printableTree(color, secrets bool, index int) *tree.Node {
 		startIndex = 1
 	}
 	for startIndex < len(s) {
-		endIndex := startIndex + 1
 		thisSplit := strings.Split("/"+s[startIndex].Path, "/")
 		groupWord := thisSplit[index+1]
+		//Make a separate entry for the secret
+		if len(thisSplit) == index+2 {
+			if secrets {
+				toAdd := s[startIndex:startIndex+1].printableTree(color, secrets, index+1)
+				if toAdd != nil {
+					ret.Append(*toAdd)
+				}
+			}
+			startIndex++
+			continue
+		}
+
+		endIndex := startIndex + 1
+		//then check for things under the "directory"
 		//Determine end of this "branch"
 		for ; endIndex < len(s); endIndex++ {
 			thisSplit := strings.Split("/"+s[endIndex].Path, "/")
