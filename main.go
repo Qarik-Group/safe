@@ -2102,11 +2102,15 @@ and overwrite all versions of the secret at the destination.
 			if opt.Move.Deep {
 				return fmt.Errorf("Cannot deep copy a specific key")
 			}
+
+			if !vault.PathHasKey(args[0]) && vault.PathHasKey(args[1]) {
+				return fmt.Errorf("Cannot move from entire secret into specific key")
+			}
 		}
 
 		//Don't try to recurse if operating on a key
 		// args[0] is the source path. args[1] is the destination path.
-		if opt.Move.Recurse {
+		if opt.Move.Recurse && !(vault.PathHasKey(args[0]) || vault.PathHasKey(args[1])) {
 			if !opt.Move.Force && !recursively("move", args...) {
 				return nil /* skip this command, process the next */
 			}
@@ -2142,11 +2146,15 @@ and overwrite all versions of the secret at the destination.
 			if opt.Copy.Deep {
 				return fmt.Errorf("Cannot deep copy a specific key")
 			}
+
+			if !vault.PathHasKey(args[0]) && vault.PathHasKey(args[1]) {
+				return fmt.Errorf("Cannot move from entire secret into specific key")
+			}
 		}
 
 		//Don't try to recurse if operating on a key
 		// args[0] is the source path. args[1] is the destination path.
-		if opt.Copy.Recurse {
+		if opt.Copy.Recurse && !(vault.PathHasKey(args[0]) || vault.PathHasKey(args[1])) {
 			if !opt.Copy.Force && !recursively("copy", args...) {
 				return nil /* skip this command, process the next */
 			}

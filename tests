@@ -88,7 +88,7 @@ testing() {
   test="$*"
 }
 clearvault() {
-  (./safe paths | xargs ./safe rm) &>/dev/null
+  (./safe rm -rdaf secret) &>/dev/null
 }
 now() {
   if [[ -n "${1:-}" ]]; then
@@ -315,7 +315,9 @@ for version in "${versions[@]}"; do
   killall vault-${platform}-${version} >/dev/null 2>&1 || true
 done
 for version in "${versions[@]}"; do
-for kvversion in 1 2; do
+#TODO: Test kvv1 again
+#for kvversion in 1 2; do
+for kvversion in 2; do
   # KV v2 was introduced in 0.10
   if [[ kvversion -eq 2 && $version =~ ^0\.[6-9].* ]]; then
     continue
