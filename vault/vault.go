@@ -443,6 +443,22 @@ func (v *Vault) deleteIfPresent(path string, opts DeleteOpts) error {
 	return err
 }
 
+func (v *Vault) verifyMetadataExists(path string) error {
+	versions, err := v.Versions(path)
+	if err != nil {
+		if vaultkv.IsNotFound(err) {
+			return NewSecretNotFoundError(path)
+		}
+		return err
+	}
+
+	if len(versions) == 0 {
+		return NewSecretNotFoundError(path)
+	}
+
+	return nil
+}
+
 type MoveCopyOpts struct {
 	SkipIfExists bool
 	Quiet        bool
@@ -466,10 +482,16 @@ func (v *Vault) Copy(oldpath, newpath string, opts MoveCopyOpts) error {
 	if opts.DeletedVersions && !opts.Deep {
 		panic("Gave DeletedVersions and not Deep")
 	}
-
-	if err := v.verifySecretExists(oldpath); err != nil {
+	var err error
+	if opts.DeletedVersions {
+		err = v.verifyMetadataExists(oldpath)
+	} else {
+		err = v.verifySecretExists(oldpath)
+	}
+	if err != nil {
 		return err
 	}
+
 	if opts.SkipIfExists {
 		if _, err := v.Read(newpath); err == nil {
 			if !opts.Quiet {
@@ -482,16 +504,16 @@ func (v *Vault) Copy(oldpath, newpath string, opts MoveCopyOpts) error {
 	}
 
 	srcPath, srcKey, _ := ParsePath(oldpath)
-	srcSecret, err := v.Read(oldpath)
-	if err != nil {
-		return err
-	}
 	dstPath, dstKey, _ := ParsePath(newpath)
 
 	var toWrite []*Secret
-	if srcKey != "" { //No versioning. Just a single key.
+	if srcKey != "" { //Just a single key.
 		if opts.Deep {
 			return fmt.Errorf("Cannot take deep copy of a specific key")
+		}
+		srcSecret, err := v.Read(oldpath)
+		if err != nil {
+			return err
 		}
 
 		if !srcSecret.Has(srcKey) {
@@ -522,6 +544,7 @@ func (v *Vault) Copy(oldpath, newpath string, opts MoveCopyOpts) error {
 				FetchKeys:          true,
 				FetchAllVersions:   true,
 				GetDeletedVersions: opts.DeletedVersions,
+				AllowDeletedKeys:   true,
 				GetOnly:            true,
 			})
 
@@ -621,7 +644,7 @@ func (v *Vault) Move(oldpath, newpath string, opts MoveCopyOpts) error {
 		return fmt.Errorf("Can't move `%s': %s. Did you mean cp?", oldpath, err)
 	}
 	if opts.DeletedVersions {
-		err = v.verifySecretUndestroyed(oldpath)
+		err = v.verifyMetadataExists(oldpath)
 	} else {
 		err = v.verifySecretExists(oldpath)
 	}
@@ -634,9 +657,13 @@ func (v *Vault) Move(oldpath, newpath string, opts MoveCopyOpts) error {
 		return err
 	}
 
-	err = v.Delete(oldpath, DeleteOpts{})
-	if err != nil {
-		return err
+	if opts.Deep && opts.DeletedVersions {
+		err = v.client.DestroyAll(oldpath)
+	} else {
+		err = v.Delete(oldpath, DeleteOpts{})
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }

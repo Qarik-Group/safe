@@ -582,6 +582,23 @@ password: sekrit
 EOF
 
 
+  clearvault
+  testing versions - simple
+  now checking versions errs when the secret does not exist
+
+  (run; ./safe versions secret/notasecret); exitok $? 1
+
+  now putting a single version into the vault
+  (run; ./safe set secret/versions beep=boop); exitok $? 0
+  
+  now checking that one versions does not err on an existing secret
+  (run; ./safe versions secret/versions >t/home/got); exitok $? 0
+
+  now checking that the output of versions was version 1
+  eq "$(awk '{print $1}' < t/home/got)" 1
+  now checking that the output of versions was labeled as alive
+  eq "$(awk '{print $2}' < t/home/got)" alive
+
 
    ######  ##     ## ########  ######  ##    ##
   ##    ## ##     ## ##       ##    ## ##   ##

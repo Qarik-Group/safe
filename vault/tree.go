@@ -338,7 +338,15 @@ func (t *secretTree) populateNodeType(v *Vault) error {
 		return err
 	}
 
-	_, err = v.Read(t.Name)
+	_, _, version := ParsePath(t.Name)
+	if version > 0 {
+		_, err = v.Read(t.Name)
+		if err != nil {
+			return err
+		}
+	}
+
+	err = v.verifyMetadataExists(t.Name)
 	if err != nil {
 		if !IsNotFound(err) {
 			return err

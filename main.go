@@ -2089,7 +2089,7 @@ redeleting them.
 		Usage:   "safe move [-rfd] OLD-PATH NEW-PATH",
 		Type:    DestructiveCommand,
 		Description: `
-Specifying the --deep (-d) flag will cause all living versions to be grabbed from the source
+Specifying the --deep (-d) flag will cause versions to be grabbed from the source
 and overwrite all versions of the secret at the destination.
 `}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
@@ -2114,12 +2114,16 @@ and overwrite all versions of the secret at the destination.
 			if !opt.Move.Force && !recursively("move", args...) {
 				return nil /* skip this command, process the next */
 			}
-			err := v.MoveCopyTree(args[0], args[1], v.Move, vault.MoveCopyOpts{SkipIfExists: opt.SkipIfExists, Quiet: opt.Quiet, Deep: opt.Move.Deep})
+			err := v.MoveCopyTree(args[0], args[1], v.Move, vault.MoveCopyOpts{
+				SkipIfExists: opt.SkipIfExists, Quiet: opt.Quiet, Deep: opt.Move.Deep, DeletedVersions: opt.Move.Deep,
+			})
 			if err != nil && !(vault.IsNotFound(err) && opt.Move.Force) {
 				return err
 			}
 		} else {
-			err := v.Move(args[0], args[1], vault.MoveCopyOpts{SkipIfExists: opt.SkipIfExists, Quiet: opt.Quiet, Deep: opt.Move.Deep})
+			err := v.Move(args[0], args[1], vault.MoveCopyOpts{
+				SkipIfExists: opt.SkipIfExists, Quiet: opt.Quiet, Deep: opt.Move.Deep, DeletedVersions: opt.Move.Deep,
+			})
 			if err != nil && !(vault.IsNotFound(err) && opt.Move.Force) {
 				return err
 			}
@@ -2158,12 +2162,22 @@ and overwrite all versions of the secret at the destination.
 			if !opt.Copy.Force && !recursively("copy", args...) {
 				return nil /* skip this command, process the next */
 			}
-			err := v.MoveCopyTree(args[0], args[1], v.Copy, vault.MoveCopyOpts{SkipIfExists: opt.SkipIfExists, Quiet: opt.Quiet, Deep: opt.Copy.Deep})
+			err := v.MoveCopyTree(args[0], args[1], v.Copy, vault.MoveCopyOpts{
+				SkipIfExists:    opt.SkipIfExists,
+				Quiet:           opt.Quiet,
+				Deep:            opt.Copy.Deep,
+				DeletedVersions: opt.Copy.Deep,
+			})
 			if err != nil && !(vault.IsNotFound(err) && opt.Copy.Force) {
 				return err
 			}
 		} else {
-			err := v.Copy(args[0], args[1], vault.MoveCopyOpts{SkipIfExists: opt.SkipIfExists, Quiet: opt.Quiet, Deep: opt.Copy.Deep})
+			err := v.Copy(args[0], args[1], vault.MoveCopyOpts{
+				SkipIfExists:    opt.SkipIfExists,
+				Quiet:           opt.Quiet,
+				Deep:            opt.Copy.Deep,
+				DeletedVersions: opt.Copy.Deep,
+			})
 			if err != nil && !(vault.IsNotFound(err) && opt.Copy.Force) {
 				return err
 			}
