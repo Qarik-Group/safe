@@ -1457,6 +1457,10 @@ paths/keys.
 		}
 
 		for i := range args {
+			_, _, version := vault.ParsePath(args[i])
+			if version > 0 {
+				return fmt.Errorf("Specifying version to versions is not supported")
+			}
 			versions, err := v.Client().Versions(args[i])
 			if vaultkv.IsNotFound(err) {
 				err = vault.NewSecretNotFoundError(args[i])
