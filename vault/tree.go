@@ -120,14 +120,43 @@ type secretTree struct {
 }
 
 func (v *Vault) ConstructSecrets(path string, opts TreeOpts) (s Secrets, err error) {
-	t, err := v.constructTree(path, opts)
+	constructTreeOpts := opts
+	//It's easier to analyze which secrets to purge once we have it structured as an array.
+	//So we let the tree just naively fetch secrets, and then we can clean up the results later
+	constructTreeOpts.SkipVersionInfo = opts.AllowDeletedSecrets && opts.SkipVersionInfo
+	t, err := v.constructTree(path, constructTreeOpts)
 	if err != nil {
 		return nil, err
 	}
 
-	ret := t.convertToSecrets()
-	ret.Sort()
-	return ret, nil
+	s = t.convertToSecrets()
+	if !opts.AllowDeletedSecrets {
+		s.purgeWhereLatestVersionDeleted()
+	}
+	//If we populated versions earlier and it wasn't asked for directly, lets clean them up now
+	if opts.SkipVersionInfo {
+		s.purgeVersions()
+	}
+
+	s.Sort()
+	return s, nil
+}
+
+//This does not keep the list in a sorted order. Sort afterward
+func (s *Secrets) purgeWhereLatestVersionDeleted() {
+	for i := 0; i < len(*s); i++ {
+		if len((*s)[i].Versions) == 0 || (*s)[i].Versions[len((*s)[i].Versions)-1].State != SecretStateAlive {
+			(*s)[i], (*s)[len(*s)-1] = (*s)[len(*s)-1], (*s)[i]
+			*s = (*s)[:len(*s)-1]
+			i--
+		}
+	}
+}
+
+func (s *Secrets) purgeVersions() {
+	for i := range *s {
+		(*s)[i].Versions = nil
+	}
 }
 
 func PathLessThan(left, right string) bool {
@@ -242,8 +271,13 @@ type SecretVersion struct {
 type TreeOpts struct {
 	//For tree/paths --keys
 	FetchKeys bool
-	//v2 backends show deleted keys in the list by default
-	AllowDeletedKeys bool
+	//v2 backends show deleted secrets in the list by default
+	//Leaving this unset will cause entries with the latest
+	//version deleted to be purged
+	//Ignored by constructTree. Just used by ConstructSecrets
+	AllowDeletedSecrets bool
+	//Overridden by FetchKeys
+	SkipVersionInfo bool
 	//Whether to get all versions of keys in the tree
 	FetchAllVersions bool
 	//GetDeletedVersions tells the workers to temporarily undelete deleted
@@ -312,14 +346,6 @@ func (v *Vault) constructTree(path string, opts TreeOpts) (*secretTree, error) {
 	//Make the output deterministic
 	ret.sort()
 
-	if !opts.GetDeletedVersions && !opts.AllowDeletedKeys {
-		ret.pruneDeleted()
-	}
-
-	if !opts.FetchKeys {
-		ret.pruneVersions()
-	}
-
 	return ret, err
 }
 
@@ -383,15 +409,15 @@ func (t *secretTree) getWorkType(opts TreeOpts) uint16 {
 		ret = opTypeList
 	case treeTypeDirAndSecret:
 		ret = opTypeList
-		if opts.FetchKeys || (t.MountVersion == 2 && !opts.AllowDeletedKeys) {
+		if opts.FetchKeys {
 			ret |= opTypeVersions
 		}
 	case treeTypeSecret:
-		if opts.FetchKeys || (t.MountVersion == 2 && !opts.AllowDeletedKeys) {
+		if opts.FetchKeys || !opts.SkipVersionInfo {
 			ret |= opTypeVersions
 		}
 	case treeTypeVersion:
-		if opts.FetchKeys {
+		if opts.FetchKeys && (opts.GetDeletedVersions || !(t.Deleted || t.Destroyed)) {
 			ret = opTypeGet
 		}
 	}
@@ -512,63 +538,6 @@ func (t *secretTree) DepthFirstMap(fn func(*secretTree)) {
 func (s SecretEntry) Basename() string {
 	parts := strings.Split(s.Path, "/")
 	return parts[len(parts)-1]
-}
-
-func (t *secretTree) pruneDeleted() bool {
-	if (t.Type == treeTypeSecret || t.Type == treeTypeDirAndSecret) && t.MountVersion == 2 {
-		var lastVersion secretTree
-		for i := len(t.Branches) - 1; i >= 0; i-- {
-			if t.Branches[i].Type == treeTypeVersion {
-				lastVersion = t.Branches[i]
-				break
-			}
-		}
-		//If we didn't find a version, this would lead to a bug here, but that would probably
-		// be the result of a bug in and of itself
-		if lastVersion.Deleted || lastVersion.Destroyed {
-			if t.Type == treeTypeSecret {
-				return true
-			} else {
-				t.Type = treeTypeDir
-				newBranches := []secretTree{}
-				for _, branch := range t.Branches {
-					if branch.Type != treeTypeVersion {
-						newBranches = append(newBranches, branch)
-					}
-				}
-				t.Branches = newBranches
-			}
-		}
-	}
-
-	newBranches := []secretTree{}
-	for i := range t.Branches {
-		if t.Branches[i].MountVersion == 2 && t.Branches[i].Type != treeTypeVersion && t.Branches[i].pruneDeleted() {
-			continue
-		}
-		newBranches = append(newBranches, t.Branches[i])
-	}
-	if len(newBranches) == 0 {
-		return true
-	}
-
-	t.Branches = newBranches
-	return false
-}
-
-func (t *secretTree) pruneVersions() {
-	t.DepthFirstMap(func(t *secretTree) {
-		if t.Type == treeTypeSecret || t.Type == treeTypeDirAndSecret {
-			newBranches := []secretTree{}
-			for _, branch := range t.Branches {
-				if branch.Type != treeTypeVersion {
-					newBranches = append(newBranches, branch)
-				}
-			}
-
-			t.Branches = newBranches
-		}
-	})
 }
 
 func (t *secretTree) sort() {
@@ -786,10 +755,7 @@ func (w *treeWorker) workGet(t secretTree) ([]secretTree, error) {
 		return nil, nil
 	}
 	path := t.Name
-	mountVersion, err := w.vault.MountVersion(path)
-	if err != nil {
-		return nil, err
-	}
+	var err error
 
 	if t.Deleted && !w.opts.GetDeletedVersions {
 		return nil, nil
@@ -803,11 +769,6 @@ func (w *treeWorker) workGet(t secretTree) ([]secretTree, error) {
 
 	s, err := w.vault.Read(EncodePath(path, "", uint64(t.Version)))
 	if err != nil {
-		//List returns keys marked as deleted in KV v2 backends, such
-		// that Get would 404 on trying to follow the listing.
-		if IsNotFound(err) && mountVersion == 2 && w.opts.AllowDeletedKeys {
-			return nil, nil
-		}
 		return nil, err
 	}
 
@@ -874,45 +835,24 @@ func (w *treeWorker) workVersions(t secretTree) ([]secretTree, error) {
 		}, nil
 	}
 
-	if !w.opts.FetchAllVersions && w.opts.AllowDeletedKeys {
-		return []secretTree{
-			{
-				Name:    t.Name,
-				Type:    treeTypeVersion,
-				Version: 0,
-			},
-		}, nil
-	}
-
 	versions, err := w.vault.Versions(path)
 	if err != nil {
 		return nil, err
 	}
 
 	ret := []secretTree{}
-	if w.opts.FetchAllVersions {
-		for i := range versions {
-			if w.opts.GetDeletedVersions || !(versions[i].Deleted || versions[i].Destroyed) {
-				ret = append(ret, secretTree{
-					Name:      t.Name,
-					Type:      treeTypeVersion,
-					Version:   versions[i].Version,
-					Deleted:   versions[i].Deleted,
-					Destroyed: versions[i].Destroyed,
-				})
-			}
-		}
-	} else {
-		lastVersion := versions[len(versions)-1]
-		if w.opts.GetDeletedVersions || !(lastVersion.Deleted || lastVersion.Destroyed) {
-			ret = append(ret, secretTree{
-				Name:      t.Name,
-				Type:      treeTypeVersion,
-				Version:   lastVersion.Version,
-				Deleted:   lastVersion.Deleted,
-				Destroyed: lastVersion.Destroyed,
-			})
-		}
+	for i := range versions {
+		ret = append(ret, secretTree{
+			Name:      t.Name,
+			Type:      treeTypeVersion,
+			Version:   versions[i].Version,
+			Deleted:   versions[i].Deleted,
+			Destroyed: versions[i].Destroyed,
+		})
+	}
+
+	if !w.opts.FetchAllVersions {
+		ret = ret[len(ret)-1:]
 	}
 
 	return ret, nil

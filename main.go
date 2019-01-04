@@ -1617,8 +1617,8 @@ flag does nothing for kv v1 mounts.
 		v := connect(true)
 		for i, path := range args {
 			secrets, err := v.ConstructSecrets(path, vault.TreeOpts{
-				FetchKeys:        opt.Tree.ShowKeys,
-				AllowDeletedKeys: opt.Tree.Quick,
+				FetchKeys:           opt.Tree.ShowKeys,
+				AllowDeletedSecrets: opt.Tree.Quick,
 			})
 
 			if err != nil {
@@ -1660,8 +1660,8 @@ vaults. This flag does nothing for kv v1 mounts.
 		v := connect(true)
 		for _, path := range args {
 			secrets, err := v.ConstructSecrets(path, vault.TreeOpts{
-				FetchKeys:        opt.Paths.ShowKeys,
-				AllowDeletedKeys: opt.Paths.Quick,
+				FetchKeys:           opt.Paths.ShowKeys,
+				AllowDeletedSecrets: opt.Paths.Quick,
 			})
 			if err != nil {
 				return err

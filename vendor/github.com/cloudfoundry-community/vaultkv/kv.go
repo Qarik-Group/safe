@@ -409,3 +409,10 @@ func (k *KV) MountVersion(mount string) (version uint, err error) {
 
 	return m.MountVersion(), nil
 }
+
+//MountPath returns the path of the mount on which the given path is mounted.
+// If no such mount can be found, an error is returned.
+func (k *KV) MountPath(path string) (mount string, err error) {
+	mount, _, err = k.mountForPath(path)
+	return
+}

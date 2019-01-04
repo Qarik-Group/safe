@@ -262,7 +262,7 @@ func (v *Vault) verifySecretUndestroyed(path string) error {
 func (v *Vault) DeleteTree(root string, opts DeleteOpts) error {
 	root = Canonicalize(root)
 
-	secrets, err := v.ConstructSecrets(root, TreeOpts{FetchKeys: false})
+	secrets, err := v.ConstructSecrets(root, TreeOpts{FetchKeys: false, SkipVersionInfo: true, AllowDeletedSecrets: true})
 	if err != nil {
 		return err
 	}
@@ -272,7 +272,17 @@ func (v *Vault) DeleteTree(root string, opts DeleteOpts) error {
 			return err
 		}
 	}
-	return v.deleteEntireSecret(root, opts.Destroy, opts.All)
+
+	mount, err := v.Client().MountPath(root)
+	if err != nil {
+		return err
+	}
+
+	if strings.Trim(root, "/") != strings.Trim(mount, "/") {
+		err = v.deleteEntireSecret(root, opts.Destroy, opts.All)
+	}
+
+	return err
 }
 
 type DeleteOpts struct {
@@ -539,35 +549,21 @@ func (v *Vault) Copy(oldpath, newpath string, opts MoveCopyOpts) error {
 		if dstKey != "" {
 			return fmt.Errorf("Cannot move full secret `%s` into specific key `%s`", oldpath, newpath)
 		}
-		if opts.Deep {
-			t, err := v.ConstructSecrets(srcPath, TreeOpts{
-				FetchKeys:          true,
-				FetchAllVersions:   true,
-				GetDeletedVersions: opts.DeletedVersions,
-				AllowDeletedKeys:   true,
-				GetOnly:            true,
-			})
+		t, err := v.ConstructSecrets(srcPath, TreeOpts{
+			FetchKeys:           true,
+			GetOnly:             true,
+			FetchAllVersions:    opts.Deep,
+			GetDeletedVersions:  opts.Deep && opts.DeletedVersions,
+			AllowDeletedSecrets: opts.Deep,
+		})
 
-			if err != nil {
-				return err
-			}
+		if err != nil {
+			return err
+		}
 
-			err = t[0].Copy(v, dstPath, TreeCopyOpts{Clear: true, Pad: true})
-			if err != nil {
-				return err
-			}
-		} else {
-			t, err := v.ConstructSecrets(srcPath, TreeOpts{
-				FetchKeys: true,
-				GetOnly:   true,
-			})
-			if err != nil {
-				return err
-			}
-			err = t[0].Copy(v, dstPath, TreeCopyOpts{})
-			if err != nil {
-				return err
-			}
+		err = t[0].Copy(v, dstPath, TreeCopyOpts{Clear: opts.Deep, Pad: opts.Deep})
+		if err != nil {
+			return err
 		}
 	}
 
@@ -588,12 +584,13 @@ func (v *Vault) MoveCopyTree(oldRoot, newRoot string, f func(string, string, Mov
 	oldRoot = Canonicalize(oldRoot)
 	newRoot = Canonicalize(newRoot)
 
-	tree, err := v.ConstructSecrets(oldRoot, TreeOpts{FetchKeys: false})
+	tree, err := v.ConstructSecrets(oldRoot, TreeOpts{FetchKeys: false, AllowDeletedSecrets: opts.Deep, SkipVersionInfo: true})
 	if err != nil {
 		return err
 	}
 	if opts.SkipIfExists {
-		newTree, err := v.ConstructSecrets(newRoot, TreeOpts{FetchKeys: false})
+		//Writing one secret over a deleted secret isn't clobbering. Completely overwriting a set of deleted secrets would be
+		newTree, err := v.ConstructSecrets(newRoot, TreeOpts{FetchKeys: false, AllowDeletedSecrets: !opts.Deep, SkipVersionInfo: true})
 		if err != nil && !IsNotFound(err) {
 			return err
 		}

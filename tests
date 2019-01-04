@@ -1577,7 +1577,6 @@ EOF
            secret/existing/to/{first,second}
     generate secret/existing/from/first  key=val
     generate secret/existing/from/second key=val
-
     now running safe $op --no-clobber -Rf with no pre-existing secrets
     (run; ./safe $op --no-clobber -Rf secret/existing/{from,to} >t/home/got 2>&1) ; exitok $? 0
     now checking the error output
