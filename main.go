@@ -152,7 +152,7 @@ type Options struct {
 	Delete struct {
 		Recurse bool `cli:"-R, -r, --recurse"`
 		Force   bool `cli:"-f, --force"`
-		Destroy bool `cli:"-d, --destroy"`
+		Destroy bool `cli:"-D, -d, --destroy"`
 		All     bool `cli:"-a, --all"`
 	} `cli:"delete, rm"`
 
@@ -1675,7 +1675,7 @@ vaults. This flag does nothing for kv v1 mounts.
 
 	r.Dispatch("delete", &Help{
 		Summary: "Remove one or more path from the Vault",
-		Usage:   "safe delete [-rfda] PATH [PATH ...]",
+		Usage:   "safe delete [-rfDa] PATH [PATH ...]",
 		Type:    DestructiveCommand,
 		Description: `
 -d (--destroy) will cause KV v2 secrets to be destroyed instead of
