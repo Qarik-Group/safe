@@ -3,11 +3,11 @@ package vault
 import "fmt"
 
 type secretNotFound struct {
-	secret string
+	message string
 }
 
 func (e secretNotFound) Error() string {
-	return fmt.Sprintf("no secret exists at path `%s`", e.secret)
+	return e.message
 }
 
 type keyNotFound struct {
@@ -28,7 +28,7 @@ func IsNotFound(err error) bool {
 //NewSecretNotFoundError returns an error with a message descibing the path
 // which could not be found in the secret backend.
 func NewSecretNotFoundError(path string) error {
-	return secretNotFound{path}
+	return secretNotFound{message: fmt.Sprintf("no secret exists at path `%s`", path)}
 }
 
 //IsSecretNotFound returns true if the given error was created with

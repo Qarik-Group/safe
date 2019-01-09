@@ -203,9 +203,91 @@ func (v *Vault) Write(path string, s *Secret) error {
 func (v *Vault) errIfFolder(path, message string, args ...interface{}) error {
 	path = Canonicalize(path)
 	if _, err := v.List(path); err == nil {
-		return fmt.Errorf(message, args...)
+		return secretNotFound{fmt.Sprintf(message, args...)}
 	} else if err != nil && !IsNotFound(err) {
 		return err
+	}
+	return nil
+}
+
+const (
+	verifyStateAlive uint = iota
+	verifyStateAliveOrDeleted
+)
+
+type verifyOpts struct {
+	AnyVersion bool
+	State      uint
+}
+
+func (v *Vault) verifySecretState(path string, opts verifyOpts) error {
+	secret, _, version := ParsePath(path)
+	mountV, err := v.MountVersion(secret)
+	if err != nil {
+		return err
+	}
+
+	var deletedErr = secretNotFound{fmt.Sprintf("`%s' is deleted", path)}
+	var destroyedErr = secretNotFound{fmt.Sprintf("`%s' is destroyed", path)}
+
+	switch mountV {
+	case 1:
+		return v.verifySecretExists(path)
+	case 2:
+		versions, err := v.Versions(secret)
+		if err != nil {
+			if IsNotFound(err) {
+				err = v.errIfFolder(path, "`%s' points to a folder, not a secret", path)
+				if err != nil {
+					return err
+				}
+
+				return NewSecretNotFoundError(secret)
+			}
+
+			return err
+		}
+
+		if !opts.AnyVersion {
+			var v vaultkv.KVVersion
+			if version == 0 {
+				v = versions[len(versions)-1]
+			} else {
+				if uint64(versions[0].Version) > version {
+					return destroyedErr
+				}
+
+				if version > uint64(versions[len(versions)-1].Version) {
+					return secretNotFound{fmt.Sprintf("`%s' references a version that does not yet exist", path)}
+				}
+
+				idx := version - uint64(versions[0].Version)
+				v = versions[idx]
+			}
+
+			if v.Destroyed {
+				return destroyedErr
+			}
+			if opts.State == verifyStateAlive && v.Deleted {
+				return deletedErr
+			}
+		} else {
+			for i := range versions {
+				if !(versions[i].Deleted || versions[i].Destroyed) || (opts.State == verifyStateAliveOrDeleted && !versions[i].Destroyed) {
+					return nil
+				}
+			}
+
+			//If we got this far, we couldn't find a version that satisfied our constraints
+			if opts.State == verifyStateAlive {
+				return secretNotFound{fmt.Sprintf("No living versions for `%s'", path)}
+			} else {
+				return secretNotFound{fmt.Sprintf("No living or deleted versions for `%s'", path)}
+			}
+		}
+
+	default:
+		return fmt.Errorf("Unsupported mount version: %d", mountV)
 	}
 	return nil
 }
@@ -322,14 +404,15 @@ func (v *Vault) canSemanticallyDelete(path string) error {
 func (v *Vault) Delete(path string, opts DeleteOpts) error {
 	path = Canonicalize(path)
 
-	var err error
-	if !opts.Destroy {
-		err = v.verifySecretExists(path)
-	} else if opts.Destroy && !opts.All {
-		//If you were trying to destroy a secret but safe didn't let you because it
-		// was already (only) deleted, that would be annoying
-		err = v.verifySecretUndestroyed(path)
+	reqState := verifyStateAlive
+	if opts.Destroy {
+		reqState = verifyStateAliveOrDeleted
 	}
+
+	err := v.verifySecretState(path, verifyOpts{
+		AnyVersion: opts.All,
+		State:      reqState,
+	})
 	if err != nil {
 		return err
 	}
@@ -493,11 +576,15 @@ func (v *Vault) Copy(oldpath, newpath string, opts MoveCopyOpts) error {
 		panic("Gave DeletedVersions and not Deep")
 	}
 	var err error
+	reqState := verifyStateAlive
 	if opts.DeletedVersions {
-		err = v.verifyMetadataExists(oldpath)
-	} else {
-		err = v.verifySecretExists(oldpath)
+		reqState = verifyStateAliveOrDeleted
 	}
+
+	err = v.verifySecretState(oldpath, verifyOpts{
+		State:      reqState,
+		AnyVersion: opts.Deep,
+	})
 	if err != nil {
 		return err
 	}
@@ -639,11 +726,6 @@ func (v *Vault) Move(oldpath, newpath string, opts MoveCopyOpts) error {
 	err := v.canSemanticallyDelete(oldpath)
 	if err != nil {
 		return fmt.Errorf("Can't move `%s': %s. Did you mean cp?", oldpath, err)
-	}
-	if opts.DeletedVersions {
-		err = v.verifyMetadataExists(oldpath)
-	} else {
-		err = v.verifySecretExists(oldpath)
 	}
 	if err != nil {
 		return err
