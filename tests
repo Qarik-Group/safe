@@ -358,8 +358,6 @@ for kvversion in 2; do
   restart_vault_server
   clearvault
 
-: <<'BLOCK_COMMENT'
-
   ########    ###    ########   ######   ######## ########
      ##      ## ##   ##     ## ##    ##  ##          ##
      ##     ##   ##  ##     ## ##        ##          ##
@@ -2059,8 +2057,6 @@ knock: knock
 EOF
   fi
 
-BLOCK_COMMENT
-
   if [[ $kvversion -ne 2 ]]; then continue; fi
 
 
@@ -2337,7 +2333,179 @@ EOF
   now checking that the metadata no longer exists
   (./safe versions secret/versioned 2>/dev/null); exitok $? 1
 
+  testing that reverting to a previous version works
+  clearvault
+  now putting three versions of a secret into the vault
+  for vnum in $(seq 1 3); do
+    (./safe set secret/versioned key=$vnum 2>/dev/null); exitok $? 0
+  done
+  now reverting back to version 2
+  (./safe revert secret/versioned 2); exitok $? 0
+  now retrieving the version list
+  (./safe versions secret/versioned >t/home/got); exitok $? 0
+  now checking that there are four living versions
+  cat << 'EOF' >t/home/want; diffok
+1	alive
+2	alive
+3	alive
+4	alive
+EOF
+  now getting the latest version of the secret
+  (./safe get secret/versioned:key >t/home/got); exitok $? 0
+  now checking that the latest version contains the value 2
+  cat << 'EOF' >t/home/want; diffok
+2
+EOF
+  
+  testing that reverting to the current version is a no-op
+  clearvault
+  now putting three versions of a secret into the vault
+  for vnum in $(seq 1 3); do
+    (./safe set secret/versioned key=$vnum 2>/dev/null); exitok $? 0
+  done
+  now reverting back to version 3
+  (./safe revert secret/versioned 3); exitok $? 0
+  now retrieving the version list
+  (./safe versions secret/versioned >t/home/got); exitok $? 0
+  now checking that there are three living versions
+  cat << 'EOF' >t/home/want; diffok
+1	alive
+2	alive
+3	alive
+EOF
+  now getting the latest version of the secret
+  (./safe get secret/versioned:key >t/home/got); exitok $? 0
+  now checking that the latest version contains the value 3
+  cat << 'EOF' >t/home/want; diffok
+3
+EOF
 
+  testing that reverting to a version that does not yet exist errs
+  clearvault
+  now putting three versions of a secret into the vault
+  for vnum in $(seq 1 3); do
+    (./safe set secret/versioned key=$vnum 2>/dev/null); exitok $? 0
+  done
+  now reverting back to version 4
+  (./safe revert secret/versioned 4 2>/dev/null); exitok $? 1
+  now retrieving the version list
+  (./safe versions secret/versioned >t/home/got); exitok $? 0
+  now checking that there are three living versions
+  cat << 'EOF' >t/home/want; diffok
+1	alive
+2	alive
+3	alive
+EOF
+  now getting the latest version of the secret
+  (./safe get secret/versioned:key >t/home/got); exitok $? 0
+  now checking that the latest version contains the value 3
+  cat << 'EOF' >t/home/want; diffok
+3
+EOF
+
+  now reverting to a deleted version
+  clearvault
+  now putting three versions of a secret into the vault
+  for vnum in $(seq 1 3); do
+    (./safe set secret/versioned key=$vnum 2>/dev/null); exitok $? 0
+  done
+  now deleting version 2
+  (./safe delete secret/versioned^2); exitok $? 0
+  now reverting back to version 2
+  (./safe revert secret/versioned 2 2>/dev/null); exitok $? 1
+  now retrieving the version list
+  (./safe versions secret/versioned >t/home/got); exitok $? 0
+  now checking that there are three versions with the correct states
+  cat << 'EOF' >t/home/want; diffok
+1	alive
+2	deleted
+3	alive
+EOF
+  now getting the latest version of the secret
+  (./safe get secret/versioned:key >t/home/got); exitok $? 0
+  now checking that the latest version contains the value 3
+  cat << 'EOF' >t/home/want; diffok
+3
+EOF
+
+  now reverting to a deleted version with the -d flag set
+  clearvault
+  now putting three versions of a secret into the vault
+  for vnum in $(seq 1 3); do
+    (./safe set secret/versioned key=$vnum 2>/dev/null); exitok $? 0
+  done
+  now deleting version 2
+  (./safe delete secret/versioned^2); exitok $? 0
+  now reverting back to version 2
+  (./safe revert secret/versioned 2 -d); exitok $? 0
+  now retrieving the version list
+  (./safe versions secret/versioned >t/home/got); exitok $? 0
+  now checking that there are four versions with the correct states
+  cat << 'EOF' >t/home/want; diffok
+1	alive
+2	deleted
+3	alive
+4	alive
+EOF
+  now getting the latest version of the secret
+  (./safe get secret/versioned:key >t/home/got); exitok $? 0
+  now checking that the latest version contains the value 3
+  cat << 'EOF' >t/home/want; diffok
+2
+EOF
+
+  testing tree export when redundant paths are specified
+  clearvault
+  no_key secret/export{,/admin,/robot,/a/b/c}
+  generate secret/export/admin username=admin password=sekrit
+  generate secret/export/robot username=bot password=beep-boop mark=2
+  generate secret/export/a/b/c subkey='the-value-given'
+
+  now exporting the vault data
+  (run; ./safe export secret/export secret/export secret/export/a secret/export/a/b secret/export/robot >t/home/got) ; exitok $? 0
+
+  now checking that the export contained our non-duplicated data
+  cat >t/home/want <<EOF ; jsonok
+[
+  {
+    "data": {
+      "secret/export/a/b/c": {
+        "versions": [
+          {
+            "value": {
+              "subkey": "the-value-given"
+            }
+          }
+        ]
+      },
+      "secret/export/admin": {
+        "versions": [
+          {
+            "value": {
+              "password": "sekrit",
+              "username": "admin"
+            }
+          }
+        ]
+      },
+      "secret/export/robot": {
+        "versions": [
+          {
+            "value": {
+              "mark": "2",
+              "password": "beep-boop",
+              "username": "bot"
+            }
+          }
+        ]
+      }
+    },
+    "export_version": 2,
+    "requires_versioning": {}
+  }
+]
+EOF
+  
   dump_log
 done
 done

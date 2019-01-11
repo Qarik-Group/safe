@@ -1819,7 +1819,7 @@ redeleting them.
 			return destroyedErr
 		}
 
-		if targetVersion >= uint64(allVersions[0].Version)+uint64(len(allVersions)) {
+		if targetVersion > uint64(allVersions[len(allVersions)-1].Version) {
 			return fmt.Errorf("Version %d of secret `%s' does not exist", targetVersion, secret)
 		}
 
@@ -1837,6 +1837,13 @@ redeleting them.
 			if err != nil {
 				return err
 			}
+		}
+
+		//If the version to revert to is the current version, do nothing...
+		// unless its deleted, then either just undelete it or err, depending on
+		// if the -d flag is set
+		if targetVersion == uint64(allVersions[len(allVersions)-1].Version) {
+			return nil
 		}
 
 		toWrite, err := v.Read(vault.EncodePath(secret, "", targetVersion))
@@ -1885,7 +1892,7 @@ redeleting them.
 
 			for _, secret := range secrets {
 				if len(secret.Versions) > 1 {
-					mount, _ := vaultkv.SplitMount(secret.Path)
+					mount, _ := v.Client().MountPath(secret.Path)
 					toExport.RequiresVersioning[mount] = true
 				}
 

@@ -208,7 +208,9 @@ func (v *Vault) Write(path string, s *Secret) error {
 func (v *Vault) errIfFolder(path, message string, args ...interface{}) error {
 	path = Canonicalize(path)
 	if _, err := v.List(path); err == nil {
-		return secretNotFound{fmt.Sprintf(message, args...)}
+		//We don't want the folder error to be ignored because of the -f flag to rm,
+		// so we explicitly don't make this a secretNotFound error
+		return fmt.Errorf(message, args...)
 	} else if err != nil && !IsNotFound(err) {
 		return err
 	}
