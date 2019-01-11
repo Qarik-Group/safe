@@ -2227,13 +2227,15 @@ EOF
   clearvault
   now putting a secret into the vault
   (./safe set secret/versioned key=val 2>/dev/null); exitok $? 0
+  now putting a second version of the secret into the vault
+  (./safe set secret/versioned key=val 2>/dev/null); exitok $? 0
   now destroying the secret
-  (./safe delete secret/versioned -D >/dev/null); exitok $? 0
+  (./safe delete secret/versioned^1 -D >/dev/null); exitok $? 0
   now destroying the same secret again
-  (./safe delete secret/versioned -D 2>t/home/got); exitok $? 1
+  (./safe delete secret/versioned^1 -D 2>t/home/got); exitok $? 1
   now checking that the error message conveys that the secret is already destroyed
   cat << 'EOF' >t/home/want; diffok
-!! `secret/versioned' is destroyed
+!! `secret/versioned^1' is destroyed
 EOF
 
   testing destroying already destroyed versions with force
@@ -2244,6 +2246,20 @@ EOF
   (./safe delete secret/versioned -Df); exitok $? 0
   now destroying the same secret again
   (./safe delete secret/versioned -Df); exitok $? 0
+
+  testing destroying versions of secrets that dont exist
+  clearvault
+  now destroying a non-existent secret
+  (./safe delete secret/poof -D 2>t/home/got); exitok $? 1
+  now testing that the error message conveys that nothing is there
+  cat << 'EOF' >t/home/want; diffok
+!! no secret exists at path `secret/poof`
+EOF
+
+  testing destroying versions of secrets that dont exist with force
+  clearvault
+  now destroying a non-existent secret
+  (./safe delete secret/poof -Df); exitok $? 0
 
   testing deleting all versions
   clearvault
@@ -2261,6 +2277,7 @@ EOF
 2	deleted
 3	deleted
 EOF
+
 
   testing deleting all versions with the latest version deleted already
   clearvault
@@ -2304,6 +2321,22 @@ EOF
   (./safe delete secret/versioned -Da 2>/dev/null); exitok $? 0
   now checking that versions metadata is gone
   (./safe versions secret/versioned >t/home/got 2>/dev/null); exitok $? 1
+
+  testing that destroying all versions one by one cleans up the metadata
+  clearvault
+  now putting three versions of a secret into the vault
+  for vnum in $(seq 1 3); do
+    (./safe set secret/versioned key=val 2>/dev/null); exitok $? 0
+  done
+  now destroying version 1
+  (./safe delete secret/versioned^1 -D); exitok $? 0
+  now destroying version 3
+  (./safe delete secret/versioned^3 -D); exitok $? 0
+  now destroying version 2
+  (./safe delete secret/versioned^2 -D); exitok $? 0
+  now checking that the metadata no longer exists
+  (./safe versions secret/versioned 2>/dev/null); exitok $? 1
+
 
   dump_log
 done

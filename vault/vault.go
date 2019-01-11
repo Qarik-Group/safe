@@ -97,7 +97,12 @@ func (v *Vault) MountVersion(path string) (uint, error) {
 
 func (v *Vault) Versions(path string) ([]vaultkv.KVVersion, error) {
 	path = Canonicalize(path)
-	return v.client.Versions(path)
+	ret, err := v.client.Versions(path)
+	if vaultkv.IsNotFound(err) {
+		return nil, NewSecretNotFoundError(path)
+	}
+
+	return ret, err
 }
 
 func shouldDebug() bool {
@@ -430,10 +435,10 @@ func (v *Vault) Delete(path string, opts DeleteOpts) error {
 }
 
 func (v *Vault) deleteEntireSecret(path string, destroy bool, all bool) error {
-	path, _, version := ParsePath(path)
+	secret, _, version := ParsePath(path)
 
 	if destroy && all {
-		return v.client.DestroyAll(path)
+		return v.client.DestroyAll(secret)
 	}
 
 	var versions []uint
@@ -442,21 +447,37 @@ func (v *Vault) deleteEntireSecret(path string, destroy bool, all bool) error {
 	}
 
 	if destroy {
+		allVersions, err := v.Versions(secret)
+		if err != nil {
+			return err
+		}
 		//Need to populate latest version to a Destroy call if the
 		// version is not explicitly given
 		if len(versions) == 0 {
-			allVersions, err := v.Versions(path)
-			if err != nil {
-				return err
-			}
-
 			versions = []uint{allVersions[len(allVersions)-1].Version}
 		}
-		return v.client.Destroy(path, versions)
+		//Check if we should clean up the metadata entirely because there are
+		// no more remaining non-destroyed versions
+		shouldNuke := true
+		verIdx := 0
+		for i := range allVersions {
+			for verIdx < len(versions) && versions[verIdx] < allVersions[i].Version {
+				verIdx++
+			}
+			if !allVersions[i].Destroyed && (verIdx >= len(versions) || versions[verIdx] != allVersions[i].Version) {
+				shouldNuke = false
+				break
+			}
+		}
+
+		if shouldNuke {
+			return v.client.DestroyAll(secret)
+		}
+		return v.client.Destroy(secret, versions)
 	}
 
 	if all {
-		allVersions, err := v.Versions(path)
+		allVersions, err := v.Versions(secret)
 		if err != nil {
 			return err
 		}
@@ -468,7 +489,7 @@ func (v *Vault) deleteEntireSecret(path string, destroy bool, all bool) error {
 
 	}
 
-	return v.client.Delete(path, &vaultkv.KVDeleteOpts{Versions: versions, V1Destroy: true})
+	return v.client.Delete(secret, &vaultkv.KVDeleteOpts{Versions: versions, V1Destroy: true})
 }
 
 func (v *Vault) deleteSpecificKey(path string) error {
