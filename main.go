@@ -1870,9 +1870,16 @@ redeleting them.
 
 	r.Dispatch("export", &Help{
 		Summary: "Export one or more subtrees for migration / backup purposes",
-		Usage:   "safe export PATH [PATH ...]",
+		Usage:   "safe export [-os] PATH [PATH ...]",
 		Type:    NonDestructiveCommand,
-	}, func(command string, args ...string) error {
+		Description: `
+Normally, the export will get all versions of every secret. If a secret is deleted, it will be undeleted,
+read, and then redeleted in order to get the contents. 
+-o (--only-alive) can be provided to stop the aforementioned delete-toggling behavior and instead encode those
+versions as destroyed. 
+-s (--shallow) will encode only the most recent version of each secret (and therefore make it compatible for 
+non-versioned backends).
+`}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
 		if len(args) < 1 {
 			args = append(args, "secret")
@@ -1898,14 +1905,14 @@ redeleting them.
 
 				thisSecret := exportSecret{FirstVersion: secret.Versions[0].Number}
 				//We want to omit the `first` key in the json if it's 1
-				if thisSecret.FirstVersion == 1 {
+				if thisSecret.FirstVersion == 1 || opt.Export.Shallow {
 					thisSecret.FirstVersion = 0
 				}
 
 				for _, version := range secret.Versions {
 					thisVersion := exportVersion{
-						Deleted:   version.State == vault.SecretStateDeleted,
-						Destroyed: version.State == vault.SecretStateDestroyed,
+						Deleted:   version.State == vault.SecretStateDeleted && !opt.Export.OnlyAlive,
+						Destroyed: version.State == vault.SecretStateDestroyed || (version.State == vault.SecretStateDeleted && opt.Export.OnlyAlive),
 						Value:     map[string]string{},
 					}
 
@@ -1951,7 +1958,12 @@ redeleting them.
 		Summary: "Import name/value pairs into the current Vault",
 		Usage:   "safe import <backup/file.json",
 		Type:    DestructiveCommand,
-	}, func(command string, args ...string) error {
+		Description: `
+-I (--ignore-destroyed) will keep destroyed versions from being replicated in the import by
+rting garbage data and then destroying it (which is originally done to preserve version numbering).
+-i (--ignore-deleted) will ignore deleted versions from being written during the import.
+-s (--shallow) will write only the latest version for each secret.
+`}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
 		b, err := ioutil.ReadAll(os.Stdin)
 		if err != nil {

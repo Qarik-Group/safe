@@ -1956,6 +1956,79 @@ EOF
   now checking that the export matches the import
   jsonok
 
+  testing import with a v1 format export
+  clearvault
+  cat <<EOF | spruce json >t/home/want
+---
+secret/import/admin:
+  username: admin
+  password: sekrit
+secret/import/robot:
+  username: bot
+  password: beep-boop
+  mark: "2"
+secret/import/a/b/c:
+  subkey: the-value-given
+secret/import/a/b/c/d:
+  subsubkey: really deep
+EOF
+  now importing our data
+  (run; ./safe import secret/import <t/home/want) ; exitok $? 0
+  cat <<EOF >t/home/want
+[
+  {
+    "data": {
+      "secret/import/a/b/c": {
+        "versions": [
+          {
+            "value": {
+              "subkey": "the-value-given"
+            }
+          }
+        ]
+      },
+      "secret/import/a/b/c/d": {
+        "versions": [
+          {
+            "value": {
+              "subsubkey": "really deep"
+            }
+          }
+        ]
+      },
+      "secret/import/admin": {
+        "versions": [
+          {
+            "value": {
+              "password": "sekrit",
+              "username": "admin"
+            }
+          }
+        ]
+      },
+      "secret/import/robot": {
+        "versions": [
+          {
+            "value": {
+              "mark": "2",
+              "password": "beep-boop",
+              "username": "bot"
+            }
+          }
+        ]
+      }
+    },
+    "export_version": 2,
+    "requires_versioning": {}
+  }
+]
+EOF
+  now exporting our data
+  (run; ./safe export secret/import >t/home/got)  ; exitok $? 0
+  now checking that the export corresponds to the import
+  jsonok
+
+
 
 
   ########  ######## ##    ## ######## ##    ##
@@ -2066,9 +2139,9 @@ EOF
   # the default version limit in vault is 10. If we write eleven, we can
   # test that the count not starting at version 1 works - we would expect 
   # the first remaining version to be version 2
-  now setting eleven versions of the same key
   values=(eins zwei drei vier fuenf sechs sieben acht neun zehn elf)
   for val in "${values[@]}"; do
+    now setting version $val of the same key
     (./safe set secret/versioned key=${val} 2>/dev/null); exitok $? 0
   done
 
@@ -2505,7 +2578,523 @@ EOF
   }
 ]
 EOF
+
+  testing export with multiple versions per secret
+  clearvault
+  no_key secret/export{,/admin,/robot,/a/b/c}
+  generate secret/export/admin username=admin password=sekrit
+  generate secret/export/admin username=admin password=anuthersekrit
+  generate secret/export/admin username=admin password=sekrit anuthurkey=beepboop
+  generate secret/export/robot username=bot password=beep-boop mark=2
+  generate secret/export/robot username=bot password=BEEPBOOP mark=2
+  generate secret/export/a/b/c subkey='the-value-given'
+  now deleting version 2 of secret/export/admin
+  (./safe delete secret/export/admin^2 -f); exitok $? 0
+  now destroying version 1 of secret/export/robot
+  (./safe delete secret/export/robot^1 -Df); exitok $? 0
+  now exporting the vault data
+  (run; ./safe export secret/export >t/home/got) ; exitok $? 0
+  now checking that the export contained our data
+  cat >t/home/want <<EOF ; jsonok
+[
+  {
+    "data": {
+      "secret/export/a/b/c": {
+        "versions": [
+          {
+            "value": {
+              "subkey": "the-value-given"
+            }
+          }
+        ]
+      },
+      "secret/export/admin": {
+        "versions": [
+          {
+            "value": {
+              "password": "sekrit",
+              "username": "admin"
+            }
+          },
+          {
+            "deleted": true,
+            "value": {
+              "password": "anuthersekrit",
+              "username": "admin"
+            }
+          },
+          {
+            "value": {
+              "password": "sekrit",
+              "username": "admin",
+              "anuthurkey": "beepboop"
+            }
+          }
+        ]
+      },
+      "secret/export/robot": {
+        "versions": [
+          {
+            "destroyed": true
+          },
+          {
+            "value": {
+              "mark": "2",
+              "password": "BEEPBOOP",
+              "username": "bot"
+            }
+          }
+        ]
+      }
+    },
+    "export_version": 2,
+    "requires_versioning": {"secret": true}
+  }
+]
+EOF
   
+  testing exports when the first remaining version is not one
+  clearvault
+  values=(eins zwei drei vier fuenf sechs sieben acht neun zehn elf)
+  for val in "${values[@]}"; do
+    now setting version $val of the same key
+    (./safe set secret/versioned key=${val} 2>/dev/null); exitok $? 0
+  done
+  now exporting the tree
+  (./safe export secret >t/home/got) ; exitok $? 0
+  cat >t/home/want <<EOF ; jsonok
+[
+  {
+    "data": {
+      "secret/versioned": {
+        "first": 2,
+        "versions": [
+          {
+            "value": {
+              "key": "zwei"
+            }
+          },
+          {
+            "value": {
+              "key": "drei"
+            }
+          },
+          {
+            "value": {
+              "key": "vier"
+            }
+          },
+          {
+            "value": {
+              "key": "fuenf"
+            }
+          },
+          {
+            "value": {
+              "key": "sechs"
+            }
+          },
+          {
+            "value": {
+              "key": "sieben"
+            }
+          },
+          {
+            "value": {
+              "key": "acht"
+            }
+          },
+          {
+            "value": {
+              "key": "neun"
+            }
+          },
+          {
+            "value": {
+              "key": "zehn"
+            }
+          },
+          {
+            "value": {
+              "key": "elf"
+            }
+          }
+        ]
+      }
+    },
+    "export_version": 2,
+    "requires_versioning": {"secret": true}
+  }
+] 
+EOF
+
+  testing importing a tree where the first version is not 1
+  clearvault
+  cat >t/home/want <<EOF
+[
+  {
+    "data": {
+      "secret/versioned": {
+        "first": 2,
+        "versions": [
+          {
+            "value": {
+              "key": "zwei"
+            }
+          },
+          {
+            "value": {
+              "key": "drei"
+            }
+          },
+          {
+            "value": {
+              "key": "vier"
+            }
+          },
+          {
+            "value": {
+              "key": "fuenf"
+            }
+          },
+          {
+            "value": {
+              "key": "sechs"
+            }
+          },
+          {
+            "value": {
+              "key": "sieben"
+            }
+          },
+          {
+            "value": {
+              "key": "acht"
+            }
+          },
+          {
+            "value": {
+              "key": "neun"
+            }
+          },
+          {
+            "value": {
+              "key": "zehn"
+            }
+          },
+          {
+            "value": {
+              "key": "elf"
+            }
+          }
+        ]
+      }
+    },
+    "export_version": 2,
+    "requires_versioning": {"secret": true}
+  }
+] 
+EOF
+  now importing the secrets
+  (run; ./safe import secret/import <t/home/want) ; exitok $? 0
+  now exporting the secrets
+  (./safe export secret >t/home/got); exitok $? 0
+  now checking that the export matches the import
+  jsonok
+
+  testing exports with --only-alive set
+  clearvault
+  values=(eins zwei drei)
+  for val in "${values[@]}"; do
+    now setting version $val of the same key
+    (./safe set secret/versioned key=${val} 2>/dev/null); exitok $? 0
+  done
+  now deleting version 2
+  (./safe delete secret/versioned^2 -f); exitok $? 0
+  now destroying version 1
+  (./safe delete secret/versioned^1 -Df); exitok $? 0
+  now exporting the tree with --only-alive set
+  (./safe export secret -o >t/home/got) ; exitok $? 0
+  cat >t/home/want <<EOF ; jsonok
+[
+  {
+    "data": {
+      "secret/versioned": {
+        "versions": [
+          {
+            "destroyed": true
+          },
+          {
+            "destroyed": true
+          },
+          {
+            "value": {
+              "key": "drei"
+            }
+          }
+        ]
+      }
+    },
+    "export_version": 2,
+    "requires_versioning": {"secret": true}
+  }
+] 
+EOF
+
+  testing exports with --shallow set
+  clearvault
+  values=(eins zwei drei)
+  for val in "${values[@]}"; do
+    now setting version $val of the same key
+    (./safe set secret/versioned key=${val} 2>/dev/null); exitok $? 0
+  done
+  now exporting with --shallow set
+  (./safe export secret -s >t/home/got) ; exitok $? 0
+  now checking that the output matches what is expected
+  cat >t/home/want <<EOF ; jsonok
+[
+  {
+    "data": {
+      "secret/versioned": {
+        "versions": [
+          {
+            "value": {
+              "key": "drei"
+            }
+          }
+        ]
+      }
+    },
+    "export_version": 2,
+    "requires_versioning": {}
+  }
+] 
+EOF
+
+  testing imports with --ignore-destroyed set
+  clearvault
+  cat >t/home/want <<EOF
+[
+  {
+    "data": {
+      "secret/versioned": {
+        "versions": [
+          {
+            "destroyed": true
+          },
+          {
+            "deleted": true,
+            "value": {
+              "key": "zwei"
+            }
+          },
+          {
+            "value": {
+              "key": "drei"
+            }
+          }
+        ]
+      }
+    },
+    "export_version": 2,
+    "requires_versioning": {"secret": true}
+  }
+]
+EOF
+  (run; ./safe import secret/import -I <t/home/want) ; exitok $? 0
+  now exporting the secrets
+  (./safe export secret >t/home/got); exitok $? 0
+  now checking that the export matches the import
+  cat >t/home/want <<EOF ; jsonok
+[
+  {
+    "data": {
+      "secret/versioned": {
+        "versions": [
+          {
+            "deleted": true,
+            "value": {
+              "key": "zwei"
+            }
+          },
+          {
+            "value": {
+              "key": "drei"
+            }
+          }
+        ]
+      }
+    },
+    "export_version": 2,
+    "requires_versioning": {"secret": true}
+  }
+]
+EOF
+  
+  testing imports with --ignore-deleted set
+  clearvault
+  cat >t/home/want <<EOF
+[
+  {
+    "data": {
+      "secret/versioned": {
+        "versions": [
+          {
+            "destroyed": true
+          },
+          {
+            "deleted": true,
+            "value": {
+              "key": "zwei"
+            }
+          },
+          {
+            "value": {
+              "key": "drei"
+            }
+          }
+        ]
+      }
+    },
+    "export_version": 2,
+    "requires_versioning": {"secret": true}
+  }
+]
+EOF
+  (run; ./safe import secret/import -i <t/home/want) ; exitok $? 0
+  now exporting the secrets
+  (./safe export secret >t/home/got); exitok $? 0
+  now checking that the export matches the import
+  cat >t/home/want <<EOF ; jsonok
+[
+  {
+    "data": {
+      "secret/versioned": {
+        "versions": [
+          {
+            "destroyed": true
+          },
+          {
+            "value": {
+              "key": "drei"
+            }
+          }
+        ]
+      }
+    },
+    "export_version": 2,
+    "requires_versioning": {"secret": true}
+  }
+]
+EOF
+
+  testing imports with --ignore-destroyed and --ignore-deleted set
+  clearvault
+  cat >t/home/want <<EOF
+[
+  {
+    "data": {
+      "secret/versioned": {
+        "versions": [
+          {
+            "destroyed": true
+          },
+          {
+            "deleted": true,
+            "value": {
+              "key": "zwei"
+            }
+          },
+          {
+            "value": {
+              "key": "drei"
+            }
+          }
+        ]
+      }
+    },
+    "export_version": 2,
+    "requires_versioning": {"secret": true}
+  }
+]
+EOF
+  (run; ./safe import secret/import -iI <t/home/want) ; exitok $? 0
+  now exporting the secrets
+  (./safe export secret >t/home/got); exitok $? 0
+  now checking that the export matches the import
+  cat >t/home/want <<EOF ; jsonok
+[
+  {
+    "data": {
+      "secret/versioned": {
+        "versions": [
+          {
+            "value": {
+              "key": "drei"
+            }
+          }
+        ]
+      }
+    },
+    "export_version": 2,
+    "requires_versioning": {}
+  }
+]
+EOF
+
+  testing imports with --shallow set
+  clearvault
+  cat >t/home/want <<EOF
+[
+  {
+    "data": {
+      "secret/versioned": {
+        "versions": [
+          {
+            "destroyed": true
+          },
+          {
+            "deleted": true,
+            "value": {
+              "key": "zwei"
+            }
+          },
+          {
+            "value": {
+              "key": "drei"
+            }
+          }
+        ]
+      }
+    },
+    "export_version": 2,
+    "requires_versioning": {"secret": true}
+  }
+]
+EOF
+  (run; ./safe import secret/import -s <t/home/want) ; exitok $? 0
+  now exporting the secrets
+  (./safe export secret >t/home/got); exitok $? 0
+  now checking that the export matches the import
+  cat >t/home/want <<EOF ; jsonok
+[
+  {
+    "data": {
+      "secret/versioned": {
+        "versions": [
+          {
+            "value": {
+              "key": "drei"
+            }
+          }
+        ]
+      }
+    },
+    "export_version": 2,
+    "requires_versioning": {}
+  }
+]
+EOF
   dump_log
 done
 done

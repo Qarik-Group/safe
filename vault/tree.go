@@ -825,6 +825,8 @@ func (w *treeWorker) workMounts(_ secretTree) ([]secretTree, error) {
 
 func (w *treeWorker) workVersions(t secretTree) ([]secretTree, error) {
 	path := t.Name
+	//If we've gotten this far, we know that this secret exists if the backend is v1
+	// and a v1 backend can only have one version
 	if t.MountVersion != 2 {
 		return []secretTree{
 			{
