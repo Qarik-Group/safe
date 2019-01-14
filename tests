@@ -15,20 +15,20 @@ case $OSTYPE in
 (darwin*)
   platform=darwin
   declare -a versions=(
-    #"0.8.3"
-    #"0.9.6"
-    #"0.10.4"
-    #"0.11.6"
+    "0.8.3"
+    "0.9.6"
+    "0.10.4"
+    "0.11.6"
     "1.0.1"
   )
   ;;
 (linux*)
   platform=linux
   declare -a versions=(
-    #"0.8.3"
-    #"0.9.6"
-    #"0.10.4"
-    #"0.11.6"
+    "0.8.3"
+    "0.9.6"
+    "0.10.4"
+    "0.11.6"
     "1.0.1"
   )
   ;;
@@ -315,9 +315,7 @@ for version in "${versions[@]}"; do
   killall vault-${platform}-${version} >/dev/null 2>&1 || true
 done
 for version in "${versions[@]}"; do
-# TODO: Put this back
-#for kvversion in 1 2; do
-for kvversion in 2; do
+for kvversion in 1 2; do
   # KV v2 was introduced in 0.10
   if [[ kvversion -eq 2 && $version =~ ^0\.[6-9].* ]]; then
     continue
