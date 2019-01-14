@@ -39,3 +39,9 @@ communicating with the Vault server. See: `tree`, `paths`, `delete -R`, etc
 
 * We can read non-strings out of the Vault again (Fixes #178).
 * `safe rekey`'s key prompt is fixed and now won't just ask you for the first key `n` times
+
+# Breaking Changes
+
+* Exports are now in a new format. While this version of safe can import versions of the old
+format, this version of safe will produce exports that older versions of safe will not be able
+to import.
