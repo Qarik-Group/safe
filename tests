@@ -281,7 +281,7 @@ cleanup() {
 restart_vault_server() {
   kill_running_vault
   rm -f t/home/log
-  ./vaults/vault-${platform}-${version} server -dev -dev-listen-address 127.0.0.1:8199 >t/home/log 2>&1 &
+  ./vaults/vault-${platform}-${version} server -dev -dev-listen-address 127.0.0.1:8198 >t/home/log 2>&1 &
   vault_pid=$!
   waitfor=600
   while ! grep -iq '^root token: ' t/home/log; do
@@ -299,7 +299,7 @@ restart_vault_server() {
   unseal_key=$(awk '/^Unseal Key:/ { print $3 }' < t/home/log | head -n1)
 
   now targeting test vault server
-  (run; ./safe target unit-tests http://127.0.0.1:8199) ; exitok $? 0
+  (run; ./safe target unit-tests http://127.0.0.1:8198) ; exitok $? 0
   now authenticating with ${root_token} root token
   (run; echo "$root_token" | ./safe auth token)         ; exitok $? 0
   local engine="kv"
@@ -366,8 +366,8 @@ for kvversion in 1 2; do
 
   #######
   testing targeting by ip
-  (run; ./safe target http://127.0.0.1:8199) ; exitok $? 0
-  (run; ./safe -T http://127.0.0.1:8199 env) ; exitok $? 0
+  (run; ./safe target http://127.0.0.1:8198) ; exitok $? 0
+  (run; ./safe -T http://127.0.0.1:8198 env) ; exitok $? 0
 
   testing targeting by alias
   (run; ./safe target unit-tests)            ; exitok $? 0
@@ -379,9 +379,9 @@ for kvversion in 1 2; do
 
   testing ambiguous targets
   (run; ./safe target alternate \
-                      http://127.0.0.1:8199) ; exitok $? 0
-  (run; ./safe target http://127.0.0.1:8199) ; exitok $? 1
-  (run; ./safe -T http://127.0.0.1:8199 env) ; exitok $? 1
+                      http://127.0.0.1:8198) ; exitok $? 0
+  (run; ./safe target http://127.0.0.1:8198) ; exitok $? 1
+  (run; ./safe -T http://127.0.0.1:8198 env) ; exitok $? 1
   restart_vault_server
 
 
