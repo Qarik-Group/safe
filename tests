@@ -303,9 +303,11 @@ restart_vault_server() {
   now authenticating with ${root_token} root token
   (run; echo "$root_token" | ./safe auth token)         ; exitok $? 0
   local engine="kv"
+  local versionflag="-version $kvversion"
   if [[ $version =~ ^0\.[6-8].* ]]; then engine="generic"; fi
+  if [[ $version =~ ^0\.[6-9].* ]]; then versionflag=""; fi
   now mounting a kv v$kvversion engine
-  (run; ./safe vault secrets disable secret/; ./safe vault secrets enable -path="secret/" -version $kvversion "$engine"); exitok $? 0
+  (run; ./safe vault secrets disable secret/; ./safe vault secrets enable -path="secret/" $versionflag "$engine"); exitok $? 0
 }
 
 mkdir -p vaults t/tmp
