@@ -281,7 +281,9 @@ cleanup() {
 restart_vault_server() {
   kill_running_vault
   rm -f t/home/log
-  ./vaults/vault-${platform}-${version} server -dev -dev-listen-address 127.0.0.1:8198 >t/home/log 2>&1 &
+  mkdir ./vaults/bin
+  cp ./vaults/vault-${platform}-${version} ./vaults/bin/vault
+  ./vaults/bin/vault server -dev -dev-listen-address 127.0.0.1:8198 >t/home/log 2>&1 &
   vault_pid=$!
   waitfor=600
   while ! grep -iq '^root token: ' t/home/log; do
@@ -302,12 +304,21 @@ restart_vault_server() {
   (run; ./safe target unit-tests http://127.0.0.1:8198) ; exitok $? 0
   now authenticating with ${root_token} root token
   (run; echo "$root_token" | ./safe auth token)         ; exitok $? 0
+  
   local engine="kv"
   local versionflag="-version $kvversion"
+  local mountcmd="secrets enable"
+  local unmountcmd="secrets disable"
+  if [[ $version =~ ^0\.[6-8].* ]]; then 
+    unmountcmd="unmount"
+    mountcmd="mount"; 
+  fi
   if [[ $version =~ ^0\.[6-8].* ]]; then engine="generic"; fi
   if [[ $version =~ ^0\.[6-9].* ]]; then versionflag=""; fi
+  now unmounting the existing secret/ mount
+  (run; PATH="${PWD}/vaults/bin:${PATH}" ./safe vault $unmountcmd "secret/"); exitok $? 0
   now mounting a kv v$kvversion engine
-  (run; ./safe vault secrets disable secret/; ./safe vault secrets enable -path="secret/" $versionflag "$engine"); exitok $? 0
+  (run; PATH="${PWD}/vaults/bin:${PATH}" ./safe vault $mountcmd -path="secret/" $versionflag "$engine"); exitok $? 0
 }
 
 mkdir -p vaults t/tmp
