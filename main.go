@@ -1662,6 +1662,7 @@ vaults. This flag does nothing for kv v1 mounts.
 			secrets, err := v.ConstructSecrets(path, vault.TreeOpts{
 				FetchKeys:           opt.Paths.ShowKeys,
 				AllowDeletedSecrets: opt.Paths.Quick,
+				SkipVersionInfo:     !opt.Paths.ShowKeys,
 			})
 			if err != nil {
 				return err

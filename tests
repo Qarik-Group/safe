@@ -281,7 +281,7 @@ cleanup() {
 restart_vault_server() {
   kill_running_vault
   rm -f t/home/log
-  mkdir ./vaults/bin
+  mkdir -p ./vaults/bin
   cp ./vaults/vault-${platform}-${version} ./vaults/bin/vault
   ./vaults/bin/vault server -dev -dev-listen-address 127.0.0.1:8198 >t/home/log 2>&1 &
   vault_pid=$!
@@ -1808,13 +1808,31 @@ EOF
 
   #######
   clearvault
-  testing paths --keys
+  testing paths 
   no_key secret/{a/b/c,robot}
   generate secret/a/b/c   subkey=value
   generate secret/a/b/c/d subsubkey=value
   generate secret/robot   username=bot password=sekrit
 
   now retrieving a single path
+  (run; ./safe paths secret/a/b/c >t/home/got) ; exitok $? 0
+  now paths should report on path per line
+  cat <<'EOF' >t/home/want ; diffok
+secret/a/b/c
+secret/a/b/c/d
+EOF
+
+  now retrieving multiple paths
+  (run; ./safe paths secret/a secret/robot >t/home/got) ; exitok $? 0
+  now should get all paths
+  cat <<'EOF' >t/home/want ; diffok
+secret/a/b/c
+secret/a/b/c/d
+secret/robot
+EOF
+
+  testing paths --keys
+  now retrieving a single path with keys
   (run; ./safe paths --keys secret/a/b/c >t/home/got) ; exitok $? 0
 
   now paths should report on path:key per line
@@ -1823,7 +1841,8 @@ secret/a/b/c:subkey
 secret/a/b/c/d:subsubkey
 EOF
 
-  now retrieving multiple paths
+
+  now retrieving multiple paths with keys
   (run; ./safe paths --keys secret/a secret/robot >t/home/got) ; exitok $? 0
   now should get all paths, and all the keys
   cat <<'EOF' >t/home/want ; diffok

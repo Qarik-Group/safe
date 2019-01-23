@@ -409,7 +409,7 @@ func (t *secretTree) getWorkType(opts TreeOpts) uint16 {
 		ret = opTypeList
 	case treeTypeDirAndSecret:
 		ret = opTypeList
-		if opts.FetchKeys {
+		if opts.FetchKeys || !opts.SkipVersionInfo {
 			ret |= opTypeVersions
 		}
 	case treeTypeSecret:
