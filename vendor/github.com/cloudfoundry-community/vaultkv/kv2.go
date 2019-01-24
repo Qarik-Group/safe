@@ -31,46 +31,47 @@ func (c *Client) IsKVv2Mount(path string) (mountPath string, isV2 bool, err erro
 	path = strings.TrimPrefix(path, "/")
 	output := struct {
 		Data struct {
-			Type    string `json:"type"`
-			Path    string `json:"path"`
-			Options struct {
-				Version string `json:"version"`
-			} `json:"options"`
+			Secret map[string]struct {
+				Type    string `json:"type"`
+				Options struct {
+					Version string `json:"version"`
+				} `json:"options"`
+			} `json:"secret"`
 		} `json:"data"`
 	}{}
 
 	err = c.doRequest(
 		"GET",
-		fmt.Sprintf("/sys/internal/ui/mounts/%s", strings.TrimLeft(path, "/")),
+		fmt.Sprintf("/sys/internal/ui/mounts"),
 		nil, &output)
+
+	mountPath = strings.Trim(mountPathDefault(path), "/")
 	if err != nil {
-		//If we got a 404, either the mount doesn't exist or this version of Vault
-		// is too old to possibly have a v2 backend
+		//If we got a 404, this version of Vault is too old to possibly have a v2 backend
 		if _, is404 := err.(*ErrNotFound); is404 {
 			err = nil
 		}
 
-		mountPath = strings.Trim(mountPathDefault(path), "/")
 		return
 	}
 
-	var prefix string
-	if strings.HasPrefix(path, "auth/") {
-		prefix = "auth/"
-	}
-
-	mountPath = strings.Trim(fmt.Sprintf("%s%s", prefix, output.Data.Path), "/")
-
-	if output.Data.Type != "kv" {
+	if output.Data.Secret == nil {
 		return
 	}
 
-	version, err := strconv.ParseUint(output.Data.Options.Version, 10, 64)
-	if err != nil {
-		return
+	path = strings.Replace(path, "//", "/", -1)
+	path = strings.Trim(path, "/")
+	pathSplit := strings.Split(path, "/")
+
+	for i := 1; i <= len(pathSplit); i++ {
+		thisPath := strings.Join(pathSplit[:i], "/") + "/"
+		if out, found := output.Data.Secret[thisPath]; found {
+			mountPath = strings.TrimRight(thisPath, "/")
+			isV2 = out.Options.Version == "2"
+			break
+		}
 	}
 
-	isV2 = version == 2
 	return
 }
 
