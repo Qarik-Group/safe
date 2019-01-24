@@ -736,6 +736,13 @@ func (w *treeWorker) workList(t secretTree) ([]secretTree, error) {
 	}
 
 	ret := []secretTree{}
+
+	//This is what happens when you list a mount point which has a secret
+	// at its root. We end up detecting it twice. This will ignore finding it
+	// out of the list so we only find it once.
+	if len(list) > 0 && list[0] == "" {
+		list = list[1:]
+	}
 	for _, l := range list {
 		t := treeTypeSecret
 		if strings.HasSuffix(l, "/") {
@@ -814,6 +821,16 @@ func (w *treeWorker) workMounts(_ secretTree) ([]secretTree, error) {
 
 	ret := []secretTree{}
 	for _, mount := range mounts {
+		//Handle the case in which a mount has a secret at its root
+		if _, err = w.vault.Read(mount); err == nil {
+			ret = append(ret, secretTree{
+				Name: mount,
+				Type: treeTypeSecret,
+			})
+		} else if !IsNotFound(err) {
+			return nil, err
+		}
+
 		ret = append(ret, secretTree{
 			Name: mount + "/",
 			Type: treeTypeDir,
