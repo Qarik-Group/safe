@@ -3,10 +3,10 @@
 	"ignore": "test",
 	"package": [
 		{
-			"checksumSHA1": "VU6dGHy9ySS2lqs2/3UBTy3xyWA=",
+			"checksumSHA1": "UvpVW7NHBuUCWvr2ge0ytE3n4zM=",
 			"path": "github.com/cloudfoundry-community/vaultkv",
-			"revision": "770bea88d6ade2800cf7502e5c51c53d4368baa7",
-			"revisionTime": "2019-01-24T03:59:47Z"
+			"revision": "05db23f9c0b75c2ecc1ebcdd234ccc4acca0bb59",
+			"revisionTime": "2019-01-25T01:15:16Z"
 		},
 		{
 			"checksumSHA1": "17vYJDDMJO63/G/tRFIUuSlMCbE=",

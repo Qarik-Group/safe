@@ -105,3 +105,10 @@ func (v *Client) AuthUserpass(username, password string) (ret *AuthOutput, err e
 func (v *Client) TokenRenewSelf() (err error) {
 	return v.doRequest("POST", "/auth/token/renew-self", nil, nil)
 }
+
+//TokenIsValid returns no error if it can look itself up. This can error
+// if the token is valid but somebody has configured policies such that it can not
+// look itself up. It can also error, of course, if the token is invalid.
+func (v *Client) TokenIsValid() (err error) {
+	return v.doRequest("GET", "/auth/token/lookup-self", nil, nil)
+}

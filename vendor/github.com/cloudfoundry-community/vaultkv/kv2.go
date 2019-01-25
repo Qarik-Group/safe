@@ -52,6 +52,16 @@ func (c *Client) IsKVv2Mount(path string) (mountPath string, isV2 bool, err erro
 			err = nil
 		}
 
+		//Then either the token is invalid (and we should err) or this could be
+		// an old version of Vault that doesn't have this endpoint yet, and so its
+		// interpreting this as a call to the sys/* region which this token may not have
+		// access to. In this case, it would be too old of a version to have a v2 backend.
+		if _, is403 := err.(*ErrForbidden); is403 {
+			if c.TokenIsValid() == nil {
+				err = nil
+			}
+		}
+
 		return
 	}
 
