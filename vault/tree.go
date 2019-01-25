@@ -374,7 +374,12 @@ func (t *secretTree) populateNodeType(v *Vault) error {
 
 	err = v.verifyMetadataExists(t.Name)
 	if err != nil {
-		if !IsNotFound(err) {
+		if vaultkv.IsForbidden(err) {
+			tokenerr := v.Client().Client.TokenIsValid()
+			if tokenerr != nil {
+				return err
+			}
+		} else if !IsNotFound(err) {
 			return err
 		}
 
