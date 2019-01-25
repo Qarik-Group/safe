@@ -261,6 +261,7 @@ dump_log() {
 kill_running_vault() {
   if [[ -n $vault_pid ]] ; then
     kill $vault_pid
+    wait $vault_pid
     vault_pid=
   fi
 }

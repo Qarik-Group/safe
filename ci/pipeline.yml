@@ -287,7 +287,9 @@ jobs:
               channel:  (( grab meta.slack.channel ))
               username: (( grab meta.slack.username ))
               icon_url: (( grab meta.slack.icon ))
-              text_file: notifications/message
+              #I want this to actually print out the safe version, but for now.... may as well print _something_
+              #text_file: notifications/message
+              text: A new version of safe was released!
         on_failure:
           put: notify
           params:
