@@ -414,12 +414,12 @@ You can also use this command to export a target's configuration into the outer
 shell in order to use the Vault CLI directly:
 
 ```
-safe env --format bash
+safe env --bash
 \export VAULT_ADDR=http://localhost:8200;
 \export VAULT_TOKEN=$SOME_UUID;
 \unset VAULT_SKIP_VERIFY;
 
-eval $(safe env --format bash)
+eval $(safe env --bash)
 ```
 
 [vault]:  https://vaultproject.io
