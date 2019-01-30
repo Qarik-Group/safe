@@ -307,17 +307,19 @@ func main() {
 		cfg := rc.Apply(opt.UseTarget)
 		if opt.Targets.JSON {
 			type vault struct {
-				Name   string `json:"name"`
-				URL    string `json:"url"`
-				Verify bool   `json:"verify"`
+				Name        string `json:"name"`
+				URL         string `json:"url"`
+				Verify      bool   `json:"verify"`
+				DefaultPath string `json:"default_path"`
 			}
 			vaults := make([]vault, 0)
 
 			for name, details := range cfg.Vaults {
 				vaults = append(vaults, vault{
-					Name:   name,
-					URL:    details.URL,
-					Verify: !details.SkipVerify,
+					Name:        name,
+					DefaultPath: details.DefaultPath,
+					URL:         details.URL,
+					Verify:      !details.SkipVerify,
 				})
 			}
 			b, err := json.Marshal(vaults)
@@ -366,7 +368,7 @@ func main() {
 
 	r.Dispatch("target", &Help{
 		Summary: "Target a new Vault, or set your current Vault target",
-		Usage:   "safe [-k] target [URL] [ALIAS] | safe target -i",
+		Usage:   "safe [-k] target [URL] [ALIAS] [DEFAULT PATH] | safe target -i",
 		Type:    AdministrativeCommand,
 	}, func(command string, args ...string) error {
 		cfg := rc.Apply(opt.UseTarget)
@@ -417,14 +419,16 @@ func main() {
 			if !opt.Quiet {
 				if opt.Target.JSON {
 					var out struct {
-						Name   string `json:"name"`
-						URL    string `json:"url"`
-						Verify bool   `json:"verify"`
+						Name        string `json:"name"`
+						URL         string `json:"url"`
+						DefaultPath string `json:"default_path"`
+						Verify      bool   `json:"verify"`
 					}
 					if cfg.Current != "" {
 						out.Name = cfg.Current
 						out.URL = cfg.URL()
 						out.Verify = cfg.Verified()
+						out.DefaultPath = cfg.Vaults[cfg.Current].DefaultPath
 					}
 					b, err := json.MarshalIndent(&out, "", "  ")
 					if err != nil {
@@ -438,10 +442,14 @@ func main() {
 					fmt.Fprintf(os.Stderr, "@R{No Vault currently targeted}\n")
 				} else {
 					skip := ""
+					path := ""
 					if !cfg.Verified() {
 						skip = " (skipping TLS certificate verification)"
 					}
-					fmt.Fprintf(os.Stderr, "Currently targeting @C{%s} at @C{%s}@R{%s}\n\n", cfg.Current, cfg.URL(), skip)
+					if cfg.Vaults[cfg.Current].DefaultPath != "" {
+						path = fmt.Sprintf("with default path @C{%s}", cfg.Vaults[cfg.Current].DefaultPath)
+					}
+					fmt.Fprintf(os.Stderr, "Currently targeting @C{%s} at @C{%s}@R{%s} %s\n\n", cfg.Current, cfg.URL(), skip, path)
 				}
 			}
 			return nil
@@ -464,15 +472,39 @@ func main() {
 		if len(args) == 2 {
 			var err error
 			if strings.HasPrefix(args[1], "http://") || strings.HasPrefix(args[1], "https://") {
-				err = cfg.SetTarget(args[0], args[1], skipverify)
+				err = cfg.SetTarget(args[0], args[1], skipverify, "")
 			} else {
-				err = cfg.SetTarget(args[1], args[0], skipverify)
+				err = cfg.SetTarget(args[1], args[0], skipverify, "")
 			}
 			if err != nil {
 				return err
 			}
 			if !opt.Quiet {
 				fmt.Fprintf(os.Stderr, "Now targeting @C{%s} at @C{%s}\n\n", cfg.Current, cfg.URL())
+			}
+			return cfg.Write()
+		}
+
+		if len(args) == 3 {
+			var err error
+			if strings.HasPrefix(args[1], "http://") || strings.HasPrefix(args[1], "https://") {
+				err = cfg.SetTarget(args[0], args[1], skipverify, args[2])
+			} else {
+				err = cfg.SetTarget(args[1], args[0], skipverify, args[2])
+			}
+			if err != nil {
+				return err
+			}
+			if !opt.Quiet {
+				skip := ""
+				path := ""
+				if skipverify {
+					skip = " (skipping TLS certificate verification)"
+				}
+				if cfg.Vaults[cfg.Current].DefaultPath != "" {
+					path = fmt.Sprintf("with default path @C{%s}", cfg.Vaults[cfg.Current].DefaultPath)
+				}
+				fmt.Fprintf(os.Stderr, "Now targeting @C{%s} at @C{%s}@R{%s} %s\n\n", cfg.Current, cfg.URL(), skip, path)
 			}
 			return cfg.Write()
 		}
@@ -650,7 +682,7 @@ listener "tcp" {
 		}
 		previous := cfg.Current
 
-		cfg.SetTarget(name, fmt.Sprintf("http://127.0.0.1:%d", port), false)
+		cfg.SetTarget(name, fmt.Sprintf("http://127.0.0.1:%d", port), false, "")
 		cfg.Write()
 
 		rc.Apply("")
@@ -1502,7 +1534,7 @@ paths/keys.
 	Specifying the -q flag will show secrets which have been marked as deleted.
 `,
 	}, func(command string, args ...string) error {
-		rc.Apply(opt.UseTarget)
+		cfg := rc.Apply(opt.UseTarget)
 		v := connect(true)
 		display := func(paths []string) {
 			if opt.List.Single {
@@ -1526,7 +1558,11 @@ paths/keys.
 		}
 
 		if len(args) == 0 {
-			args = []string{"/"}
+			if cfg.Vaults[cfg.Current].DefaultPath != "" {
+				args = []string{cfg.Vaults[cfg.Current].DefaultPath}
+			} else {
+				args = []string{"/"}
+			}
 		}
 
 		for _, path := range args {
@@ -1605,12 +1641,16 @@ appear in the tree, but is often considerably quicker for larger vaults. This
 flag does nothing for kv v1 mounts.
 `,
 	}, func(command string, args ...string) error {
-		rc.Apply(opt.UseTarget)
+		cfg := rc.Apply(opt.UseTarget)
 		if opt.Tree.HideLeaves && opt.Tree.ShowKeys {
 			return fmt.Errorf("Cannot specify both -d and --keys at the same time")
 		}
 		if len(args) == 0 {
-			args = append(args, "secret")
+			if cfg.Vaults[cfg.Current].DefaultPath != "" {
+				args = append(args, cfg.Vaults[cfg.Current].DefaultPath)
+			} else {
+				args = append(args, "secret")
+			}
 		}
 		r1, _ := regexp.Compile("^ ")
 		r2, _ := regexp.Compile("^└")
@@ -1653,9 +1693,13 @@ marked as deleted. This may cause keys which would 404 in an attempt to read
 them to appear in the tree, but is often considerably quicker for larger
 vaults. This flag does nothing for kv v1 mounts.
 `}, func(command string, args ...string) error {
-		rc.Apply(opt.UseTarget)
-		if len(args) < 1 {
-			args = append(args, "secret")
+		cfg := rc.Apply(opt.UseTarget)
+		if len(args) == 0 {
+			if cfg.Vaults[cfg.Current].DefaultPath != "" {
+				args = append(args, cfg.Vaults[cfg.Current].DefaultPath)
+			} else {
+				args = append(args, "secret")
+			}
 		}
 		v := connect(true)
 		for _, path := range args {
@@ -1881,9 +1925,13 @@ versions as destroyed.
 -s (--shallow) will encode only the most recent version of each secret (and therefore make it compatible for 
 non-versioned backends).
 `}, func(command string, args ...string) error {
-		rc.Apply(opt.UseTarget)
+		cfg := rc.Apply(opt.UseTarget)
 		if len(args) < 1 {
-			args = append(args, "secret")
+			if cfg.Vaults[cfg.Current].DefaultPath != "" {
+				args = append(args, cfg.Vaults[cfg.Current].DefaultPath)
+			} else {
+				args = append(args, "secret")
+			}
 		}
 		v := connect(true)
 		toExport := exportFormat{ExportVersion: 2, Data: map[string]exportSecret{}, RequiresVersioning: map[string]bool{}}

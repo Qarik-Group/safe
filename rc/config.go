@@ -17,9 +17,10 @@ type Config struct {
 }
 
 type Vault struct {
-	URL        string `yaml:"url"`
-	Token      string `yaml:"token"`
-	SkipVerify bool   `yaml:"skip_verify"`
+	DefaultPath string `yaml:"default_path"`
+	URL         string `yaml:"url"`
+	Token       string `yaml:"token"`
+	SkipVerify  bool   `yaml:"skip_verify"`
 }
 
 type oldConfig struct {
@@ -184,15 +185,16 @@ func (c *Config) SetCurrent(alias string, reskip bool) error {
 	return nil
 }
 
-func (c *Config) SetTarget(alias, url string, skipverify bool) error {
+func (c *Config) SetTarget(alias, url string, skipverify bool, defaultpath string) error {
 	if c.Vaults == nil {
 		c.Vaults = make(map[string]*Vault)
 	}
 
 	c.Current = alias
 	c.Vaults[alias] = &Vault{
-		URL:        url,
-		SkipVerify: skipverify,
+		URL:         url,
+		SkipVerify:  skipverify,
+		DefaultPath: defaultpath,
 	}
 
 	return nil
