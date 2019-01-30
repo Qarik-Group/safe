@@ -1567,6 +1567,10 @@ paths/keys.
 
 		for _, path := range args {
 			var paths []string
+			if path != cfg.Vaults[cfg.Current].DefaultPath &&
+				cfg.Vaults[cfg.Current].DefaultPath != "" && !strings.HasPrefix(path, "/") {
+				path = cfg.Vaults[cfg.Current].DefaultPath + "/" + path
+			}
 			if path == "" || path == "/" {
 				generics, err := v.Mounts("generic")
 				if err != nil {
@@ -1656,6 +1660,10 @@ flag does nothing for kv v1 mounts.
 		r2, _ := regexp.Compile("^└")
 		v := connect(true)
 		for i, path := range args {
+			if path != cfg.Vaults[cfg.Current].DefaultPath &&
+				cfg.Vaults[cfg.Current].DefaultPath != "" && !strings.HasPrefix(path, "/") {
+				path = cfg.Vaults[cfg.Current].DefaultPath + "/" + path
+			}
 			secrets, err := v.ConstructSecrets(path, vault.TreeOpts{
 				FetchKeys:           opt.Tree.ShowKeys,
 				AllowDeletedSecrets: opt.Tree.Quick,
@@ -1703,6 +1711,10 @@ vaults. This flag does nothing for kv v1 mounts.
 		}
 		v := connect(true)
 		for _, path := range args {
+			if path != cfg.Vaults[cfg.Current].DefaultPath &&
+				cfg.Vaults[cfg.Current].DefaultPath != "" && !strings.HasPrefix(path, "/") {
+				path = cfg.Vaults[cfg.Current].DefaultPath + "/" + path
+			}
 			secrets, err := v.ConstructSecrets(path, vault.TreeOpts{
 				FetchKeys:           opt.Paths.ShowKeys,
 				AllowDeletedSecrets: opt.Paths.Quick,
@@ -1978,6 +1990,10 @@ non-versioned backends).
 		}
 
 		for _, path := range args {
+			if path != cfg.Vaults[cfg.Current].DefaultPath &&
+				cfg.Vaults[cfg.Current].DefaultPath != "" && !strings.HasPrefix(path, "/") {
+				path = cfg.Vaults[cfg.Current].DefaultPath + "/" + path
+			}
 			secret, key, version := vault.ParsePath(path)
 			if key != "" {
 				return fmt.Errorf("Cannot export path with key (%s)", path)
