@@ -84,7 +84,7 @@ func (c *Config) credentials() (string, string, bool, error) {
 	return v.URL, v.Token, v.SkipVerify, nil
 }
 
-func Apply(use string) Config {
+func Read() Config {
 	var c Config
 
 	b, err := ioutil.ReadFile(saferc())
@@ -103,6 +103,12 @@ func Apply(use string) Config {
 		}
 		c = legacy.convert()
 	}
+
+	return c
+}
+
+func Apply(use string) Config {
+	c := Read()
 
 	if err := c.Apply(use); err != nil {
 		fmt.Fprintf(os.Stderr, "@R{!!! %s}\n", err)
