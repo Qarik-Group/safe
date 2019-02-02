@@ -165,6 +165,9 @@ type Options struct {
 	} `cli:"revert"`
 
 	Export struct {
+		All     bool `cli:"-a, --all"`
+		Deleted bool `cli:"-d, --deleted"`
+		//These do nothing but are kept for backwards-compat
 		OnlyAlive bool `cli:"-o, --only-alive"`
 		Shallow   bool `cli:"-s, --shallow"`
 	} `cli:"export"`
@@ -1879,34 +1882,90 @@ redeleting them.
 		Usage:   "safe export [-os] PATH [PATH ...]",
 		Type:    NonDestructiveCommand,
 		Description: `
-Normally, the export will get all versions of every secret. If a secret is deleted, it will be undeleted,
-read, and then redeleted in order to get the contents. 
--o (--only-alive) can be provided to stop the aforementioned delete-toggling behavior and instead encode those
-versions as destroyed. 
--s (--shallow) will encode only the most recent version of each secret (and therefore make it compatible for 
-non-versioned backends).
+Normally, the export will get only the latest version of each secret, and encode it in a format that is backwards-
+compatible with pre-1.0.0 versions of safe (and newer versions).
+-a (--all) will encode all versions of each secret. This will cause the export to use the V2 format, which is
+incompatible with versions of safe prior to v1.0.0
+-d (--deleted) will cause safe to undelete, read, and then redelete deleted secrets in order to encode them in the
+backup. Without this, deleted versions will be ignored.
 `}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
 		if len(args) < 1 {
 			args = append(args, "secret")
 		}
 		v := connect(true)
-		toExport := exportFormat{ExportVersion: 2, Data: map[string]exportSecret{}, RequiresVersioning: map[string]bool{}}
 
-		v2Export := func(path string) error {
-			secrets, err := v.ConstructSecrets(path, vault.TreeOpts{
-				FetchKeys:          true,
-				FetchAllVersions:   !opt.Export.Shallow,
-				GetDeletedVersions: !opt.Export.OnlyAlive,
+		var toExport interface{}
+
+		//Standardize and validate paths
+		for i := range args {
+			args[i] = vault.Canonicalize(args[i])
+			_, key, version := vault.ParsePath(args[i])
+			if key != "" {
+				return fmt.Errorf("Cannot export path with key (%s)", args[i])
+			}
+
+			if version > 0 {
+				return fmt.Errorf("Cannot export path with version (%s)", args[i])
+			}
+		}
+
+		//Deduplicate the input paths
+		sort.Slice(args, func(i, j int) bool { return vault.PathLessThan(args[i], args[j]) })
+		for i := 0; i < len(args)-1; i++ {
+			//No need to get a deeper part of a tree if you're already walking the `((great)*grand)?parent`
+			if strings.HasPrefix(strings.Trim(args[i+1], "/"), strings.Trim(args[i], "/")) {
+				before := args[:i+1]
+				var after []string
+				if len(args)-1 != i+1 {
+					after = args[i+2:]
+				}
+				args = append(before, after...)
+				i--
+			}
+		}
+
+		secrets := vault.Secrets{}
+		for _, path := range args {
+			theseSecrets, err := v.ConstructSecrets(path, vault.TreeOpts{
+				FetchKeys:           true,
+				FetchAllVersions:    opt.Export.All,
+				GetDeletedVersions:  opt.Export.Deleted,
+				AllowDeletedSecrets: opt.Export.Deleted,
 			})
 			if err != nil {
 				return err
 			}
 
+			secrets = secrets.Merge(theseSecrets)
+		}
+
+		var mustV2Export bool
+		//Determine if we can get away with a v1 export
+		for _, s := range secrets {
+			if len(s.Versions) > 1 {
+				mustV2Export = true
+				break
+			}
+		}
+
+		v1Export := func() error {
+			export := make(map[string]*vault.Secret)
+			for _, s := range secrets {
+				export[s.Path] = s.Versions[0].Data
+			}
+
+			toExport = export
+			return nil
+		}
+
+		v2Export := func() error {
+			export := exportFormat{ExportVersion: 2, Data: map[string]exportSecret{}, RequiresVersioning: map[string]bool{}}
+
 			for _, secret := range secrets {
 				if len(secret.Versions) > 1 {
 					mount, _ := v.Client().MountPath(secret.Path)
-					toExport.RequiresVersioning[mount] = true
+					export.RequiresVersioning[mount] = true
 				}
 
 				thisSecret := exportSecret{FirstVersion: secret.Versions[0].Number}
@@ -1917,8 +1976,8 @@ non-versioned backends).
 
 				for _, version := range secret.Versions {
 					thisVersion := exportVersion{
-						Deleted:   version.State == vault.SecretStateDeleted && !opt.Export.OnlyAlive,
-						Destroyed: version.State == vault.SecretStateDestroyed || (version.State == vault.SecretStateDeleted && opt.Export.OnlyAlive),
+						Deleted:   version.State == vault.SecretStateDeleted && opt.Export.Deleted,
+						Destroyed: version.State == vault.SecretStateDestroyed || (version.State == vault.SecretStateDeleted && !opt.Export.Deleted),
 						Value:     map[string]string{},
 					}
 
@@ -1929,29 +1988,26 @@ non-versioned backends).
 					thisSecret.Versions = append(thisSecret.Versions, thisVersion)
 				}
 
-				toExport.Data[secret.Path] = thisSecret
+				export.Data[secret.Path] = thisSecret
+
+				//Wrap export in array so that older versions of safe don't try to import this improperly.
+				toExport = []exportFormat{export}
 			}
+
 			return nil
 		}
 
-		for _, path := range args {
-			secret, key, version := vault.ParsePath(path)
-			if key != "" {
-				return fmt.Errorf("Cannot export path with key (%s)", path)
-			}
-
-			if version > 0 {
-				return fmt.Errorf("Cannot export path with version (%s)", path)
-			}
-
-			err := v2Export(secret)
-			if err != nil {
-				return err
-			}
+		var err error
+		if mustV2Export {
+			err = v2Export()
+		} else {
+			err = v1Export()
 		}
 
-		//Wrap export in array so that older versions of safe don't try to import this improperly.
-		b, err := json.Marshal(&[]exportFormat{toExport})
+		if err != nil {
+			return err
+		}
+		b, err := json.Marshal(&toExport)
 		if err != nil {
 			return err
 		}

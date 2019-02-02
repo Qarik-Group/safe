@@ -189,6 +189,29 @@ func (s Secrets) Sort() {
 	sort.Slice(s, func(i, j int) bool { return PathLessThan(s[i].Path, s[j].Path) })
 }
 
+func (s1 Secrets) Merge(s2 Secrets) Secrets {
+	ret := append(Secrets{}, s1...)
+	for _, s := range s2 {
+		idx := sort.Search(len(ret), func(i int) bool {
+			return (s.Path == ret[i].Path || PathLessThan(s.Path, ret[i].Path))
+		})
+		if idx == len(ret) {
+			ret = append(ret, s)
+			continue
+		}
+
+		if s.Path == ret[idx].Path {
+			continue
+		}
+
+		before := ret[:idx]
+		after := append(Secrets{s}, ret[idx:]...)
+		ret = append(before, after...)
+	}
+
+	return ret
+}
+
 func (t secretTree) convertToSecrets() Secrets {
 	var ret Secrets
 	t.DepthFirstMap(func(t *secretTree) {
