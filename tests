@@ -1875,45 +1875,18 @@ EOF
   (run; ./safe export secret/export >t/home/got) ; exitok $? 0
 
   now checking that the export contained our data
-  cat >t/home/want <<EOF ; jsonok
-[
-  {
-    "data": {
-      "secret/export/a/b/c": {
-        "versions": [
-          {
-            "value": {
-              "subkey": "the-value-given"
-            }
-          }
-        ]
-      },
-      "secret/export/admin": {
-        "versions": [
-          {
-            "value": {
-              "password": "sekrit",
-              "username": "admin"
-            }
-          }
-        ]
-      },
-      "secret/export/robot": {
-        "versions": [
-          {
-            "value": {
-              "mark": "2",
-              "password": "beep-boop",
-              "username": "bot"
-            }
-          }
-        ]
-      }
-    },
-    "export_version": 2,
-    "requires_versioning": {}
-  }
-]
+cat >t/home/want <<EOF ; yamlok
+---
+secret/export/admin:
+  username: admin
+  password: sekrit
+secret/export/robot:
+  username: bot
+  password: beep-boop
+  mark: "2"
+secret/export/a/b/c:
+  subkey: the-value-given
+EOF
 EOF
 
 
@@ -1984,8 +1957,21 @@ EOF
   now exporting our data
   (run; ./safe export secret/import >t/home/got)  ; exitok $? 0
 
+  cat <<EOF >t/home/want
+secret/import/a/b/c:
+  subkey: the-value-given
+secret/import/a/b/c/d:
+  subsubkey: really deep
+secret/import/admin:
+  password: sekrit
+  username: admin
+secret/import/robot:
+  mark: "2"
+  password: beep-boop
+  username: bot
+EOF
   now checking that the export matches the import
-  jsonok
+  yamlok
 
   testing import with a v1 format export
   clearvault
@@ -2005,59 +1991,26 @@ secret/import/a/b/c/d:
 EOF
   now importing our data
   (run; ./safe import secret/import <t/home/want) ; exitok $? 0
-  cat <<EOF >t/home/want
-[
-  {
-    "data": {
-      "secret/import/a/b/c": {
-        "versions": [
-          {
-            "value": {
-              "subkey": "the-value-given"
-            }
-          }
-        ]
-      },
-      "secret/import/a/b/c/d": {
-        "versions": [
-          {
-            "value": {
-              "subsubkey": "really deep"
-            }
-          }
-        ]
-      },
-      "secret/import/admin": {
-        "versions": [
-          {
-            "value": {
-              "password": "sekrit",
-              "username": "admin"
-            }
-          }
-        ]
-      },
-      "secret/import/robot": {
-        "versions": [
-          {
-            "value": {
-              "mark": "2",
-              "password": "beep-boop",
-              "username": "bot"
-            }
-          }
-        ]
-      }
-    },
-    "export_version": 2,
-    "requires_versioning": {}
-  }
-]
-EOF
+
   now exporting our data
   (run; ./safe export secret/import >t/home/got)  ; exitok $? 0
+
+  cat <<EOF >t/home/want
+---
+secret/import/admin:
+  username: admin
+  password: sekrit
+secret/import/robot:
+  username: bot
+  password: beep-boop
+  mark: "2"
+secret/import/a/b/c:
+  subkey: the-value-given
+secret/import/a/b/c/d:
+  subsubkey: really deep
+EOF
   now checking that the export corresponds to the import
-  jsonok
+  yamlok
 
 
 
@@ -2569,45 +2522,17 @@ EOF
   (run; ./safe export secret/export secret/export secret/export/a secret/export/a/b secret/export/robot >t/home/got) ; exitok $? 0
 
   now checking that the export contained our non-duplicated data
-  cat >t/home/want <<EOF ; jsonok
-[
-  {
-    "data": {
-      "secret/export/a/b/c": {
-        "versions": [
-          {
-            "value": {
-              "subkey": "the-value-given"
-            }
-          }
-        ]
-      },
-      "secret/export/admin": {
-        "versions": [
-          {
-            "value": {
-              "password": "sekrit",
-              "username": "admin"
-            }
-          }
-        ]
-      },
-      "secret/export/robot": {
-        "versions": [
-          {
-            "value": {
-              "mark": "2",
-              "password": "beep-boop",
-              "username": "bot"
-            }
-          }
-        ]
-      }
-    },
-    "export_version": 2,
-    "requires_versioning": {}
-  }
-]
+  cat >t/home/want <<EOF ; yamlok
+---
+secret/export/a/b/c:
+  subkey: the-value-given
+secret/export/admin:
+  password: sekrit
+  username: admin
+secret/export/robot:
+  mark: "2"
+  password: beep-boop
+  username: bot
 EOF
 
   testing export with multiple versions per secret
@@ -2624,7 +2549,7 @@ EOF
   now destroying version 1 of secret/export/robot
   (./safe delete secret/export/robot^1 -Df); exitok $? 0
   now exporting the vault data
-  (run; ./safe export secret/export >t/home/got) ; exitok $? 0
+  (run; ./safe export secret/export --all --deleted >t/home/got) ; exitok $? 0
   now checking that the export contained our data
   cat >t/home/want <<EOF ; jsonok
 [
@@ -2692,7 +2617,7 @@ EOF
     (./safe set secret/versioned key=${val} 2>/dev/null); exitok $? 0
   done
   now exporting the tree
-  (./safe export secret >t/home/got) ; exitok $? 0
+  (./safe export secret --all --deleted >t/home/got) ; exitok $? 0
   cat >t/home/want <<EOF ; jsonok
 [
   {
@@ -2829,11 +2754,11 @@ EOF
   now importing the secrets
   (run; ./safe import secret/import <t/home/want) ; exitok $? 0
   now exporting the secrets
-  (./safe export secret >t/home/got); exitok $? 0
+  (./safe export secret --all --deleted >t/home/got); exitok $? 0
   now checking that the export matches the import
   jsonok
 
-  testing exports with --only-alive set
+  testing exports without --deleted set
   clearvault
   values=(eins zwei drei)
   for val in "${values[@]}"; do
@@ -2844,8 +2769,8 @@ EOF
   (./safe delete secret/versioned^2 -f); exitok $? 0
   now destroying version 1
   (./safe delete secret/versioned^1 -Df); exitok $? 0
-  now exporting the tree with --only-alive set
-  (./safe export secret -o >t/home/got) ; exitok $? 0
+  now exporting the tree 
+  (./safe export secret --all >t/home/got) ; exitok $? 0
   cat >t/home/want <<EOF ; jsonok
 [
   {
@@ -2872,34 +2797,19 @@ EOF
 ] 
 EOF
 
-  testing exports with --shallow set
+  testing exports without --all set
   clearvault
   values=(eins zwei drei)
   for val in "${values[@]}"; do
     now setting version $val of the same key
     (./safe set secret/versioned key=${val} 2>/dev/null); exitok $? 0
   done
-  now exporting with --shallow set
-  (./safe export secret -s >t/home/got) ; exitok $? 0
+  now exporting 
+  (./safe export secret >t/home/got) ; exitok $? 0
   now checking that the output matches what is expected
-  cat >t/home/want <<EOF ; jsonok
-[
-  {
-    "data": {
-      "secret/versioned": {
-        "versions": [
-          {
-            "value": {
-              "key": "drei"
-            }
-          }
-        ]
-      }
-    },
-    "export_version": 2,
-    "requires_versioning": {}
-  }
-] 
+  cat >t/home/want <<EOF ; yamlok
+secret/versioned:
+  key: drei
 EOF
 
   testing imports with --ignore-destroyed set
@@ -2934,7 +2844,7 @@ EOF
 EOF
   (run; ./safe import secret/import -I <t/home/want) ; exitok $? 0
   now exporting the secrets
-  (./safe export secret >t/home/got); exitok $? 0
+  (./safe export secret --all --deleted >t/home/got); exitok $? 0
   now checking that the export matches the import
   cat >t/home/want <<EOF ; jsonok
 [
@@ -2994,7 +2904,7 @@ EOF
 EOF
   (run; ./safe import secret/import -i <t/home/want) ; exitok $? 0
   now exporting the secrets
-  (./safe export secret >t/home/got); exitok $? 0
+  (./safe export secret --all --deleted >t/home/got); exitok $? 0
   now checking that the export matches the import
   cat >t/home/want <<EOF ; jsonok
 [
@@ -3051,26 +2961,11 @@ EOF
 EOF
   (run; ./safe import secret/import -iI <t/home/want) ; exitok $? 0
   now exporting the secrets
-  (./safe export secret >t/home/got); exitok $? 0
+  (./safe export secret --all --deleted >t/home/got); exitok $? 0
   now checking that the export matches the import
-  cat >t/home/want <<EOF ; jsonok
-[
-  {
-    "data": {
-      "secret/versioned": {
-        "versions": [
-          {
-            "value": {
-              "key": "drei"
-            }
-          }
-        ]
-      }
-    },
-    "export_version": 2,
-    "requires_versioning": {}
-  }
-]
+  cat >t/home/want <<EOF ; yamlok
+secret/versioned:
+  key: drei
 EOF
 
   testing imports with --shallow set
@@ -3105,26 +3000,11 @@ EOF
 EOF
   (run; ./safe import secret/import -s <t/home/want) ; exitok $? 0
   now exporting the secrets
-  (./safe export secret >t/home/got); exitok $? 0
+  (./safe export secret --all --deleted >t/home/got); exitok $? 0
   now checking that the export matches the import
-  cat >t/home/want <<EOF ; jsonok
-[
-  {
-    "data": {
-      "secret/versioned": {
-        "versions": [
-          {
-            "value": {
-              "key": "drei"
-            }
-          }
-        ]
-      }
-    },
-    "export_version": 2,
-    "requires_versioning": {}
-  }
-]
+  cat >t/home/want <<EOF ; yamlok
+secret/versioned:
+  key: drei
 EOF
   dump_log
 done
