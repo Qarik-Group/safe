@@ -78,6 +78,7 @@ type Options struct {
 	HelpCommand    struct{} `cli:"help"`
 	VersionCommand struct{} `cli:"version"`
 
+	Envvars struct{} `cli:"envvars"`
 	Targets struct {
 		JSON bool `cli:"--json"`
 	} `cli:"targets"`
@@ -291,6 +292,12 @@ func main() {
 		}
 		r.Help(os.Stderr, strings.Join(args, " "))
 		os.Exit(0)
+		return nil
+	})
+
+	r.Dispatch("envvars", nil, func(command string, args ...string) error {
+		fmt.Printf(`@B{SAFE_TARGET}  The vault alias which requests are sent to
+`)
 		return nil
 	})
 

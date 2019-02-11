@@ -71,7 +71,8 @@ func (r *Runner) Help(out io.Writer, topic string) {
 			}
 		}
 
-		fmt.Fprintf(out, "\nTry 'safe help <command>' for detailed information\n")
+		fmt.Fprintf(out, "\nTry `safe envvars' for information on available environment variables\n")
+		fmt.Fprintf(out, "Try 'safe help <command>' for detailed information on specific commands\n")
 		return
 	}
 
