@@ -1460,7 +1460,7 @@ paths/keys.
 	})
 
 	r.Dispatch("versions", &Help{
-		Summary: "Print information about the versions of the one or more paths",
+		Summary: "Print information about the versions of one or more paths",
 		Usage:   "safe versions PATH [PATHS...]",
 		Type:    NonDestructiveCommand,
 	}, func(command string, args ...string) error {
