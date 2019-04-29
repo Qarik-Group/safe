@@ -110,6 +110,7 @@ type Options struct {
 		Threshold int  `cli:"--threshold"`
 		JSON      bool `cli:"--json"`
 		Sealed    bool `cli:"--sealed"`
+		NoMount   bool `cli:"--no-mount"`
 		Persist   bool `cli:"--persist, --no-persist"`
 	} `cli:"init"`
 
@@ -691,6 +692,19 @@ listener "tcp" {
 		cfg.Write()
 		v = connect(true)
 
+		exists, err := v.MountExists("secret")
+		if err != nil {
+			return fmt.Errorf("Could not list mounts: %s", err)
+		}
+
+		if !exists {
+			err := v.AddMount("secret", 2)
+			if err != nil {
+				return fmt.Errorf("Could not add `secret' mount: %s", err)
+			}
+			fmt.Printf("safe has mounted the @C{secret} backend\n\n")
+		}
+
 		s := vault.NewSecret()
 		s.Set("knock", "knock", false)
 		v.Write("secret/handshake", s)
@@ -723,7 +737,7 @@ listener "tcp" {
 
 	r.Dispatch("init", &Help{
 		Summary: "Initialize a new vault",
-		Usage:   "safe init [--keys #] [--threshold #] [--single] [--json] [--sealed]",
+		Usage:   "safe init [--keys #] [--threshold #] [--single] [--json] [--no-mount] [--sealed]",
 		Description: `
 Initializes a brand new Vault backend, generating new seal keys, and an
 initial root token.  This information will be printed out, so that you
@@ -758,10 +772,17 @@ which can be quite handy.
 
 By default, the seal keys will also be stored in the Vault itself,
 unless you specify the --no-persist flag.  They will be written to
-secret/vault/seal/keys, as key1, key2, ... keyN.
+secret/vault/seal/keys, as key1, key2, ... keyN. Note that if 
+--sealed is also set, this option is ignored (since the Vault will 
+remain sealed).
 
+In more recent versions of Vault, the "secret" mount is not mounted
+by default. Safe will ensure that the mount is mounted anyway unless
+the --no-mount option is given. The flag will not unmount an existing
+secret mount in versions of Vault which mount "secret" by default.
 Note that if --sealed is also set, this option is ignored (since the
 Vault will remain sealed).
+
 `,
 		Type: AdministrativeCommand,
 	}, func(command string, args ...string) error {
@@ -801,33 +822,6 @@ Vault will remain sealed).
 		}
 		os.Setenv("VAULT_TOKEN", token)
 		v = connect(true)
-
-		/* unseal if we weren't called with --sealed */
-		if !opt.Init.Sealed {
-			if st, err := v.Strongbox(); err == nil {
-				for addr := range st {
-					v.SetURL(addr)
-					if err := v.Unseal(keys); err != nil {
-						fmt.Fprintf(os.Stderr, "!!! unable to unseal newly-initialized vault (at %s): %s\n", addr, err)
-					}
-				}
-
-			} else {
-				if err := v.Unseal(keys); err != nil {
-					fmt.Fprintf(os.Stderr, "!! unable to unseal newly-initialized vault: %s\n", err)
-				}
-			}
-
-			/* write secret/handshake, just for fun */
-			s := vault.NewSecret()
-			s.Set("knock", "knock", false)
-			v.Write("secret/handshake", s)
-
-			/* write seal keys to the vault */
-			if opt.Init.Persist {
-				v.SaveSealKeys(keys)
-			}
-		}
 
 		/* be nice to the machines and machine-like intelligences */
 		if opt.Init.JSON {
@@ -880,8 +874,48 @@ Vault will remain sealed).
 
 		fmt.Printf("\n")
 		if !opt.Init.Sealed {
+			if st, err := v.Strongbox(); err == nil {
+				for addr := range st {
+					v.SetURL(addr)
+					if err := v.Unseal(keys); err != nil {
+						fmt.Fprintf(os.Stderr, "!!! unable to unseal newly-initialized vault (at %s): %s\n", addr, err)
+					}
+				}
+
+			} else {
+				if err := v.Unseal(keys); err != nil {
+					fmt.Fprintf(os.Stderr, "!! unable to unseal newly-initialized vault: %s\n", err)
+				}
+			}
+
+			if !opt.Init.NoMount {
+				exists, err := v.MountExists("secret")
+				if err != nil {
+					return fmt.Errorf("Could not list mounts: %s", err)
+				}
+
+				if !exists {
+					err := v.AddMount("secret", 2)
+					if err != nil {
+						return fmt.Errorf("Could not add `secret' mount: %s", err)
+					}
+					fmt.Printf("safe has mounted the @C{secret} backend\n")
+				}
+			}
+
+			/* write secret/handshake, just for fun */
+			s := vault.NewSecret()
+			s.Set("knock", "knock", false)
+			v.Write("secret/handshake", s)
+
 			fmt.Printf("safe has unsealed the Vault for you, and written a test value\n")
-			fmt.Printf("at @C{secret/handshake}.\n")
+			fmt.Printf("at @C{secret/handshake}.\n\n")
+
+			/* write seal keys to the vault */
+			if opt.Init.Persist {
+				v.SaveSealKeys(keys)
+				fmt.Printf("safe has written the unseal keys at @C{secret/vault/seal/keys}\n")
+			}
 		} else {
 			fmt.Printf("Your Vault has been left sealed.\n")
 		}
