@@ -173,7 +173,7 @@ jobs:
         - aggregate:
             - { get: git,     trigger: true,  passed: [test] }
             - { get: version, trigger: true, params: {pre: rc} }
-        - put: version
+        - put: shipit-version
           params: {file: version/number}
         on_failure:
           put: notify
@@ -232,7 +232,7 @@ jobs:
       - do:
         - name: inputs
           aggregate:
-            - { get: version, passed: [rc], params: {bump: final} }
+            - { get: version, resource: shipit-version, passed: [rc], params: {bump: final} }
             - { get: git,     passed: [rc] }
         - name: release
           task: release
@@ -324,6 +324,17 @@ resources:
       bucket:            (( grab meta.aws.bucket ))
       region_name:       (( grab meta.aws.region_name ))
       key:               version
+      access_key_id:     (( grab meta.aws.access_key ))
+      secret_access_key: (( grab meta.aws.secret_key ))
+      initial_version:   (( grab meta.initial_version || "0.0.1" ))
+
+  - name: shipit-version
+    type: semver
+    source :
+      driver:            s3
+      bucket:            (( grab meta.aws.bucket ))
+      region_name:       (( grab meta.aws.region_name ))
+      key:               shipit-version
       access_key_id:     (( grab meta.aws.access_key ))
       secret_access_key: (( grab meta.aws.secret_key ))
       initial_version:   (( grab meta.initial_version || "0.0.1" ))
