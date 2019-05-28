@@ -1098,7 +1098,7 @@ written to STDOUT instead of STDERR to make it easier to consume.
 
 	r.Dispatch("auth", &Help{
 		Summary: "Authenticate to the current target",
-		Usage:   "safe auth (token|github|ldap|userpass)",
+		Usage:   "safe auth (token|github|ldap|userpass|approle)",
 		Type:    AdministrativeCommand,
 	}, func(command string, args ...string) error {
 		cfg := rc.Apply(opt.UseTarget)
@@ -1142,6 +1142,13 @@ written to STDOUT instead of STDERR to make it easier to consume.
 
 		case "userpass":
 			token, err = auth.UserPass(url)
+			if err != nil {
+				return err
+			}
+			break
+
+		case "approle":
+			token, err = auth.AppRole(url)
 			if err != nil {
 				return err
 			}
