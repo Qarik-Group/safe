@@ -15,7 +15,6 @@ case $OSTYPE in
 (darwin*)
   platform=darwin
   declare -a versions=(
-    "0.8.3"
     "0.9.6"
     "0.10.4"
     "0.11.6"
@@ -26,7 +25,6 @@ case $OSTYPE in
 (linux*)
   platform=linux
   declare -a versions=(
-    "0.8.3"
     "0.9.6"
     "0.10.4"
     "0.11.6"
@@ -312,16 +310,25 @@ restart_vault_server() {
   local versionflag="-version $kvversion"
   local mountcmd="secrets enable"
   local unmountcmd="secrets disable"
-  if [[ $version =~ ^0\.[6-8].* ]]; then 
-    unmountcmd="unmount"
-    mountcmd="mount"; 
-  fi
-  if [[ $version =~ ^0\.[6-8].* ]]; then engine="generic"; fi
   if [[ $version =~ ^0\.[6-9].* ]]; then versionflag=""; fi
   now unmounting the existing secret/ mount
   (run; PATH="${PWD}/vaults/bin:${PATH}" ./safe vault $unmountcmd "secret/"); exitok $? 0
   now mounting a kv v$kvversion engine
   (run; PATH="${PWD}/vaults/bin:${PATH}" ./safe vault $mountcmd -path="secret/" $versionflag "$engine"); exitok $? 0
+}
+
+create_test_policy() {
+  ./safe curl POST /sys/policy/test-policy '{"policy": "path \"secret/*\" { capabilities = [\"create\", \"read\", \"update\", \"delete\", \"list\"]}"}' >/dev/null
+}
+
+setup_approle() {
+  create_test_policy
+  role_name="test-role"
+  ./safe vault auth enable approle >/dev/null #Mount the approle backend
+  ./safe curl POST "auth/approle/role/${role_name}" '{"policies": "test-policy"}' >/dev/null #Create a role
+  role_id="$(./safe curl --data-only GET "auth/approle/role/${role_name}/role-id" | jq -Mr '.data.role_id')"
+  secret_id="$(./safe curl --data-only POST "auth/approle/role/${role_name}/secret-id" | jq -Mr '.data.secret_id')"
+  echo "$role_id" "$secret_id"
 }
 
 mkdir -p vaults t/tmp
@@ -419,6 +426,32 @@ for kvversion in 1 2; do
   now trying to curl with embedded duplicate slashes
   (run; ./safe curl /sys///seal-status) ; exitok $? 0
 
+
+     ##     ##     ## ######## ##    ##
+    ####    ##     ##    ##    ##    ##
+   ##  ##   ##     ##    ##    ##    ##
+  ########  ##     ##    ##    ########
+  ##    ##  ##     ##    ##    ##    ##
+  ##    ##  ##     ##    ##    ##    ##
+  ##    ##   #######     ##    ##    ##
+
+  ########
+  clearvault
+  testing approle login
+  now making an approle
+  approle_output="$(setup_approle)"
+  echo "$approle_output" >&2
+  role_id="$(awk '{print $1}' <<<"$approle_output")"
+  secret_id="$(awk '{print $2}' <<<"$approle_output")"
+
+  now trying to login with approle
+  (run; ./safe auth approle <<<"$role_id
+$secret_id
+") ; exitok $? 0;
+  now checking that we can do stuff with the Vault
+  (run; ./safe set secret/beep/boop foo=bar) ; exitok $? 0
+  (run; ./safe get secret/beep/boop) ; exitok $? 0
+  restart_vault_server
 
    ######   ######## ########       ##  ######  ######## ########
   ##    ##  ##          ##         ##  ##    ## ##          ##
