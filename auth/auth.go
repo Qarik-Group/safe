@@ -6,15 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"os"
 	"strings"
-	"time"
 
-	"github.com/cloudfoundry/socks5-proxy"
 	"github.com/starkandwayne/safe/vault"
 )
 
@@ -28,27 +25,23 @@ func authurl(base, f string, args ...interface{}) string {
 }
 
 func authenticate(req *http.Request) (string, error) {
-
-	var dialer = vault.SOCKS5DialFuncFromEnvironment((&net.Dialer{
-		Timeout:   30 * time.Second,
-		KeepAlive: 30 * time.Second,
-	}).Dial, proxy.NewSocks5Proxy(proxy.NewHostKey(), nil))
+	proxyRouter, err := vault.NewProxyRouter()
+	if err != nil {
+		return "", fmt.Errorf("Error setting up proxy: %s", err)
+	}
 
 	client := &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: os.Getenv("VAULT_SKIP_VERIFY") != "",
-				// PreferServerCipherSuites: true,
 			},
-			Proxy:               http.ProxyFromEnvironment,
-			Dial:                dialer,
+			Proxy:               proxyRouter.Proxy,
 			MaxIdleConnsPerHost: 100,
 		},
 	}
 
 	var (
 		body []byte
-		err  error
 		res  *http.Response
 	)
 	if req.Body != nil {

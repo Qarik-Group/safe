@@ -9,19 +9,6 @@
 			"revisionTime": "2019-01-25T01:15:16Z"
 		},
 		{
-			"checksumSHA1": "1lxJTACtMFrpoSHJHC5bjSfQn7g=",
-			"origin": "github.com/cloudfoundry/socks5-proxy/vendor/github.com/cloudfoundry/go-socks5",
-			"path": "github.com/cloudfoundry/go-socks5",
-			"revision": "3659db090cb23a57807b53e2f8580b2427dc2659",
-			"revisionTime": "2018-05-30T21:19:53Z"
-		},
-		{
-			"checksumSHA1": "TLUCJxypw6qLcaGvhpJGQ2U6qfI=",
-			"path": "github.com/cloudfoundry/socks5-proxy",
-			"revision": "3659db090cb23a57807b53e2f8580b2427dc2659",
-			"revisionTime": "2018-05-30T21:19:53Z"
-		},
-		{
 			"checksumSHA1": "17vYJDDMJO63/G/tRFIUuSlMCbE=",
 			"path": "github.com/ghodss/yaml",
 			"revision": "73d445a93680fa1a78ae23a5839bad48f32ba1ee"
@@ -283,6 +270,12 @@
 			"path": "golang.org/x/crypto/ssh",
 			"revision": "7d9177d70076375b9a59c8fde23d52d9c4a7ecd5",
 			"revisionTime": "2017-09-15T19:08:28Z"
+		},
+		{
+			"checksumSHA1": "QbhkYdTB4gx5EAAU/UhyysdCAkg=",
+			"path": "golang.org/x/crypto/ssh/knownhosts",
+			"revision": "a49355c7e3f8fe157a85be2f77e6e269a0f89602",
+			"revisionTime": "2018-06-20T09:14:27Z"
 		},
 		{
 			"checksumSHA1": "bA2gANkJBx2Br/p5GKYdhyGo3Pg=",
