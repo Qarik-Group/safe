@@ -3,6 +3,12 @@
 	"ignore": "test",
 	"package": [
 		{
+			"checksumSHA1": "UlWLJjLRCRtXOzP6nLHb5YTWK+c=",
+			"path": "github.com/armon/go-socks5",
+			"revision": "e75332964ef517daa070d7c38a9466a0d687e0a5",
+			"revisionTime": "2016-09-02T18:42:37Z"
+		},
+		{
 			"checksumSHA1": "UvpVW7NHBuUCWvr2ge0ytE3n4zM=",
 			"path": "github.com/cloudfoundry-community/vaultkv",
 			"revision": "05db23f9c0b75c2ecc1ebcdd234ccc4acca0bb59",
@@ -293,6 +299,12 @@
 			"path": "golang.org/x/net/context",
 			"revision": "3659db090cb23a57807b53e2f8580b2427dc2659",
 			"revisionTime": "2018-05-30T21:19:53Z"
+		},
+		{
+			"checksumSHA1": "yNR4RokwDc+lYbCL/yOB3ENuKH8=",
+			"path": "golang.org/x/net/http/httpproxy",
+			"revision": "60506f45cf65977eb3a9c6e30f995f54a721c271",
+			"revisionTime": "2019-06-03T08:53:59Z"
 		},
 		{
 			"checksumSHA1": "LvdVRE0FqdR68SvVpRkHs1rxhcA=",
