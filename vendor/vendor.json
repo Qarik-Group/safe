@@ -307,6 +307,12 @@
 			"revisionTime": "2019-06-03T08:53:59Z"
 		},
 		{
+			"checksumSHA1": "vL6l4FZWitsxht0uqA/GpDNkNNc=",
+			"path": "golang.org/x/net/idna",
+			"revision": "60506f45cf65977eb3a9c6e30f995f54a721c271",
+			"revisionTime": "2019-06-03T08:53:59Z"
+		},
+		{
 			"checksumSHA1": "LvdVRE0FqdR68SvVpRkHs1rxhcA=",
 			"path": "golang.org/x/net/proxy",
 			"revision": "db8e4de5b2d6653f66aea53094624468caad15d2",
