@@ -11,6 +11,8 @@ import (
 	"net/url"
 	"os"
 	"strings"
+
+	"github.com/starkandwayne/safe/vault"
 )
 
 func shouldDebug() bool {
@@ -23,18 +25,23 @@ func authurl(base, f string, args ...interface{}) string {
 }
 
 func authenticate(req *http.Request) (string, error) {
+	proxyRouter, err := vault.NewProxyRouter()
+	if err != nil {
+		return "", fmt.Errorf("Error setting up proxy: %s", err)
+	}
+
 	client := &http.Client{
 		Transport: &http.Transport{
-			Proxy: http.ProxyFromEnvironment,
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: os.Getenv("VAULT_SKIP_VERIFY") != "",
 			},
+			Proxy:               proxyRouter.Proxy,
+			MaxIdleConnsPerHost: 100,
 		},
 	}
 
 	var (
 		body []byte
-		err  error
 		res  *http.Response
 	)
 	if req.Body != nil {

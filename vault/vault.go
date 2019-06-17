@@ -63,17 +63,23 @@ func NewVault(u, token string, auth bool) (*Vault, error) {
 		vaultURL.Host = vaultURL.Host + port
 	}
 
+	proxyRouter, err := NewProxyRouter()
+	if err != nil {
+		return nil, fmt.Errorf("Error setting up proxy: %s", err)
+	}
+
 	return &Vault{
 		client: (&vaultkv.Client{
 			VaultURL:  vaultURL,
 			AuthToken: token,
 			Client: &http.Client{
 				Transport: &http.Transport{
-					Proxy: http.ProxyFromEnvironment,
+					Proxy: proxyRouter.Proxy,
 					TLSClientConfig: &tls.Config{
 						RootCAs:            roots,
 						InsecureSkipVerify: os.Getenv("VAULT_SKIP_VERIFY") != "",
 					},
+					MaxIdleConnsPerHost: 100,
 				},
 			},
 			Trace: func() (ret io.Writer) {
