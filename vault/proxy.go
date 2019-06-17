@@ -38,51 +38,32 @@ func NewProxyRouter() (*ProxyRouter, error) {
 
 	noProxy := getEnvironmentVariable("NO_PROXY", "no_proxy")
 
-	knownHostsFile := getEnvironmentVariable("KNOWN_HOSTS_FILE", "known_hosts_file")
-	skipHostKeyString := getEnvironmentVariable("SKIP_HOST_KEY_VALIDATION", "skip_host_key_validation")
-	skipHostKeyValidation := skipHostKeyString != "" && skipHostKeyString != "false"
+	knownHostsFile := getEnvironmentVariable("SAFE_KNOWN_HOSTS_FILE", "safe_known_hosts_file")
+	skipHostKeyString := getEnvironmentVariable("SAFE_SKIP_HOST_KEY_VALIDATION", "safe_skip_host_key_validation")
+	skipHostKeyValidation := true
+	for _, falseString := range []string{"", "false", "no", "0"} {
+		if skipHostKeyString == falseString {
+			skipHostKeyValidation = false
+			break
+		}
+	}
 
-	var tunnelsToOpen []*string
+	var err error
 	if strings.HasPrefix(httpProxy, "ssh+socks5://") {
-		tunnelsToOpen = append(tunnelsToOpen, &httpProxy)
+		httpProxy, err = openSOCKS5Helper(httpProxy, knownHostsFile, skipHostKeyValidation)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if strings.HasPrefix(httpsProxy, "ssh+socks5://") {
-		tunnelsToOpen = append(tunnelsToOpen, &httpsProxy)
-	}
-
-	for i := range tunnelsToOpen {
-		//If we haven't already opened a proxy for this...
-		if i == 0 || *(tunnelsToOpen[i]) != *(tunnelsToOpen[i-1]) {
-			//Let's open a proxy!
-			u, err := url.Parse(*(tunnelsToOpen[i]))
-			if err != nil {
-				return nil, fmt.Errorf("Could not parse proxy URL (%s): %s", *tunnelsToOpen[i], err)
-			}
-
-			if u.User == nil {
-				return nil, fmt.Errorf("No user provided for SSH proxy")
-			}
-
-			sshClient, err := StartSSHTunnel(SOCKS5SSHConfig{
-				Host:                  u.Host,
-				User:                  u.User.Username(),
-				PrivateKey:            u.Path,
-				KnownHostsFile:        knownHostsFile,
-				SkipHostKeyValidation: skipHostKeyValidation,
-			})
-			if err != nil {
-				return nil, fmt.Errorf("Could not start SSH tunnel: %s", err)
-			}
-
-			socks5Addr, err := StartSOCKS5Server(sshClient.Dial)
-			if err != nil {
-				return nil, fmt.Errorf("Could not start SOCKS5 Server: %s", err)
-			}
-			*tunnelsToOpen[i] = fmt.Sprintf("socks5://%s", socks5Addr)
+		if httpsProxy == httpProxy {
+			httpsProxy = httpProxy
 		} else {
-			//Let's get the address of the already opened proxy
-			*tunnelsToOpen[i] = *tunnelsToOpen[i-1]
+			httpsProxy, err = openSOCKS5Helper(httpsProxy, knownHostsFile, skipHostKeyValidation)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -95,16 +76,44 @@ func NewProxyRouter() (*ProxyRouter, error) {
 	}, nil
 }
 
+func openSOCKS5Helper(toOpen, knownHostsFile string, skipHostKeyValidation bool) (string, error) {
+	u, err := url.Parse(toOpen)
+	if err != nil {
+		return "", fmt.Errorf("Could not parse proxy URL (%s): %s", toOpen, err)
+	}
+
+	if u.User == nil {
+		return "", fmt.Errorf("No user provided for SSH proxy")
+	}
+
+	sshClient, err := StartSSHTunnel(SOCKS5SSHConfig{
+		Host:                  u.Host,
+		User:                  u.User.Username(),
+		PrivateKey:            u.Path,
+		KnownHostsFile:        knownHostsFile,
+		SkipHostKeyValidation: skipHostKeyValidation,
+	})
+	if err != nil {
+		return "", fmt.Errorf("Could not start SSH tunnel: %s", err)
+	}
+
+	socks5Addr, err := StartSOCKS5Server(sshClient.Dial)
+	if err != nil {
+		return "", fmt.Errorf("Could not start SOCKS5 Server: %s", err)
+	}
+
+	return fmt.Sprintf("socks5://%s", socks5Addr), nil
+}
+
 func getEnvironmentVariable(variables ...string) string {
-	var ret string
 	for _, v := range variables {
 		ret := os.Getenv(v)
 		if ret != "" {
-			break
+			return ret
 		}
 	}
 
-	return ret
+	return ""
 }
 
 //SOCKS5SSHConfig contains configuration variables for setting up a SOCKS5
@@ -125,6 +134,9 @@ func StartSSHTunnel(conf SOCKS5SSHConfig) (*ssh.Client, error) {
 
 	if !conf.SkipHostKeyValidation {
 		if conf.KnownHostsFile == "" {
+			if os.Getenv("$HOME") == "" {
+				return nil, fmt.Errorf("No home directory set and no known hosts file explicitly given; cannot validate host key")
+			}
 			conf.KnownHostsFile = fmt.Sprintf("%s/.ssh/known_hosts", os.Getenv("HOME"))
 		}
 
@@ -164,11 +176,10 @@ func StartSOCKS5Server(dialFn func(string, string) (net.Conn, error)) (string, e
 		return "", fmt.Errorf("Error starting local SOCKS5 server: %s", err)
 	}
 
-	//TODO: Put this on another thread. Get error somehow?
 	go func() {
 		err = socks5Server.Serve(socks5Listener)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "SOCKS5 proxy error: %s", err)
+			fmt.Fprintf(os.Stderr, "SOCKS5 proxy error: %s\n", err)
 		}
 	}()
 
@@ -286,6 +297,8 @@ func writeKnownHosts(knownHostsFile, hostname string, key ssh.PublicKey) error {
 	if err != nil {
 		return fmt.Errorf("Error when writing to `%s': %s", knownHostsFile, err)
 	}
+
+	fmt.Fprintf(os.Stderr, "Warning: Permanently added '%s' (%s) to the list of known hosts.\n", hostname, key.Type())
 	return nil
 }
 
