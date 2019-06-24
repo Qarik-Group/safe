@@ -187,5 +187,22 @@ func (v *Client) parseError(r *http.Response) (err error) {
 }
 
 func (v *Client) parse503(message string) (err error) {
-	return v.Health(true)
+	err = v.Health(true)
+	if err == nil {
+		return nil
+	}
+
+	switch e := err.(type) {
+	case *ErrStandby:
+		e.message = message
+		err = e
+	case *ErrUninitialized:
+		e.message = message
+		err = e
+	case *ErrSealed:
+		e.message = message
+		err = e
+	}
+
+	return err
 }
