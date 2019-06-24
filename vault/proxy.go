@@ -134,7 +134,7 @@ func StartSSHTunnel(conf SOCKS5SSHConfig) (*ssh.Client, error) {
 
 	if !conf.SkipHostKeyValidation {
 		if conf.KnownHostsFile == "" {
-			if os.Getenv("$HOME") == "" {
+			if os.Getenv("HOME") == "" {
 				return nil, fmt.Errorf("No home directory set and no known hosts file explicitly given; cannot validate host key")
 			}
 			conf.KnownHostsFile = fmt.Sprintf("%s/.ssh/known_hosts", os.Getenv("HOME"))
