@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"io/ioutil"
 
 	socks5 "github.com/armon/go-socks5"
 	isatty "github.com/mattn/go-isatty"
@@ -48,6 +49,7 @@ func NewProxyRouter() (*ProxyRouter, error) {
 		}
 	}
 
+	oldHTTPProxy := httpProxy
 	var err error
 	if strings.HasPrefix(httpProxy, "ssh+socks5://") {
 		httpProxy, err = openSOCKS5Helper(httpProxy, knownHostsFile, skipHostKeyValidation)
@@ -57,7 +59,7 @@ func NewProxyRouter() (*ProxyRouter, error) {
 	}
 
 	if strings.HasPrefix(httpsProxy, "ssh+socks5://") {
-		if httpsProxy == httpProxy {
+		if httpsProxy == oldHTTPProxy {
 			httpsProxy = httpProxy
 		} else {
 			httpsProxy, err = openSOCKS5Helper(httpsProxy, knownHostsFile, skipHostKeyValidation)
@@ -86,10 +88,23 @@ func openSOCKS5Helper(toOpen, knownHostsFile string, skipHostKeyValidation bool)
 		return "", fmt.Errorf("No user provided for SSH proxy")
 	}
 
+	if u.Port() == "" {
+		u.Host = u.Host + ":22"
+	}
+
+	if u.Path == "" {
+		return "", fmt.Errorf("No private key path provided")
+	}
+
+	privateKeyContents, err := ioutil.ReadFile(u.Path)
+	if err != nil {
+		return "", fmt.Errorf("Could not read private key file (%s): %s", u.Path, err)
+	}
+
 	sshClient, err := StartSSHTunnel(SOCKS5SSHConfig{
 		Host:                  u.Host,
 		User:                  u.User.Username(),
-		PrivateKey:            u.Path,
+		PrivateKey:            privateKeyContents,
 		KnownHostsFile:        knownHostsFile,
 		SkipHostKeyValidation: skipHostKeyValidation,
 	})
@@ -121,7 +136,7 @@ func getEnvironmentVariable(variables ...string) string {
 type SOCKS5SSHConfig struct {
 	Host                  string
 	User                  string
-	PrivateKey            string
+	PrivateKey            []byte
 	KnownHostsFile        string
 	SkipHostKeyValidation bool
 }
@@ -145,9 +160,10 @@ func StartSSHTunnel(conf SOCKS5SSHConfig) (*ssh.Client, error) {
 			return nil, fmt.Errorf("Error opening known_hosts file at `%s': %s", conf.KnownHostsFile, err)
 		}
 	}
-	privateKeySigner, err := ssh.NewSignerFromKey(conf.PrivateKey)
+
+	privateKeySigner, err := ssh.ParsePrivateKey(conf.PrivateKey)
 	if err != nil {
-		return nil, fmt.Errorf("Could not create signer for private key")
+		return nil, fmt.Errorf("Could not create signer for private key: %s", err)
 	}
 
 	sshConfig := &ssh.ClientConfig{
@@ -216,14 +232,15 @@ func knownHostsPromptCallback(knownHostsFile string) (ssh.HostKeyCallback, error
 				}
 			}
 
-			hostKeyConflictError := `@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+			hostKeyConflictError := `
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 @    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @
 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 IT IS POSSIBLE THAT SOMEONE IS DOING SOMETHING NASTY!
 Someone could be eavesdropping on you right now (man-in-the-middle attack)!
 It is also possible that a host key has just been changed.
 The fingerprint for the %[1]s key sent by the remote host is
-SHA256:%[2]s.
+%[2]s.
 Please contact your system administrator.
 Add correct host key in %[3]s to get rid of this message.
 Offending %[1]s key in %[3]s:%[4]d
@@ -253,7 +270,7 @@ Host key verification failed.
 func promptAddNewKnownHost(hostname string, remote net.Addr, key ssh.PublicKey) bool {
 	//Otherwise, let's ask the user
 	fmt.Fprintf(os.Stderr, `The authenticity of host '%[1]s (%[2]s)' can't be established.
-%[3]s key fingerprint is SHA256:%[4]s
+%[3]s key fingerprint is %[4]s
 Are you sure you want to continue connecting (yes/no)? `, hostname, remote.String(), key.Type(), ssh.FingerprintSHA256(key))
 
 	var response string
@@ -263,12 +280,12 @@ Are you sure you want to continue connecting (yes/no)? `, hostname, remote.Strin
 		fmt.Scanln(&response)
 	}
 
-	return response == "no"
+	return response == "yes"
 }
 
 func writeKnownHosts(knownHostsFile, hostname string, key ssh.PublicKey) error {
 	normalizedHostname := knownhosts.Normalize(hostname)
-	f, err := os.Open(knownHostsFile)
+	f, err := os.OpenFile(knownHostsFile, os.O_APPEND|os.O_RDWR, 0600)
 	if err != nil {
 		return fmt.Errorf("Could not open `%s' for reading: %s", knownHostsFile, err)
 	}
