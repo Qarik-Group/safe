@@ -297,7 +297,44 @@ func main() {
 	})
 
 	r.Dispatch("envvars", nil, func(command string, args ...string) error {
-		fmt.Printf(`@B{SAFE_TARGET}  The vault alias which requests are sent to
+		fmt.Printf(`@G{[SCRIPTING]}
+  @B{SAFE_TARGET}    The vault alias which requests are sent to.
+
+@G{[PROXYING]}
+  @B{HTTP_PROXY}     The proxy to use for HTTP requests.
+  @B{HTTPS_PROXY}    The proxy to use for HTTPS requests.
+  @B{SAFE_ALL_PROXY} The proxy to use for both HTTP and HTTPS requests. 
+                 Overrides HTTP_PROXY and HTTPS_PROXY.
+  @B{NO_PROXY}       A comma-separated list of domains to not use proxies for.
+  @B{SAFE_KNOWN_HOSTS_FILE} 
+                 The location of your known hosts file, used for
+                 'ssh+socks5://' proxying. Uses '${HOME}/.ssh/known_hosts'
+                 by default.
+  @B{SAFE_SKIP_HOST_KEY_VALIDATION} 
+                 If set, 'ssh+socks5://' proxying will skip host key validation
+                 validation of the remote ssh server.
+
+
+  The proxy environment variables support proxies with the schemes 'http://',
+  'https://', 'socks5://', or 'ssh+socks5://'. http, https, and socks5 do what they
+  say - they'll proxy through the server with the hostname:port given using the
+  protocol specified in the scheme.
+
+  'ssh+socks5://' will open an SSH tunnel to the given server, then will start a
+  local SOCKS5 proxy temporarily which sends its traffic through the SSH tunnel.
+  Because this requires an SSH connection, some extra information is required.
+  This type of proxy should be specified in the form 
+
+      ssh+socks5://<user>@<hostname>:<port>/<path-to-private-key>
+
+  If no port is provided, port 22 is assumed.
+  Encrypted private keys are not supported. Password authentication is also not
+  supported.
+
+  Your known_hosts file is used to verify the remote ssh server's host key. If no
+  key for the given server is present, you will be prompted to add the key. If no
+  TTY when no host key is present, safe will return with a failure.
+
 `)
 		return nil
 	})
