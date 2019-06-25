@@ -22,7 +22,7 @@ meta:
     name:   (( param "Please provide the git name for automated commits" ))
 
   go:
-    version: 1.9
+    version: 1.12
     module:  (( concat "github.com/" meta.github.owner "/" meta.github.repo ))
     cmd_module: (( grab meta.go.module ))
     binary:  (( grab meta.github.repo ))
@@ -170,7 +170,7 @@ jobs:
     public: true
     plan:
       - do:
-        - aggregate:
+        - in_parallel:
             - { get: git,     trigger: true,  passed: [test] }
             - { get: version, trigger: true, params: {pre: rc} }
         - put: shipit-version
@@ -231,7 +231,7 @@ jobs:
     plan:
       - do:
         - name: inputs
-          aggregate:
+          in_parallel:
             - { get: version, resource: shipit-version, passed: [rc], params: {bump: final} }
             - { get: git,     passed: [rc] }
         - name: release
@@ -281,7 +281,7 @@ jobs:
             body:   gh/notes.md
             globs: [gh/artifacts/*]
         - name: notify
-          aggregate:
+          in_parallel:
           - put: notify
             params:
               channel:  (( grab meta.slack.channel ))
