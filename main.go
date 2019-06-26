@@ -326,6 +326,7 @@ func main() {
   This type of proxy should be specified in the form 
 
       ssh+socks5://<user>@<hostname>:<port>/<path-to-private-key>
+  or  ssh+socks5://<user>@<hostname>:<port>?private-key=<path-to-private-key
 
   If no port is provided, port 22 is assumed.
   Encrypted private keys are not supported. Password authentication is also not
