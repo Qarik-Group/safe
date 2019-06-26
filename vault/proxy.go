@@ -91,16 +91,26 @@ func openSOCKS5Helper(toOpen, knownHostsFile string, skipHostKeyValidation bool)
 	if u.Port() == "" {
 		u.Host = u.Host + ":22"
 	}
+	
+	privateKeyPath := u.Query()["private-key"]
+		
+	if u.Path != "" && u.Path != "/" {
+		privateKeyPath = append(privateKeyPath, u.Path)
+	}
 
-	if u.Path == "" {
+	if len(privateKeyPath) == 0 {
 		return "", fmt.Errorf("No private key path provided")
 	}
 
-	privateKeyContents, err := ioutil.ReadFile(u.Path)
-	if err != nil {
-		return "", fmt.Errorf("Could not read private key file (%s): %s", u.Path, err)
+	if len(privateKeyPath) > 1 {
+		return "", fmt.Errorf("More than one private key provided")
 	}
 
+	privateKeyContents, err := ioutil.ReadFile(privateKeyPath[0])
+	if err != nil {
+		return "", fmt.Errorf("Could not read private key file (%s): %s", privateKeyPath[0], err)
+	}
+	
 	sshClient, err := StartSSHTunnel(SOCKS5SSHConfig{
 		Host:                  u.Host,
 		User:                  u.User.Username(),
