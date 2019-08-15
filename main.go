@@ -1026,34 +1026,50 @@ Vault will remain sealed).
 			return fmt.Errorf("%s; are you targeting a `safe' installation?", err)
 		}
 
-		n := 0
-		for _, state := range st {
+		var toSeal []string
+		for addr, state := range st {
 			if state == "unsealed" {
-				n++
+				toSeal = append(toSeal, addr)
 			}
 		}
 
-		if n == 0 {
+		if len(toSeal) == 0 {
 			fmt.Printf("@C{all vaults are already sealed!}\n")
 		}
 
-		for n > 0 {
-			for addr, state := range st {
-				if state == "unsealed" {
-					v.SetURL(addr)
+		consecutiveFailures := 0
+		const maxFailures = 10
 
-					sealed, err := v.Seal()
-					if err != nil {
-						return err
+		for len(toSeal) > 0 {
+			for i, addr := range toSeal {
+				v.SetURL(addr)
+				err := v.Client().Client.Health(false)
+				if err != nil {
+					if vaultkv.IsErrStandby(err) {
+						continue
 					}
-					if sealed {
-						fmt.Printf("sealed @G{%s}...\n", addr)
-						st[addr] = "sealed"
-						n--
-					}
+
+					return err
+				}
+
+				sealed, err := v.Seal()
+				if err != nil {
+					return err
+				}
+
+				if sealed {
+					fmt.Printf("sealed @G{%s}...\n", addr)
+					//Remove sealed Vault from list
+					toSeal[i], toSeal[len(toSeal)-1] = toSeal[len(toSeal)-1], toSeal[i]
+					toSeal = toSeal[:len(toSeal)-1]
+					break
 				}
 			}
-			if n != 0 {
+			if len(toSeal) > 0 {
+				consecutiveFailures++
+				if consecutiveFailures == maxFailures {
+					return fmt.Errorf("timed out waiting for leader election")
+				}
 				time.Sleep(500 * time.Millisecond)
 			}
 		}
