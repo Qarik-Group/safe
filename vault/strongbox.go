@@ -13,7 +13,7 @@ func (v *Vault) Strongbox() (map[string]string, error) {
 
 	u := *v.client.Client.VaultURL
 
-	c := &http.Client{}
+	c := v.client.Client.Client
 	re := regexp.MustCompile(`:[0-9]+$`)
 
 	uri := "http://" + re.ReplaceAllString(u.Host, "") + ":8484/strongbox"
