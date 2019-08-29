@@ -2095,9 +2095,9 @@ Your Vault has been re-keyed. Please take note of your new unseal keys and store
 Unseal key 1: REPLACED
 EOF
   now "unsealing with the new unseal key succeeds (making sure data still exists + the new keys work)"
-  (./safe vault seal); exitok $? 0
+  (./safe vault operator seal); exitok $? 0
   unseal_key=$(awk '/^Unseal key 1:/ { print $4 }' < t/home/original | head -n1)
-  (./safe vault unseal "$unseal_key" </dev/null); exitok $? 0
+  (./safe vault operator unseal "$unseal_key" </dev/null); exitok $? 0
   (./safe read secret/handshake > t/home/got); exitok $? 0
   cat <<'EOF' >t/home/want; diffok
 --- # secret/handshake
@@ -2134,12 +2134,12 @@ Unseal key for safe-testing@safe.com:
 REPLACED
 EOF
     now "unsealing with the new unseal key succeeds (making sure data still exists + the new keys work)"
-    (./safe vault seal); exitok $? 0
+    (./safe vault operator seal); exitok $? 0
     #FIXME retrieve the new unseal key, decrypt, and unseal vault, then read data
     encrypted_key=$(tail -n 1 t/home/original)
     unseal_key=$(echo $encrypted_key | xxd -r -p  | gpg -d)
     echo "Using new unseal key of '$unseal_key'"
-    (./safe vault unseal "$unseal_key" < /dev/null); exitok $? 0
+    (./safe vault operator unseal "$unseal_key" < /dev/null); exitok $? 0
     rm t/home/original
   (./safe read secret/handshake > t/home/got); exitok $? 0
   cat <<'EOF' >t/home/want; diffok
