@@ -20,11 +20,11 @@ import (
 )
 
 type ProxyRouter struct {
-	proxyConf httpproxy.Config
+	ProxyConf httpproxy.Config
 }
 
 func (n ProxyRouter) Proxy(req *http.Request) (*url.URL, error) {
-	return n.proxyConf.ProxyFunc()(req.URL)
+	return n.ProxyConf.ProxyFunc()(req.URL)
 }
 
 func NewProxyRouter() (*ProxyRouter, error) {
@@ -70,7 +70,7 @@ func NewProxyRouter() (*ProxyRouter, error) {
 	}
 
 	return &ProxyRouter{
-		proxyConf: httpproxy.Config{
+		ProxyConf: httpproxy.Config{
 			HTTPProxy:  httpProxy,
 			HTTPSProxy: httpsProxy,
 			NoProxy:    noProxy,
@@ -91,9 +91,9 @@ func openSOCKS5Helper(toOpen, knownHostsFile string, skipHostKeyValidation bool)
 	if u.Port() == "" {
 		u.Host = u.Host + ":22"
 	}
-	
+
 	privateKeyPath := u.Query()["private-key"]
-		
+
 	if u.Path != "" && u.Path != "/" {
 		privateKeyPath = append(privateKeyPath, u.Path)
 	}
@@ -110,7 +110,7 @@ func openSOCKS5Helper(toOpen, knownHostsFile string, skipHostKeyValidation bool)
 	if err != nil {
 		return "", fmt.Errorf("Could not read private key file (%s): %s", privateKeyPath[0], err)
 	}
-	
+
 	sshClient, err := StartSSHTunnel(SOCKS5SSHConfig{
 		Host:                  u.Host,
 		User:                  u.User.Username(),

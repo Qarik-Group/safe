@@ -2601,12 +2601,42 @@ NBITS defaults to 2048.
 			fmt.Fprintf(os.Stderr, "@C{--no-clobber} @Y{specified, but is ignored for} @C{safe vault}\n")
 		}
 
+		proxy, err := vault.NewProxyRouter()
+		if err != nil {
+			return err
+		}
+
 		cmd := exec.Command("vault", args...)
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 
-		err := cmd.Run()
+		cmd.Env = os.Environ()
+
+		//Make sure we don't accidentally specify a http_proxy and a HTTP_PROXY
+		for i := range cmd.Env {
+			parts := strings.Split(cmd.Env[i], "=")
+			if len(parts) < 2 {
+				continue
+			}
+			if parts[0] == "http_proxy" || parts[0] == "https_proxy" || parts[0] == "no_proxy" {
+				cmd.Env[i] = strings.ToUpper(parts[0]) + "=" + strings.Join(parts[1:], "=")
+			}
+		}
+
+		if proxy.ProxyConf.HTTPProxy != "" {
+			cmd.Env = append(cmd.Env, "HTTP_PROXY="+proxy.ProxyConf.HTTPProxy)
+		}
+
+		if proxy.ProxyConf.HTTPSProxy != "" {
+			cmd.Env = append(cmd.Env, "HTTPS_PROXY="+proxy.ProxyConf.HTTPSProxy)
+		}
+
+		if proxy.ProxyConf.NoProxy != "" {
+			cmd.Env = append(cmd.Env, "NO_PROXY="+proxy.ProxyConf.NoProxy)
+		}
+
+		err = cmd.Run()
 		if err != nil {
 			return err
 		}
