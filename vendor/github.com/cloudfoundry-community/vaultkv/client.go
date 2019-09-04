@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -71,7 +72,12 @@ func (v *Client) doRequest(
 
 	if output != nil && resp.StatusCode == 200 {
 		err = json.NewDecoder(resp.Body).Decode(output)
+		if err != nil {
+			return err
+		}
 	}
+
+	_, err = ioutil.ReadAll(resp.Body)
 
 	return err
 }

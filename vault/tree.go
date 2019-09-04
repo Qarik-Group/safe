@@ -311,13 +311,9 @@ type TreeOpts struct {
 }
 
 func (v *Vault) constructTree(path string, opts TreeOpts) (*secretTree, error) {
-	//3 is what I found to be the fastest in testing. Seems dumb but... works, I guess.
 	numWorkers := runtime.NumCPU()
 	if numWorkers < 1 {
 		numWorkers = 1
-	}
-	if numWorkers > 3 {
-		numWorkers = 3
 	}
 
 	queue := newWorkQueue(numWorkers)
