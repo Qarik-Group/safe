@@ -51,6 +51,7 @@ func connect(auth bool) *vault.Vault {
 		fmt.Fprintf(os.Stderr, " or @C{safe auth github}\n")
 		fmt.Fprintf(os.Stderr, " or @C{safe auth token}\n")
 		fmt.Fprintf(os.Stderr, " or @C{safe auth userpass}\n")
+		fmt.Fprintf(os.Stderr, " or @C{safe auth approle}\n")
 		os.Exit(1)
 	}
 
