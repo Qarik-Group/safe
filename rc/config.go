@@ -195,10 +195,19 @@ func (c *Config) SetTarget(alias, url string, skipverify bool) error {
 		c.Vaults = make(map[string]*Vault)
 	}
 
+	var token string
+
 	c.Current = alias
+	if existingAlias, found := c.Vaults[alias]; found {
+		if url == existingAlias.URL {
+			token = existingAlias.Token
+		}
+	}
+
 	c.Vaults[alias] = &Vault{
 		URL:        url,
 		SkipVerify: skipverify,
+		Token:      token,
 	}
 
 	return nil
