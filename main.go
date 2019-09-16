@@ -878,41 +878,41 @@ Vault will remain sealed).
 				return err
 			}
 			fmt.Printf("%s\n", string(b))
-			return nil
-		}
-
-		for i, key := range keys {
-			fmt.Printf("Unseal Key #%d: @G{%s}\n", i+1, key)
-		}
-		fmt.Printf("Initial Root Token: @M{%s}\n", token)
-		fmt.Printf("\n")
-		if opt.Init.NKeys == 1 {
-			fmt.Printf("Vault initialized with a single key. Please securely distribute it.\n")
-			fmt.Printf("When the Vault is re-sealed, restarted, or stopped, you must provide\n")
-			fmt.Printf("this key to unseal it again.\n")
-			fmt.Printf("\n")
-			fmt.Printf("Vault does not store the master key. Without the above unseal key,\n")
-			fmt.Printf("your Vault will remain permanently sealed.\n")
-
-		} else if opt.Init.NKeys == opt.Init.Threshold {
-			fmt.Printf("Vault initialized with %d keys. Please securely distribute the\n", opt.Init.NKeys)
-			fmt.Printf("above keys. When the Vault is re-sealed, restarted, or stopped,\n")
-			fmt.Printf("you must provide all of these keys to unseal it again.\n")
-			fmt.Printf("\n")
-			fmt.Printf("Vault does not store the master key. Without all %d of the keys,\n", opt.Init.Threshold)
-			fmt.Printf("your Vault will remain permanently sealed.\n")
-
 		} else {
-			fmt.Printf("Vault initialized with %d keys and a key threshold of %d. Please\n", opt.Init.NKeys, opt.Init.Threshold)
-			fmt.Printf("securely distribute the above keys. When the Vault is re-sealed,\n")
-			fmt.Printf("restarted, or stopped, you must provide at least %d of these keys\n", opt.Init.Threshold)
-			fmt.Printf("to unseal it again.\n")
+			for i, key := range keys {
+				fmt.Printf("Unseal Key #%d: @G{%s}\n", i+1, key)
+			}
+			fmt.Printf("Initial Root Token: @M{%s}\n", token)
 			fmt.Printf("\n")
-			fmt.Printf("Vault does not store the master key. Without at least %d keys,\n", opt.Init.Threshold)
-			fmt.Printf("your Vault will remain permanently sealed.\n")
+			if opt.Init.NKeys == 1 {
+				fmt.Printf("Vault initialized with a single key. Please securely distribute it.\n")
+				fmt.Printf("When the Vault is re-sealed, restarted, or stopped, you must provide\n")
+				fmt.Printf("this key to unseal it again.\n")
+				fmt.Printf("\n")
+				fmt.Printf("Vault does not store the master key. Without the above unseal key,\n")
+				fmt.Printf("your Vault will remain permanently sealed.\n")
+
+			} else if opt.Init.NKeys == opt.Init.Threshold {
+				fmt.Printf("Vault initialized with %d keys. Please securely distribute the\n", opt.Init.NKeys)
+				fmt.Printf("above keys. When the Vault is re-sealed, restarted, or stopped,\n")
+				fmt.Printf("you must provide all of these keys to unseal it again.\n")
+				fmt.Printf("\n")
+				fmt.Printf("Vault does not store the master key. Without all %d of the keys,\n", opt.Init.Threshold)
+				fmt.Printf("your Vault will remain permanently sealed.\n")
+
+			} else {
+				fmt.Printf("Vault initialized with %d keys and a key threshold of %d. Please\n", opt.Init.NKeys, opt.Init.Threshold)
+				fmt.Printf("securely distribute the above keys. When the Vault is re-sealed,\n")
+				fmt.Printf("restarted, or stopped, you must provide at least %d of these keys\n", opt.Init.Threshold)
+				fmt.Printf("to unseal it again.\n")
+				fmt.Printf("\n")
+				fmt.Printf("Vault does not store the master key. Without at least %d keys,\n", opt.Init.Threshold)
+				fmt.Printf("your Vault will remain permanently sealed.\n")
+			}
+
+			fmt.Printf("\n")
 		}
 
-		fmt.Printf("\n")
 		if !opt.Init.Sealed {
 			if st, err := v.Strongbox(); err == nil {
 				for addr := range st {
@@ -939,7 +939,10 @@ Vault will remain sealed).
 					if err != nil {
 						return fmt.Errorf("Could not add `secret' mount: %s", err)
 					}
-					fmt.Printf("safe has mounted the @C{secret} backend\n")
+
+					if !opt.Init.JSON {
+						fmt.Printf("safe has mounted the @C{secret} backend\n")
+					}
 				}
 			}
 
@@ -948,21 +951,30 @@ Vault will remain sealed).
 			s.Set("knock", "knock", false)
 			v.Write("secret/handshake", s)
 
-			fmt.Printf("safe has unsealed the Vault for you, and written a test value\n")
-			fmt.Printf("at @C{secret/handshake}.\n\n")
+			if !opt.Init.JSON {
+				fmt.Printf("safe has unsealed the Vault for you, and written a test value\n")
+				fmt.Printf("at @C{secret/handshake}.\n\n")
+			}
 
 			/* write seal keys to the vault */
 			if opt.Init.Persist {
 				v.SaveSealKeys(keys)
-				fmt.Printf("safe has written the unseal keys at @C{secret/vault/seal/keys}\n")
+				if !opt.Init.JSON {
+					fmt.Printf("safe has written the unseal keys at @C{secret/vault/seal/keys}\n")
+				}
 			}
 		} else {
-			fmt.Printf("Your Vault has been left sealed.\n")
+			if !opt.Init.JSON {
+				fmt.Printf("Your Vault has been left sealed.\n")
+			}
 		}
-		fmt.Printf("\n")
-		fmt.Printf("You have been automatically authenticated to the Vault with the\n")
-		fmt.Printf("initial root token.  Be safe out there!\n")
-		fmt.Printf("\n")
+
+		if !opt.Init.JSON {
+			fmt.Printf("\n")
+			fmt.Printf("You have been automatically authenticated to the Vault with the\n")
+			fmt.Printf("initial root token.  Be safe out there!\n")
+			fmt.Printf("\n")
+		}
 
 		return nil
 	})
