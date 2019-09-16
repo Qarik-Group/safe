@@ -93,6 +93,7 @@ type Options struct {
 		ForJSON bool `cli:"--json"`
 	} `cli:"env"`
 	Auth   struct{} `cli:"auth, login"`
+	Logout struct{} `cli:"logout"`
 	Renew  struct{} `cli:"renew"`
 	Ask    struct{} `cli:"ask"`
 	Set    struct{} `cli:"set, write"`
@@ -1168,7 +1169,7 @@ written to STDOUT instead of STDERR to make it easier to consume.
 		var err error
 		url := os.Getenv("VAULT_ADDR")
 		target := cfg.Current
-		if opt.UseTarget == "" {
+		if opt.UseTarget != "" {
 			target = opt.UseTarget
 		}
 		fmt.Fprintf(os.Stderr, "Authenticating against @C{%s} at @C{%s}\n", target, url)
@@ -1215,7 +1216,26 @@ written to STDOUT instead of STDERR to make it easier to consume.
 
 		cfg.SetToken(token)
 		return cfg.Write()
+	})
 
+	r.Dispatch("logout", &Help{
+		Summary: "Forget the authentication token of the currently targeted Vault",
+		Usage:   "safe logout\n",
+		Type:    AdministrativeCommand,
+	}, func(command string, args ...string) error {
+		cfg := rc.Apply(opt.UseTarget)
+		cfg.SetToken("")
+		err := cfg.Write()
+		if err != nil {
+			return err
+		}
+
+		target := cfg.Current
+		if opt.UseTarget != "" {
+			target = opt.UseTarget
+		}
+		fmt.Fprintf(os.Stderr, "Successfully logged out of @C{%s}\n", target)
+		return nil
 	})
 
 	r.Dispatch("renew", &Help{
