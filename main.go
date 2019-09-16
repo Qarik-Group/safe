@@ -914,18 +914,38 @@ Vault will remain sealed).
 		}
 
 		if !opt.Init.Sealed {
+			addrs := []string{}
 			if st, err := v.Strongbox(); err == nil {
 				for addr := range st {
+					addrs = append(addrs, addr)
+				}
+			} else {
+				addrs = append(addrs, v.Client().Client.VaultURL.String())
+			}
+
+			for _, addr := range addrs {
+				v.SetURL(addr)
+				if err := v.Unseal(keys); err != nil {
+					fmt.Fprintf(os.Stderr, "!!! unable to unseal newly-initialized vault (at %s): %s\n", addr, err)
+				}
+			}
+
+			//Make a best attempt to wait until Vault has figured out which node should be the master.
+			// This doesn't error out if no master comes forward, as there may be a cluster but no
+			// Strongbox. In that case, it may error later, but we've done what we can.
+			const maxAttempts = 5
+			const waitInterval = 500 * time.Millisecond
+			var currentAttempt int
+		waitMaster:
+			for currentAttempt < maxAttempts {
+				for _, addr := range addrs {
 					v.SetURL(addr)
-					if err := v.Unseal(keys); err != nil {
-						fmt.Fprintf(os.Stderr, "!!! unable to unseal newly-initialized vault (at %s): %s\n", addr, err)
+					if err := v.Client().Client.Health(false); err == nil {
+						break waitMaster
 					}
 				}
-
-			} else {
-				if err := v.Unseal(keys); err != nil {
-					fmt.Fprintf(os.Stderr, "!! unable to unseal newly-initialized vault: %s\n", err)
-				}
+				currentAttempt++
+				time.Sleep(waitInterval)
 			}
 
 			if !opt.Init.NoMount {
