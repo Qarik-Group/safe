@@ -3109,8 +3109,8 @@ EOF
   eq $(( $serial1 + 1 )) $serial2
 
   now checking that reissue does not change certificate attributes
-  eq_or_diff "$(./safe x509 show secret/reissue/orig | grep -Ev 'secret/re|valid from|expires in')" \
-              "$(./safe x509 show secret/reissue/cert | grep -Ev 'secret/re|valid from|expires in')"
+  eq_or_diff "$(./safe x509 show secret/reissue/orig | grep -Ev 'secret/re|valid from|expires in|serial')" \
+              "$(./safe x509 show secret/reissue/cert | grep -Ev 'secret/re|valid from|expires in|serial')"
 
   now reissuing the certificate with a shorter ttl and a smaller key
   (run; ./safe x509 reissue --ttl 5d --bits 1024 secret/reissue/cert); exitok $? 0
@@ -3120,8 +3120,8 @@ EOF
       "$(./safe x509 show secret/reissue/cert | grep 'valid from')"
 
   now checking that reissue does not change certificate attributes, other than ttl
-  eq_or_diff "$(./safe x509 show secret/reissue/orig | grep -Ev 'secret/re|valid from|expires in')" \
-              "$(./safe x509 show secret/reissue/cert | grep -Ev 'secret/re|valid from|expires in')"
+  eq_or_diff "$(./safe x509 show secret/reissue/orig | grep -Ev 'secret/re|valid from|expires in|serial')" \
+              "$(./safe x509 show secret/reissue/cert | grep -Ev 'secret/re|valid from|expires in|serial')"
 
 
 
@@ -3145,8 +3145,8 @@ EOF
   eq $(( $serial1 + 1 )) $serial2
 
   now checking that renew does not change certificate attributes
-  eq_or_diff "$(./safe x509 show secret/renew/orig | grep -Ev 'secret/re|valid from|expires in')" \
-              "$(./safe x509 show secret/renew/cert | grep -Ev 'secret/re|valid from|expires in')"
+  eq_or_diff "$(./safe x509 show secret/renew/orig | grep -Ev 'secret/re|valid from|expires in|serial')" \
+              "$(./safe x509 show secret/renew/cert | grep -Ev 'secret/re|valid from|expires in|serial')"
 
   now renewing the certificate with a shorter ttl
   (run; ./safe x509 renew --ttl 5d secret/renew/cert); exitok $? 0
@@ -3156,8 +3156,8 @@ EOF
       "$(./safe x509 show secret/renew/cert | grep 'valid from')"
 
   now checking that renew does not change certificate attributes, other than ttl
-  eq_or_diff "$(./safe x509 show secret/renew/orig | grep -Ev 'secret/re|valid from|expires in')" \
-              "$(./safe x509 show secret/renew/cert | grep -Ev 'secret/re|valid from|expires in')"
+  eq_or_diff "$(./safe x509 show secret/renew/orig | grep -Ev 'secret/re|valid from|expires in|serial')" \
+              "$(./safe x509 show secret/renew/cert | grep -Ev 'secret/re|valid from|expires in|serial')"
 
 
   now removing the CRL from a CA certificate

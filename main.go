@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io/ioutil"
+	"math/big"
 	"net"
 	"net/http/httputil"
 	"os"
@@ -3539,7 +3540,6 @@ prints out information about a certificate, including:
 			}
 
 			fmt.Printf("  @G{%s}\n\n", cert.Subject())
-			fmt.Printf("  serial: @M{%s}\n", cert.FormatSerial())
 			if cert.Subject() != cert.Issuer() {
 				fmt.Printf("  issued by: @C{%s}\n", cert.Issuer())
 				for i := range cert.Intermediaries {
@@ -3549,14 +3549,6 @@ prints out information about a certificate, including:
 				fmt.Printf("  @C{self-signed}\n")
 			}
 
-			fmt.Printf("\n")
-			fmt.Printf("  ")
-			if cert.IsCA() {
-				fmt.Printf("@G{is}")
-			} else {
-				fmt.Printf("@Y{is not}")
-			}
-			fmt.Printf(" a CA\n\n")
 			toStart := cert.Certificate.NotBefore.Sub(time.Now())
 			toEnd := cert.Certificate.NotAfter.Sub(time.Now())
 
@@ -3692,6 +3684,20 @@ prints out information about a certificate, including:
 			for _, s := range cert.Certificate.IPAddresses {
 				fmt.Printf("    - @G{%s} (IP)\n", s)
 			}
+			fmt.Printf("\n")
+
+			serialString := fmt.Sprintf("@M{%[1]d} (@M{%#[1]x})", cert.Certificate.SerialNumber)
+			if cert.Certificate.SerialNumber.Cmp(big.NewInt(1000)) == 1 {
+				serialString = fmt.Sprintf("@M{%s}", cert.FormatSerial())
+			}
+			fmt.Printf("  serial: %s\n", serialString)
+			fmt.Printf("  ")
+			if cert.IsCA() {
+				fmt.Printf("@G{is}")
+			} else {
+				fmt.Printf("@Y{is not}")
+			}
+			fmt.Printf(" a CA\n")
 			fmt.Printf("\n")
 		}
 
