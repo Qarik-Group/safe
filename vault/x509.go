@@ -481,11 +481,11 @@ func (x X509) ValidFor(names ...string) (bool, error) {
 	return true, nil
 }
 
-func (x *X509) MakeCA(serial int64) {
+func (x *X509) MakeCA() {
 	x.Certificate.BasicConstraintsValid = true
 	x.Certificate.IsCA = true
 	x.Certificate.MaxPathLen = 1
-	x.Serial = big.NewInt(serial)
+	x.Serial = big.NewInt(1)
 	x.CRL = &pkix.CertificateList{}
 	x.CRL.TBSCertList.RevokedCertificates = make([]pkix.RevokedCertificate, 0)
 }
@@ -555,12 +555,19 @@ func (ca *X509) SaveTo(v *Vault, path string, skipIfExists bool) error {
 	return v.Write(path, s)
 }
 
+var maxSerial = big.NewInt(0).Exp(big.NewInt(2), big.NewInt(159), nil)
+
 func (ca *X509) Sign(x *X509, ttl time.Duration) error {
-	if ca.Serial == nil {
-		x.Certificate.SerialNumber = big.NewInt(1)
+	if ca.Serial == nil || ca == x {
+		serial, err := rand.Int(rand.Reader, maxSerial)
+		if err != nil {
+			return err
+		}
+		x.Certificate.SerialNumber = serial
 	} else {
 		x.Certificate.SerialNumber = ca.Serial
 		ca.Serial.Add(ca.Serial, big.NewInt(1))
+		ca.Serial.Mod(ca.Serial, maxSerial)
 	}
 
 	x.Certificate.NotBefore = time.Now()
@@ -591,4 +598,16 @@ func (ca *X509) HasRevoked(cert *X509) bool {
 		}
 	}
 	return false
+}
+
+func (c *X509) FormatSerial() string {
+	serial := big.NewInt(0).Set(c.Certificate.SerialNumber)
+	serialHex := []byte(fmt.Sprintf("%040x", serial))
+	colonByte := []byte(":")[0]
+	ret := []byte{}
+	for i := 0; i < 40/2; i++ {
+		ret = append(ret, serialHex[i*2], serialHex[(i*2)+1], colonByte)
+	}
+	//cutoff last colon
+	return string(ret[:59])
 }

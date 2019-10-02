@@ -3204,7 +3204,7 @@ The following options are recognized:
 		}
 
 		if opt.X509.Issue.CA {
-			cert.MakeCA(1)
+			cert.MakeCA()
 		}
 
 		ttl, err := duration(opt.X509.Issue.TTL)
@@ -3538,15 +3538,25 @@ prints out information about a certificate, including:
 				continue
 			}
 
-			fmt.Printf("  @G{%s}\n", cert.Subject())
+			fmt.Printf("  @G{%s}\n\n", cert.Subject())
+			fmt.Printf("  serial: @M{%s}\n", cert.FormatSerial())
 			if cert.Subject() != cert.Issuer() {
 				fmt.Printf("  issued by: @C{%s}\n", cert.Issuer())
 				for i := range cert.Intermediaries {
 					fmt.Printf("        via: @C{%s}\n", cert.IntermediarySubject(i))
 				}
+			} else {
+				fmt.Printf("  @C{self-signed}\n")
 			}
 
 			fmt.Printf("\n")
+			fmt.Printf("  ")
+			if cert.IsCA() {
+				fmt.Printf("@G{is}")
+			} else {
+				fmt.Printf("@Y{is not}")
+			}
+			fmt.Printf(" a CA\n\n")
 			toStart := cert.Certificate.NotBefore.Sub(time.Now())
 			toEnd := cert.Certificate.NotAfter.Sub(time.Now())
 
