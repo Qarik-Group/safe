@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"regexp"
 )
 
@@ -14,9 +15,7 @@ func (v *Vault) Strongbox() (map[string]string, error) {
 	u := *v.client.Client.VaultURL
 
 	c := v.client.Client.Client
-	re := regexp.MustCompile(`:[0-9]+$`)
-
-	uri := "http://" + re.ReplaceAllString(u.Host, "") + ":8484/strongbox"
+	uri := StrongboxURL(&u)
 	req, err := http.NewRequest("GET", uri, nil)
 	if err != nil {
 		return m, err
@@ -34,4 +33,9 @@ func (v *Vault) Strongbox() (map[string]string, error) {
 	b, err := ioutil.ReadAll(res.Body)
 	err = json.Unmarshal(b, &m)
 	return m, err
+}
+
+func StrongboxURL(vaultURL *url.URL) string {
+	re := regexp.MustCompile(`:[0-9]+$`)
+	return "http://" + re.ReplaceAllString(vaultURL.Host, "") + ":8484/strongbox"
 }

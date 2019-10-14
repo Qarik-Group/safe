@@ -17,9 +17,10 @@ type Config struct {
 }
 
 type Vault struct {
-	URL        string `yaml:"url"`
-	Token      string `yaml:"token"`
-	SkipVerify bool   `yaml:"skip_verify"`
+	URL         string `yaml:"url"`
+	Token       string `yaml:"token"`
+	SkipVerify  bool   `yaml:"skip_verify"`
+	NoStrongbox bool   `yaml:"strongbox"`
 }
 
 type oldConfig struct {
@@ -69,19 +70,6 @@ func (legacy *oldConfig) convert() Config {
 	}
 
 	return c
-}
-
-func (c *Config) credentials() (string, string, bool, error) {
-	if c.Current == "" {
-		return "", "", false, nil
-	}
-
-	v, ok, _ := c.Find(c.Current)
-	if !ok {
-		return "", "", false, fmt.Errorf("Current target vault '%s' not found in ~/.saferc", c.Current)
-	}
-
-	return v.URL, v.Token, v.SkipVerify, nil
 }
 
 func Read() Config {
@@ -190,26 +178,19 @@ func (c *Config) SetCurrent(alias string, reskip bool) error {
 	return nil
 }
 
-func (c *Config) SetTarget(alias, url string, skipverify bool) error {
+func (c *Config) SetTarget(alias string, config Vault) error {
 	if c.Vaults == nil {
 		c.Vaults = make(map[string]*Vault)
 	}
 
-	var token string
-
 	c.Current = alias
 	if existingAlias, found := c.Vaults[alias]; found {
-		if url == existingAlias.URL {
-			token = existingAlias.Token
+		if config.URL == existingAlias.URL {
+			config.Token = existingAlias.Token
 		}
 	}
 
-	c.Vaults[alias] = &Vault{
-		URL:        url,
-		SkipVerify: skipverify,
-		Token:      token,
-	}
-
+	c.Vaults[alias] = &config
 	return nil
 }
 
@@ -235,6 +216,13 @@ func (c *Config) URL() string {
 func (c *Config) Verified() bool {
 	if v, ok, _ := c.Find(c.Current); ok {
 		return !v.SkipVerify
+	}
+	return false
+}
+
+func (c *Config) HasStrongbox() bool {
+	if v, ok, _ := c.Find(c.Current); ok {
+		return !v.NoStrongbox
 	}
 	return false
 }

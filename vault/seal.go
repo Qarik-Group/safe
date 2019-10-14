@@ -42,3 +42,14 @@ func (v *Vault) Unseal(keys []string) error {
 	}
 	return nil
 }
+
+func (v *Vault) Sealed() (bool, error) {
+	err := v.client.Client.Health(true)
+	var isSealed bool
+	if err != nil && (vaultkv.IsSealed(err) || vaultkv.IsUninitialized(err)) {
+		isSealed = true
+		err = nil
+	}
+
+	return isSealed, err
+}

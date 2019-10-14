@@ -11,6 +11,7 @@ import (
 	"math/big"
 	"net"
 	"net/http/httputil"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -150,6 +151,7 @@ type Options struct {
 	Target struct {
 		JSON        bool `cli:"--json"`
 		Interactive bool `cli:"-i, --interactive"`
+		Strongbox   bool `cli:"-s, --strongbox, --no-strongbox"`
 
 		Delete struct{} `cli:"delete, rm"`
 	} `cli:"target"`
@@ -271,6 +273,8 @@ func main() {
 
 	opt.Init.Persist = true
 	opt.Rekey.Persist = true
+
+	opt.Target.Strongbox = true
 
 	go Signals()
 
@@ -418,8 +422,19 @@ func main() {
 
 	r.Dispatch("target", &Help{
 		Summary: "Target a new Vault, or set your current Vault target",
-		Usage:   "safe [-k] target [URL] [ALIAS] | safe target -i",
-		Type:    AdministrativeCommand,
+		Description: `Target a new Vault if URL and ALIAS are provided, or set 
+your current Vault target if just ALIAS is given. If the single argument form
+if provided, the following flags are valid:
+
+-k (--insecure) specifies to skip x509 certificate validation. This only has an
+effect if the given URL uses an HTTPS scheme.
+
+-s (--strongbox) specifies that the targeted Vault has a strongbox deployed at
+its IP on port :8484. This is true by default. -s=false will cause commands
+that would otherwise use strongbox to run against only the targeted Vault.
+`,
+		Usage: "safe [-k] [-s] target [URL] [ALIAS] | safe target -i",
+		Type:  AdministrativeCommand,
 	}, func(command string, args ...string) error {
 		var cfg rc.Config
 		if !opt.Target.Interactive && len(args) == 0 {
@@ -434,6 +449,25 @@ func main() {
 
 		if opt.UseTarget != "" {
 			fmt.Fprintf(os.Stderr, "@Y{Specifying --target to the target command makes no sense; ignoring...}\n")
+		}
+
+		printTarget := func() {
+			u := cfg.URL()
+			fmt.Fprintf(os.Stderr, "Currently targeting @C{%s} at @C{%s}\n", cfg.Current, u)
+			if !cfg.Verified() {
+				fmt.Fprintf(os.Stderr, "@R{Skipping TLS certificate validation}\n")
+			}
+			if cfg.HasStrongbox() {
+				urlAsURL, err := url.Parse(u)
+				fmt.Fprintf(os.Stderr, "Uses Strongbox")
+				if err == nil {
+					fmt.Fprintf(os.Stderr, " at @C{%s}", vault.StrongboxURL(urlAsURL))
+				}
+				fmt.Fprintf(os.Stderr, "\n")
+			} else {
+				fmt.Fprintf(os.Stderr, "Does not use Strongbox\n")
+			}
+			fmt.Fprintf(os.Stderr, "\n")
 		}
 
 		if opt.Target.Interactive {
@@ -474,14 +508,16 @@ func main() {
 			if !opt.Quiet {
 				if opt.Target.JSON {
 					var out struct {
-						Name   string `json:"name"`
-						URL    string `json:"url"`
-						Verify bool   `json:"verify"`
+						Name      string `json:"name"`
+						URL       string `json:"url"`
+						Verify    bool   `json:"verify"`
+						Strongbox bool   `json:"strongbox"`
 					}
 					if cfg.Current != "" {
 						out.Name = cfg.Current
 						out.URL = cfg.URL()
 						out.Verify = cfg.Verified()
+						out.Strongbox = cfg.HasStrongbox()
 					}
 					b, err := json.MarshalIndent(&out, "", "  ")
 					if err != nil {
@@ -494,11 +530,7 @@ func main() {
 				if cfg.Current == "" {
 					fmt.Fprintf(os.Stderr, "@R{No Vault currently targeted}\n")
 				} else {
-					skip := ""
-					if !cfg.Verified() {
-						skip = " (skipping TLS certificate verification)"
-					}
-					fmt.Fprintf(os.Stderr, "Currently targeting @C{%s} at @C{%s}@R{%s}\n\n", cfg.Current, cfg.URL(), skip)
+					printTarget()
 				}
 			}
 			return nil
@@ -509,27 +541,29 @@ func main() {
 				return err
 			}
 			if !opt.Quiet {
-				skip := ""
-				if !cfg.Verified() {
-					skip = " (skipping TLS certificate verification)"
-				}
-				fmt.Fprintf(os.Stderr, "Now targeting @C{%s} at @C{%s}@R{%s}\n\n", cfg.Current, cfg.URL(), skip)
+				printTarget()
 			}
 			return cfg.Write()
 		}
 
 		if len(args) == 2 {
 			var err error
-			if strings.HasPrefix(args[1], "http://") || strings.HasPrefix(args[1], "https://") {
-				err = cfg.SetTarget(args[0], args[1], skipverify)
-			} else {
-				err = cfg.SetTarget(args[1], args[0], skipverify)
+			alias, url := args[0], args[1]
+			if !(strings.HasPrefix(args[1], "http://") ||
+				strings.HasPrefix(args[1], "https://")) {
+				alias, url = url, alias
 			}
+
+			err = cfg.SetTarget(alias, rc.Vault{
+				URL:         url,
+				SkipVerify:  skipverify,
+				NoStrongbox: !opt.Target.Strongbox,
+			})
 			if err != nil {
 				return err
 			}
 			if !opt.Quiet {
-				fmt.Fprintf(os.Stderr, "Now targeting @C{%s} at @C{%s}\n\n", cfg.Current, cfg.URL())
+				printTarget()
 			}
 			return cfg.Write()
 		}
@@ -561,20 +595,43 @@ func main() {
 		Usage:   "safe status",
 		Type:    AdministrativeCommand,
 	}, func(command string, args ...string) error {
-		rc.Apply(opt.UseTarget)
+		cfg := rc.Apply(opt.UseTarget)
 		v := connect(false)
-		st, err := v.Strongbox()
-		if err != nil {
-			return fmt.Errorf("%s; are you targeting a `safe' installation?", err)
+
+		type status struct {
+			addr   string
+			sealed bool
 		}
 
-		for addr, state := range st {
-			if state == "sealed" {
-				fmt.Printf("@R{%s is sealed}\n", addr)
+		var statuses []status
+
+		if cfg.HasStrongbox() {
+			st, err := v.Strongbox()
+			if err != nil {
+				return fmt.Errorf("%s; are you targeting a `safe' installation?", err)
+			}
+
+			for addr, state := range st {
+				statuses = append(statuses, status{addr, state == "sealed"})
+			}
+		} else {
+			v.SetURL(cfg.URL())
+			isSealed, err := v.Sealed()
+			if err != nil {
+				return err
+			}
+
+			statuses = append(statuses, status{cfg.URL(), isSealed})
+		}
+
+		for _, s := range statuses {
+			if s.sealed {
+				fmt.Printf("@R{%s is sealed}\n", s.addr)
 			} else {
-				fmt.Printf("@G{%s is unsealed}\n", addr)
+				fmt.Printf("@G{%s is unsealed}\n", s.addr)
 			}
 		}
+
 		return nil
 	})
 
@@ -707,7 +764,11 @@ listener "tcp" {
 		}
 		previous := cfg.Current
 
-		cfg.SetTarget(name, fmt.Sprintf("http://127.0.0.1:%d", port), false)
+		cfg.SetTarget(name, rc.Vault{
+			URL:         fmt.Sprintf("http://127.0.0.1:%d", port),
+			SkipVerify:  false,
+			NoStrongbox: true,
+		})
 		cfg.Write()
 
 		rc.Apply("")
@@ -916,11 +977,16 @@ Vault will remain sealed).
 
 		if !opt.Init.Sealed {
 			addrs := []string{}
-			if st, err := v.Strongbox(); err == nil {
-				for addr := range st {
-					addrs = append(addrs, addr)
+			gotStrongbox := false
+			if cfg.HasStrongbox() {
+				if st, err := v.Strongbox(); err == nil {
+					gotStrongbox = true
+					for addr := range st {
+						addrs = append(addrs, addr)
+					}
 				}
-			} else {
+			}
+			if !gotStrongbox {
 				addrs = append(addrs, v.Client().Client.VaultURL.String())
 			}
 
@@ -1005,44 +1071,57 @@ Vault will remain sealed).
 		Usage:   "safe unseal",
 		Type:    AdministrativeCommand,
 	}, func(command string, args ...string) error {
-		rc.Apply(opt.UseTarget)
+		cfg := rc.Apply(opt.UseTarget)
 		v := connect(false)
-		st, err := v.Strongbox()
-		if err != nil {
-			return fmt.Errorf("%s; are you targeting a `safe' installation?", err)
-		}
 
-		n := 0
-		nkeys := 0
-		for addr, state := range st {
-			if state == "sealed" {
-				n++
-				v.SetURL(addr)
-				nkeys, err = v.SealKeys()
-				if err != nil {
-					return err
-				}
-			}
-		}
-
-		if n == 0 {
-			fmt.Printf("@C{all vaults are already unsealed!}\n")
-		} else {
-			fmt.Printf("You need %d key(s) to unseal the vaults.\n\n", nkeys)
-			keys := make([]string, nkeys)
-
-			for i := 0; i < nkeys; i++ {
-				keys[i] = pr(fmt.Sprintf("Key #%d", i+1), false, true)
+		var addrs []string
+		if cfg.HasStrongbox() {
+			st, err := v.Strongbox()
+			if err != nil {
+				return fmt.Errorf("%s; are you targeting a `safe' installation?", err)
 			}
 
 			for addr, state := range st {
 				if state == "sealed" {
-					fmt.Printf("unsealing @G{%s}...\n", addr)
-					v.SetURL(addr)
-					if err = v.Unseal(keys); err != nil {
-						return err
-					}
+					addrs = append(addrs, addr)
 				}
+			}
+		} else {
+			v.SetURL(cfg.URL())
+			isSealed, err := v.Sealed()
+			if err != nil {
+				return err
+			}
+
+			if isSealed {
+				addrs = append(addrs, cfg.URL())
+			}
+		}
+
+		if len(addrs) == 0 {
+			fmt.Printf("@C{all vaults are already unsealed!}\n")
+			return nil
+		}
+
+		v.SetURL(addrs[0])
+		nkeys, err := v.SealKeys()
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("You need %d key(s) to unseal the vaults.\n\n", nkeys)
+		keys := make([]string, nkeys)
+
+		for i := 0; i < nkeys; i++ {
+			keys[i] = pr(fmt.Sprintf("Key #%d", i+1), false, true)
+		}
+
+		for _, addr := range addrs {
+			fmt.Printf("unsealing @G{%s}...\n", addr)
+			v.SetURL(addr)
+			err = v.Unseal(keys)
+			if err != nil {
+				return err
 			}
 		}
 
@@ -1054,17 +1133,29 @@ Vault will remain sealed).
 		Usage:   "safe seal",
 		Type:    AdministrativeCommand,
 	}, func(command string, args ...string) error {
-		rc.Apply(opt.UseTarget)
+		cfg := rc.Apply(opt.UseTarget)
 		v := connect(true)
-		st, err := v.Strongbox()
-		if err != nil {
-			return fmt.Errorf("%s; are you targeting a `safe' installation?", err)
-		}
 
 		var toSeal []string
-		for addr, state := range st {
-			if state == "unsealed" {
-				toSeal = append(toSeal, addr)
+		if cfg.HasStrongbox() {
+			st, err := v.Strongbox()
+			if err != nil {
+				return fmt.Errorf("%s; are you targeting a `safe' installation?", err)
+			}
+
+			for addr, state := range st {
+				if state == "unsealed" {
+					toSeal = append(toSeal, addr)
+				}
+			}
+		} else {
+			v.SetURL(cfg.URL())
+			isSealed, err := v.Sealed()
+			if err != nil {
+				return nil
+			}
+			if !isSealed {
+				toSeal = append(toSeal, cfg.URL())
 			}
 		}
 
@@ -1074,6 +1165,7 @@ Vault will remain sealed).
 
 		consecutiveFailures := 0
 		const maxFailures = 10
+		const attemptInterval = 500 * time.Millisecond
 
 		for len(toSeal) > 0 {
 			for i, addr := range toSeal {
@@ -1097,6 +1189,7 @@ Vault will remain sealed).
 					//Remove sealed Vault from list
 					toSeal[i], toSeal[len(toSeal)-1] = toSeal[len(toSeal)-1], toSeal[i]
 					toSeal = toSeal[:len(toSeal)-1]
+					consecutiveFailures = 0
 					break
 				}
 			}
@@ -1105,7 +1198,7 @@ Vault will remain sealed).
 				if consecutiveFailures == maxFailures {
 					return fmt.Errorf("timed out waiting for leader election")
 				}
-				time.Sleep(500 * time.Millisecond)
+				time.Sleep(attemptInterval)
 			}
 		}
 
