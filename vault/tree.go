@@ -716,6 +716,8 @@ func (w *treeWorker) work() {
 				break
 			}
 			//toAppend can be nil if a get was issued on a destroyed node
+			// or if it attempted to access a node that was listable but
+			// itself not accessible
 			if toAppend != nil {
 				answer = append(answer, toAppend...)
 			}
@@ -751,9 +753,13 @@ func (w *treeWorker) workList(t secretTree) ([]secretTree, error) {
 	path := strings.TrimSuffix(t.Name, "/")
 	list, err := w.vault.List(path)
 	if err != nil {
-		//This is most likely because a mount exists but has no secrets in it yet
-		// Probably shouldn't err
-		if IsNotFound(err) {
+		//IsNotFound: This is most likely because a mount exists but has no secrets
+		//in it yet Probably shouldn't err
+		//
+		//IsForbidden: This is because you were able to list the contents of a path
+		// that this path is contained in, but you do not have the permissions to
+		// list this path.
+		if IsNotFound(err) || vaultkv.IsForbidden(err) {
 			return nil, nil
 		}
 		return nil, err
@@ -799,7 +805,13 @@ func (w *treeWorker) workGet(t secretTree) ([]secretTree, error) {
 	}
 
 	s, err := w.vault.Read(EncodePath(path, "", uint64(t.Version)))
+	//For v1 backends, this is the first non-list Vault access.
+	// If we're unable to get a path that we could list because of permissions,
+	// don't explode.
 	if err != nil {
+		if t.MountVersion == 1 && vaultkv.IsForbidden(err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 
@@ -879,7 +891,13 @@ func (w *treeWorker) workVersions(t secretTree) ([]secretTree, error) {
 	}
 
 	versions, err := w.vault.Versions(path)
+	//For v2 backends, this is the first non-list Vault access.
+	// If we're unable to get a path that we could list because of permissions,
+	// don't explode.
 	if err != nil {
+		if t.MountVersion == 2 && vaultkv.IsForbidden(err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 
