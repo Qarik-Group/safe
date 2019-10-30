@@ -22,32 +22,27 @@ type Vault struct {
 	client *vaultkv.KV
 }
 
+type VaultConfig struct {
+	URL        string
+	Token      string
+	CACerts    *x509.CertPool
+	SkipVerify bool
+}
+
 // NewVault creates a new Vault object.  If an empty token is specified,
 // the current user's token is read from ~/.vault-token.
-func NewVault(u, token string, auth bool) (*Vault, error) {
-	if auth {
-		if token == "" {
-			b, err := ioutil.ReadFile(fmt.Sprintf("%s/.vault-token", userHomeDir()))
-			if err != nil {
-				return nil, err
-			}
-			token = string(b)
-		}
-
-		if token == "" {
-			return nil, fmt.Errorf("no vault token specified; are you authenticated?")
+func NewVault(conf VaultConfig) (*Vault, error) {
+	var err error
+	if conf.CACerts == nil {
+		// x509.SystemCertPool is not implemented for windows currently.
+		// If nil is supplied for RootCAs, the system will verify the certs as per
+		// https://golang.org/src/crypto/x509/verify.go (Line 741)
+		conf.CACerts, err = x509.SystemCertPool()
+		if err != nil && runtime.GOOS != "windows" {
+			return nil, fmt.Errorf("unable to retrieve system root certificate authorities: %s", err)
 		}
 	}
-
-	// x509.SystemCertPool is not implemented for windows currently.
-	// If nil is supplied for RootCAs, the system will verify the certs as per
-	// https://golang.org/src/crypto/x509/verify.go (Line 741)
-	roots, err := x509.SystemCertPool()
-	if err != nil && runtime.GOOS != "windows" {
-		return nil, fmt.Errorf("unable to retrieve system root certificate authorities: %s", err)
-	}
-
-	vaultURL, err := url.Parse(strings.TrimSuffix(u, "/"))
+	vaultURL, err := url.Parse(strings.TrimSuffix(conf.URL, "/"))
 	if err != nil {
 		return nil, fmt.Errorf("Could not parse Vault URL: %s", err)
 	}
@@ -71,13 +66,13 @@ func NewVault(u, token string, auth bool) (*Vault, error) {
 	return &Vault{
 		client: (&vaultkv.Client{
 			VaultURL:  vaultURL,
-			AuthToken: token,
+			AuthToken: conf.Token,
 			Client: &http.Client{
 				Transport: &http.Transport{
 					Proxy: proxyRouter.Proxy,
 					TLSClientConfig: &tls.Config{
-						RootCAs:            roots,
-						InsecureSkipVerify: os.Getenv("VAULT_SKIP_VERIFY") != "",
+						RootCAs:            conf.CACerts,
+						InsecureSkipVerify: conf.SkipVerify,
 					},
 					MaxIdleConnsPerHost: 100,
 				},

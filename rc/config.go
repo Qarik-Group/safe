@@ -3,12 +3,17 @@ package rc
 import (
 	"io/ioutil"
 	"os"
+	"os/signal"
 	"runtime"
 	"strings"
+	"sync"
 
 	fmt "github.com/jhunt/go-ansi"
 	"gopkg.in/yaml.v2"
 )
+
+var toCleanup []string
+var cleanupLock sync.Mutex
 
 type Config struct {
 	Version int               `yaml:"version"`
@@ -17,10 +22,12 @@ type Config struct {
 }
 
 type Vault struct {
-	URL         string `yaml:"url"`
-	Token       string `yaml:"token"`
-	SkipVerify  bool   `yaml:"skip_verify"`
-	NoStrongbox bool   `yaml:"strongbox"`
+	URL        string   `yaml:"url"`
+	Token      string   `yaml:"token"`
+	CACerts    []string `yaml:"ca_certs,omitempty"`
+	SkipVerify bool     `yaml:"skip_verify"`
+	//FIXME: NoStrongbox should not go into the config as "strongbox"
+	NoStrongbox bool `yaml:"strongbox"`
 }
 
 type oldConfig struct {
@@ -138,6 +145,36 @@ func (c *Config) Write() error {
 	return ioutil.WriteFile(svtoken(), b, 0600)
 }
 
+//Returns the path of the file that the certificates were written into
+func writeTempCACerts(certs []string) (string, error) {
+	cleanupLock.Lock()
+	defer cleanupLock.Unlock()
+
+	caFile, err := ioutil.TempFile("", "safe-ca-cert")
+	if err != nil {
+		return "", fmt.Errorf("Could not write CAs to a temp file: %s", err.Error())
+	}
+	defer caFile.Close()
+
+	toWrite := strings.Join(certs, "\n")
+	_, err = caFile.WriteString(toWrite)
+	if err != nil {
+		return "", fmt.Errorf("Could not write CA certs into temporary file: %s", err.Error())
+	}
+
+	toCleanup = append(toCleanup, caFile.Name())
+
+	go func() {
+		sigChan := make(chan os.Signal)
+		signal.Notify(sigChan, os.Interrupt)
+		<-sigChan
+		Cleanup()
+		os.Exit(1)
+	}()
+
+	return caFile.Name(), nil
+}
+
 func (c *Config) Apply(use string) error {
 	v, err := c.Vault(use)
 	if err != nil {
@@ -150,6 +187,13 @@ func (c *Config) Apply(use string) error {
 		os.Setenv("VAULT_TOKEN", v.Token)
 		if v.SkipVerify {
 			os.Setenv("VAULT_SKIP_VERIFY", "1")
+		}
+		if len(v.CACerts) > 0 {
+			filename, err := writeTempCACerts(v.CACerts)
+			if err != nil {
+				return err
+			}
+			os.Setenv("VAULT_CACERT", filename)
 		}
 	} else {
 		if os.Getenv("VAULT_TOKEN") == "" {
@@ -227,6 +271,13 @@ func (c *Config) HasStrongbox() bool {
 	return false
 }
 
+func (c *Config) CACerts() []string {
+	if v, ok, _ := c.Find(c.Current); ok {
+		return v.CACerts
+	}
+	return nil
+}
+
 func (c *Config) Find(alias string) (*Vault, bool, error) {
 	if v, ok := c.Vaults[alias]; ok {
 		return v, true, nil
@@ -269,4 +320,16 @@ func (c *Config) Vault(which string) (*Vault, error) {
 		return nil, fmt.Errorf("Current target '%s' not found in ~/.saferc", which)
 	}
 	return v, nil
+}
+
+//Cleanup will clean up any temporary files that the rc package may have made.
+// Cleanup is thread-safe and can be called multiple times.
+func Cleanup() {
+	cleanupLock.Lock()
+	for _, filename := range toCleanup {
+		_ = os.Remove(filename)
+	}
+
+	toCleanup = nil
+	cleanupLock.Unlock()
 }

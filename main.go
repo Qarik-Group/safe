@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"io/ioutil"
 	"math/big"
@@ -39,15 +40,39 @@ import (
 var Version string
 
 func connect(auth bool) *vault.Vault {
-	addr := os.Getenv("VAULT_ADDR")
-	if addr == "" {
+	var caCertPool *x509.CertPool
+	if os.Getenv("VAULT_CACERT") != "" {
+		contents, err := ioutil.ReadFile(os.Getenv("VAULT_CACERT"))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "@R{!! Could not read CA certificates: %s}", err.Error())
+		}
+
+		caCertPool = x509.NewCertPool()
+		caCertPool.AppendCertsFromPEM(contents)
+	}
+
+	shouldSkipVerify := func() bool {
+		skipVerifyVal := os.Getenv("VAULT_SKIP_VERIFY")
+		if skipVerifyVal != "" && skipVerifyVal != "false" {
+			return true
+		}
+		return false
+	}
+
+	conf := vault.VaultConfig{
+		URL:        os.Getenv("VAULT_ADDR"),
+		Token:      os.Getenv("VAULT_TOKEN"),
+		SkipVerify: shouldSkipVerify(),
+		CACerts:    caCertPool,
+	}
+	if conf.URL == "" {
 		fmt.Fprintf(os.Stderr, "@R{You are not targeting a Vault.}\n")
 		fmt.Fprintf(os.Stderr, "Try @C{safe target http://your-vault alias}\n")
 		fmt.Fprintf(os.Stderr, " or @C{safe target alias}\n")
 		os.Exit(1)
 	}
 
-	if auth && os.Getenv("VAULT_TOKEN") == "" {
+	if auth && conf.Token == "" {
 		fmt.Fprintf(os.Stderr, "@R{You are not authenticated to a Vault.}\n")
 		fmt.Fprintf(os.Stderr, "Try @C{safe auth ldap}\n")
 		fmt.Fprintf(os.Stderr, " or @C{safe auth github}\n")
@@ -57,7 +82,7 @@ func connect(auth bool) *vault.Vault {
 		os.Exit(1)
 	}
 
-	v, err := vault.NewVault(addr, os.Getenv("VAULT_TOKEN"), auth)
+	v, err := vault.NewVault(conf)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "@R{!! %s}\n", err)
 		os.Exit(1)
@@ -149,9 +174,10 @@ type Options struct {
 	} `cli:"tree"`
 
 	Target struct {
-		JSON        bool `cli:"--json"`
-		Interactive bool `cli:"-i, --interactive"`
-		Strongbox   bool `cli:"-s, --strongbox, --no-strongbox"`
+		JSON        bool     `cli:"--json"`
+		Interactive bool     `cli:"-i, --interactive"`
+		Strongbox   bool     `cli:"-s, --strongbox, --no-strongbox"`
+		CACerts     []string `cli:"--ca-cert"`
 
 		Delete struct{} `cli:"delete, rm"`
 	} `cli:"target"`
@@ -432,8 +458,13 @@ effect if the given URL uses an HTTPS scheme.
 -s (--strongbox) specifies that the targeted Vault has a strongbox deployed at
 its IP on port :8484. This is true by default. -s=false will cause commands
 that would otherwise use strongbox to run against only the targeted Vault.
+
+--ca-cert can be either a PEM-encoded certificate value or filepath to a
+PEM-encoded certificate. The given certificate will be trusted as the signing
+certificate to the certificate served by the Vault server. This flag can be
+provided multiple times to provide multiple CA certificates.
 `,
-		Usage: "safe [-k] [-s] target [URL] [ALIAS] | safe target -i",
+		Usage: "safe [-k] [-s] [--ca-cert] target [URL] [ALIAS] | safe target -i",
 		Type:  AdministrativeCommand,
 	}, func(command string, args ...string) error {
 		var cfg rc.Config
@@ -554,10 +585,38 @@ that would otherwise use strongbox to run against only the targeted Vault.
 				alias, url = url, alias
 			}
 
+			caCerts := []string{}
+			for _, input := range opt.Target.CACerts {
+				const errorPrefix = "Error reading CA certificates"
+				p, _ := pem.Decode([]byte(input))
+				// If not a PEM block, try to interpret it as a filepath pointing to
+				// a file that contains a PEM block.
+				if p == nil {
+					pemData, err := ioutil.ReadFile(input)
+					if err != nil {
+						return fmt.Errorf("%s: While reading from file `%s': %s", errorPrefix, input, err.Error())
+					}
+
+					p, _ = pem.Decode([]byte(pemData))
+					if p == nil {
+						return fmt.Errorf("%s: File contents could not be parsed as PEM-encoded data", errorPrefix)
+					}
+				}
+
+				_, err := x509.ParseCertificate(p.Bytes)
+				if err != nil {
+					return fmt.Errorf("%s: While parsing certificate ASN.1 DER data: %s", errorPrefix, err.Error())
+				}
+
+				toWrite := pem.EncodeToMemory(p)
+				caCerts = append(caCerts, string(toWrite))
+			}
+
 			err = cfg.SetTarget(alias, rc.Vault{
 				URL:         url,
 				SkipVerify:  skipverify,
 				NoStrongbox: !opt.Target.Strongbox,
+				CACerts:     caCerts,
 			})
 			if err != nil {
 				return err
@@ -3885,6 +3944,7 @@ Currently, only the --renew option is supported, and it is required:
 			os.Setenv("SAFE_SKIP_VERIFY", "1")
 		}
 
+		defer rc.Cleanup()
 		err = r.Execute(p.Command, p.Args...)
 		if err != nil {
 			if strings.HasPrefix(err.Error(), "USAGE") {
