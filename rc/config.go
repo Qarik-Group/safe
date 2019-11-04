@@ -22,12 +22,11 @@ type Config struct {
 }
 
 type Vault struct {
-	URL        string   `yaml:"url"`
-	Token      string   `yaml:"token"`
-	CACerts    []string `yaml:"ca_certs,omitempty"`
-	SkipVerify bool     `yaml:"skip_verify"`
-	//FIXME: NoStrongbox should not go into the config as "strongbox"
-	NoStrongbox bool `yaml:"strongbox"`
+	URL         string   `yaml:"url"`
+	Token       string   `yaml:"token"`
+	CACerts     []string `yaml:"ca_certs,omitempty"`
+	SkipVerify  bool     `yaml:"skip_verify,omitempty"`
+	NoStrongbox bool     `yaml:"no_strongbox,omitempty"`
 }
 
 type oldConfig struct {
