@@ -101,7 +101,7 @@ func (v *Client) Curl(method string, path string, urlQuery url.Values, body io.R
 	}
 	if v.Trace != nil {
 		dump, _ := httputil.DumpRequest(req, true)
-		v.Trace.Write([]byte(fmt.Sprintf("Request:\n%s\n", dump)))
+		_, _ = v.Trace.Write([]byte(fmt.Sprintf("Request:\n%s\n", dump)))
 	}
 
 	token := v.AuthToken
@@ -132,7 +132,7 @@ func (v *Client) Curl(method string, path string, urlQuery url.Values, body io.R
 
 	if v.Trace != nil {
 		dump, _ := httputil.DumpResponse(resp, true)
-		v.Trace.Write([]byte(fmt.Sprintf("Response:\n%s\n", dump)))
+		_, _ = v.Trace.Write([]byte(fmt.Sprintf("Response:\n%s\n", dump)))
 	}
 
 	return resp, nil

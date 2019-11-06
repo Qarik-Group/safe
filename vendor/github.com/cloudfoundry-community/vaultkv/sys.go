@@ -3,6 +3,7 @@ package vaultkv
 import (
 	"encoding/json"
 	"errors"
+	"io/ioutil"
 	"net/url"
 	"strings"
 )
@@ -205,9 +206,20 @@ func (v *Client) Health(standbyok bool) error {
 	}
 
 	resp, err := v.Curl("GET", "/sys/health", query, nil)
+	if err != nil {
+		return err
+	}
 
 	errorsStruct := apiError{}
-	json.NewDecoder(resp.Body).Decode(&errorsStruct)
+	err = json.NewDecoder(resp.Body).Decode(&errorsStruct)
+	if err != nil {
+		return err
+	}
+	_, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+
 	errorMessage := strings.Join(errorsStruct.Errors, "\n")
 
 	switch resp.StatusCode {
