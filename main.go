@@ -62,6 +62,7 @@ func connect(auth bool) *vault.Vault {
 	conf := vault.VaultConfig{
 		URL:        os.Getenv("VAULT_ADDR"),
 		Token:      os.Getenv("VAULT_TOKEN"),
+		Namespace:  os.Getenv("VAULT_NAMESPACE"),
 		SkipVerify: shouldSkipVerify(),
 		CACerts:    caCertPool,
 	}
@@ -178,6 +179,7 @@ type Options struct {
 		Interactive bool     `cli:"-i, --interactive"`
 		Strongbox   bool     `cli:"-s, --strongbox, --no-strongbox"`
 		CACerts     []string `cli:"--ca-cert"`
+		Namespace   string   `cli:"-n, --namespace"`
 
 		Delete struct{} `cli:"delete, rm"`
 	} `cli:"target"`
@@ -459,12 +461,15 @@ effect if the given URL uses an HTTPS scheme.
 its IP on port :8484. This is true by default. -s=false will cause commands
 that would otherwise use strongbox to run against only the targeted Vault.
 
+-n (--namespace) specifies a Vault Enterprise namespace to run commands against
+for this target.
+
 --ca-cert can be either a PEM-encoded certificate value or filepath to a
 PEM-encoded certificate. The given certificate will be trusted as the signing
 certificate to the certificate served by the Vault server. This flag can be
 provided multiple times to provide multiple CA certificates.
 `,
-		Usage: "safe [-k] [-s] [--ca-cert] target [URL] [ALIAS] | safe target -i",
+		Usage: "safe [-k] [-s] [-n] [--ca-cert] target [URL] [ALIAS] | safe target -i",
 		Type:  AdministrativeCommand,
 	}, func(command string, args ...string) error {
 		var cfg rc.Config
@@ -487,6 +492,9 @@ provided multiple times to provide multiple CA certificates.
 			fmt.Fprintf(os.Stderr, "Currently targeting @C{%s} at @C{%s}\n", cfg.Current, u)
 			if !cfg.Verified() {
 				fmt.Fprintf(os.Stderr, "@R{Skipping TLS certificate validation}\n")
+			}
+			if cfg.Namespace() != "" {
+				fmt.Fprintf(os.Stderr, "Using namespace @C{%s}\n", cfg.Namespace())
 			}
 			if cfg.HasStrongbox() {
 				urlAsURL, err := url.Parse(u)
@@ -616,6 +624,7 @@ provided multiple times to provide multiple CA certificates.
 				URL:         url,
 				SkipVerify:  skipverify,
 				NoStrongbox: !opt.Target.Strongbox,
+				Namespace:   opt.Target.Namespace,
 				CACerts:     caCerts,
 			})
 			if err != nil {

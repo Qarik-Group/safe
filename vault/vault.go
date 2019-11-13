@@ -25,6 +25,7 @@ type Vault struct {
 type VaultConfig struct {
 	URL        string
 	Token      string
+	Namespace  string
 	CACerts    *x509.CertPool
 	SkipVerify bool
 }
@@ -67,6 +68,7 @@ func NewVault(conf VaultConfig) (*Vault, error) {
 		client: (&vaultkv.Client{
 			VaultURL:  vaultURL,
 			AuthToken: conf.Token,
+			Namespace: conf.Namespace,
 			Client: &http.Client{
 				Transport: &http.Transport{
 					Proxy: proxyRouter.Proxy,

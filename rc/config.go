@@ -27,6 +27,7 @@ type Vault struct {
 	CACerts     []string `yaml:"ca_certs,omitempty"`
 	SkipVerify  bool     `yaml:"skip_verify,omitempty"`
 	NoStrongbox bool     `yaml:"no_strongbox,omitempty"`
+	Namespace   string   `yaml:"namespace,omitempty"`
 }
 
 type oldConfig struct {
@@ -195,6 +196,9 @@ func (c *Config) Apply(use string) error {
 			}
 			os.Setenv("VAULT_CACERT", filename)
 		}
+		if v.Namespace != "" {
+			os.Setenv("VAULT_NAMESPACE", v.Namespace)
+		}
 	} else {
 		if os.Getenv("VAULT_TOKEN") == "" {
 			tokenFile := fmt.Sprintf("%s/.vault-token", os.Getenv("HOME"))
@@ -276,6 +280,13 @@ func (c *Config) CACerts() []string {
 		return v.CACerts
 	}
 	return nil
+}
+
+func (c *Config) Namespace() string {
+	if v, ok, _ := c.Find(c.Current); ok {
+		return v.Namespace
+	}
+	return ""
 }
 
 func (c *Config) Find(alias string) (*Vault, bool, error) {

@@ -25,6 +25,9 @@ type Client struct {
 	//If Trace is non-nil, information about HTTP requests will be given into the
 	//Writer.
 	Trace io.Writer
+	//Namespace, if non-empty, will send a X-Vault-Namespace header on requests with
+	// the given value.
+	Namespace string
 }
 
 type vaultResponse struct {
@@ -109,6 +112,10 @@ func (v *Client) Curl(method string, path string, urlQuery url.Values, body io.R
 		token = "01234567-89ab-cdef-0123-456789abcdef"
 	}
 	req.Header.Set("X-Vault-Token", token)
+
+	if v.Namespace != "" {
+		req.Header.Set("X-Vault-Namespace", strings.Trim(v.Namespace, "/")+"/")
+	}
 
 	client := v.Client
 	if client == nil {
