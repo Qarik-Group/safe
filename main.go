@@ -1300,6 +1300,7 @@ written to STDOUT instead of STDERR to make it easier to consume.
 			"VAULT_ADDR":        os.Getenv("VAULT_ADDR"),
 			"VAULT_TOKEN":       os.Getenv("VAULT_TOKEN"),
 			"VAULT_SKIP_VERIFY": os.Getenv("VAULT_SKIP_VERIFY"),
+			"VAULT_NAMESPACE":   os.Getenv("VAULT_NAMESPACE"),
 		}
 
 		switch {
