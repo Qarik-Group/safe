@@ -112,7 +112,10 @@ type Options struct {
 		JSON bool `cli:"--json"`
 	} `cli:"targets"`
 
-	Status struct{} `cli:"status"`
+	Status struct {
+		ErrorIfSealed bool `cli:"-e, --err-sealed"`
+	} `cli:"status"`
+
 	Unseal struct{} `cli:"unseal"`
 	Seal   struct{} `cli:"seal"`
 	Env    struct {
@@ -660,8 +663,21 @@ provided multiple times to provide multiple CA certificates.
 
 	r.Dispatch("status", &Help{
 		Summary: "Print the status of the current target's backend nodes",
-		Usage:   "safe status",
 		Type:    AdministrativeCommand,
+		Usage:   "safe status",
+		Description: `
+Returns the seal status of each node in the Vault cluster.
+
+If strongbox is configured for this target, then strongbox is queried for seal
+status of all nodes in the cluster. If strongbox is disabled for the target,
+the /sys/health endpoint is queried for the target box to return the health of
+just this Vault instance.
+
+The following options are recognized:
+
+	-e, --err-sealed  Causes safe to exit with a non-zero code if any of the
+	                  queried Vaults are sealed.
+		`,
 	}, func(command string, args ...string) error {
 		cfg := rc.Apply(opt.UseTarget)
 		v := connect(false)
@@ -692,12 +708,19 @@ provided multiple times to provide multiple CA certificates.
 			statuses = append(statuses, status{cfg.URL(), isSealed})
 		}
 
+		var hasSealed bool
+
 		for _, s := range statuses {
 			if s.sealed {
+				hasSealed = true
 				fmt.Printf("@R{%s is sealed}\n", s.addr)
 			} else {
 				fmt.Printf("@G{%s is unsealed}\n", s.addr)
 			}
+		}
+
+		if opt.Status.ErrorIfSealed && hasSealed {
+			return fmt.Errorf("There are sealed Vaults")
 		}
 
 		return nil
