@@ -137,7 +137,14 @@ func (c *Config) Write() error {
 		Token      string `yaml:"token"`
 		SkipVerify bool   `yaml:"skip_verify"`
 		CACerts    string `yaml:"ca_certs,omitempty"`
-	}{v.URL, v.Token, v.SkipVerify, strings.Join(v.CACerts, "\n")}
+		Namespace  string `yaml:"namespace,omitempty"`
+	}{
+		Vault:      v.URL,
+		Token:      v.Token,
+		SkipVerify: v.SkipVerify,
+		CACerts:    strings.Join(v.CACerts, "\n"),
+		Namespace:  v.Namespace,
+	}
 	b, err = yaml.Marshal(sv)
 	if err != nil {
 		return err
