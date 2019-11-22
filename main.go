@@ -2613,15 +2613,16 @@ and overwrite all versions of the secret at the destination.
 
 	r.Dispatch("gen", &Help{
 		Summary: "Generate a random password",
-		Usage:   "safe gen [-l <length>] PATH:KEY [PATH:KEY ...]",
+		Usage:   "safe gen [-l <length>] [-p] PATH:KEY [PATH:KEY ...]",
 		Type:    DestructiveCommand,
 		Description: `
 LENGTH defaults to 64 characters.
 
 The following options are recognized:
 
-  -p, --policy  Specify a regex character grouping for limiting
-                characters used to generate the password (e.g --policy a-z0-9)
+  -l, --length  Specify the length of the random string to generate
+	-p, --policy  Specify a regex character grouping for limiting characters used
+	              to generate the password (e.g --policy a-z0-9)
 `,
 	}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
