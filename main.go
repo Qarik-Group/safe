@@ -123,7 +123,11 @@ type Options struct {
 		ForFish bool `cli:"--fish"`
 		ForJSON bool `cli:"--json"`
 	} `cli:"env"`
-	Auth   struct{} `cli:"auth, login"`
+
+	Auth struct {
+		Path string `cli:"-p, --path"`
+	} `cli:"auth, login"`
+
 	Logout struct{} `cli:"logout"`
 	Renew  struct{} `cli:"renew"`
 	Ask    struct{} `cli:"ask"`
@@ -1372,8 +1376,25 @@ written to STDOUT instead of STDERR to make it easier to consume.
 
 	r.Dispatch("auth", &Help{
 		Summary: "Authenticate to the current target",
-		Usage:   "safe auth (token|github|ldap|userpass|approle)",
-		Type:    AdministrativeCommand,
+		Usage:   "safe auth [--path <value>] (token|github|ldap|userpass|approle)",
+		Description: `
+Set the authentication token sent when talking to the Vault.
+
+Supported auth backends are:
+
+token     Set the Vault authentication token directly.
+github    Provide a Github personal access (oauth) token.
+ldap      Provide LDAP user credentials.
+userpass  Provide a username and password registered with the UserPass backend.
+approle   Provide a client ID and client secret registered with the AppRole backend.
+
+Flags:
+	-p, --path  Set the path of the auth backend mountpoint. For those who are
+		          familiar with the API, this is the part that comes after v1/auth.
+		          Defaults to the name of auth type (e.g. "userpass"), which is
+		          the default when creating auth backends with the Vault CLI.
+`,
+		Type: AdministrativeCommand,
 	}, func(command string, args ...string) error {
 		cfg := rc.Apply(opt.UseTarget)
 
@@ -1394,6 +1415,9 @@ written to STDOUT instead of STDERR to make it easier to consume.
 
 		switch method {
 		case "token":
+			if opt.Auth.Path != "" {
+				return fmt.Errorf("Setting a custom path is not supported for token auth")
+			}
 			token, err = auth.Token(url)
 			if err != nil {
 				return err
@@ -1401,28 +1425,28 @@ written to STDOUT instead of STDERR to make it easier to consume.
 			break
 
 		case "ldap":
-			token, err = auth.LDAP(url)
+			token, err = auth.LDAP(url, opt.Auth.Path)
 			if err != nil {
 				return err
 			}
 			break
 
 		case "github":
-			token, err = auth.Github(url)
+			token, err = auth.Github(url, opt.Auth.Path)
 			if err != nil {
 				return err
 			}
 			break
 
 		case "userpass":
-			token, err = auth.UserPass(url)
+			token, err = auth.UserPass(url, opt.Auth.Path)
 			if err != nil {
 				return err
 			}
 			break
 
 		case "approle":
-			token, err = auth.AppRole(url)
+			token, err = auth.AppRole(url, opt.Auth.Path)
 			if err != nil {
 				return err
 			}

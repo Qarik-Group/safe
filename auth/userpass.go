@@ -8,7 +8,12 @@ import (
 	"github.com/starkandwayne/safe/prompt"
 )
 
-func UserPass(addr string) (string, error) {
+func UserPass(addr, path string) (string, error) {
+	path = strings.Trim(path, "/")
+	if path == "" {
+		path = "userpass"
+	}
+
 	username := prompt.Normal("Username: ")
 	password := prompt.Secure("Password: ")
 
@@ -20,7 +25,7 @@ func UserPass(addr string) (string, error) {
 		return "", err
 	}
 
-	req, err := http.NewRequest("POST", authurl(addr, "/v1/auth/userpass/login/%s", username),
+	req, err := http.NewRequest("POST", authurl(addr, "/v1/auth/%s/login/%s", path, username),
 		strings.NewReader(string(b)))
 	if err != nil {
 		return "", err

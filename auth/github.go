@@ -11,7 +11,12 @@ import (
 	"github.com/starkandwayne/safe/prompt"
 )
 
-func Github(addr string) (string, error) {
+func Github(addr, path string) (string, error) {
+	path = strings.Trim(path, "/")
+	if path == "" {
+		path = "github"
+	}
+
 	access := prompt.Secure("Github Personal Access Token: ")
 
 	body := struct {
@@ -22,7 +27,7 @@ func Github(addr string) (string, error) {
 		return "", err
 	}
 
-	req, err := http.NewRequest("POST", authurl(addr, "/v1/auth/github/login"),
+	req, err := http.NewRequest("POST", authurl(addr, "/v1/auth/%s/login", path),
 		strings.NewReader(string(b)))
 	if err != nil {
 		return "", err

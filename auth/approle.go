@@ -8,7 +8,12 @@ import (
 	"github.com/starkandwayne/safe/prompt"
 )
 
-func AppRole(addr string) (string, error) {
+func AppRole(addr, path string) (string, error) {
+	path = strings.Trim(path, "/")
+	if path == "" {
+		path = "approle"
+	}
+
 	role_id := prompt.Normal("Role ID: ")
 	secret_id := prompt.Secure("Secret ID: ")
 
@@ -21,7 +26,7 @@ func AppRole(addr string) (string, error) {
 		return "", err
 	}
 
-	req, err := http.NewRequest("POST", authurl(addr, "/v1/auth/approle/login"),
+	req, err := http.NewRequest("POST", authurl(addr, "/v1/auth/%s/login", path),
 		strings.NewReader(string(b)))
 	if err != nil {
 		return "", err

@@ -8,7 +8,12 @@ import (
 	"github.com/starkandwayne/safe/prompt"
 )
 
-func LDAP(addr string) (string, error) {
+func LDAP(addr, path string) (string, error) {
+	path = strings.Trim(path, "/")
+	if path == "" {
+		path = "ldap"
+	}
+
 	username := prompt.Normal("LDAP username: ")
 	password := prompt.Secure("Password: ")
 
@@ -20,7 +25,7 @@ func LDAP(addr string) (string, error) {
 		return "", err
 	}
 
-	req, err := http.NewRequest("POST", authurl(addr, "/v1/auth/ldap/login/%s", username),
+	req, err := http.NewRequest("POST", authurl(addr, "/v1/auth/%s/login/%s", path, username),
 		strings.NewReader(string(b)))
 	if err != nil {
 		return "", err
