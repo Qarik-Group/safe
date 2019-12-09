@@ -30,6 +30,10 @@ func authenticate(req *http.Request) (string, error) {
 		return "", fmt.Errorf("Error setting up proxy: %s", err)
 	}
 
+	if os.Getenv("VAULT_NAMESPACE") != "" {
+		req.Header.Set("X-Vault-Namespace", strings.Trim(os.Getenv("VAULT_NAMESPACE"), "/")+"/")
+	}
+
 	client := &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{

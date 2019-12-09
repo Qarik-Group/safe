@@ -10,3 +10,7 @@
   ls` with target URL `https://myvault.com/foo` will query
   `https://myvault.com/foo/v1/secret` (sort of, but it works as a visual
   example).
+
+# Bug Fixes
+
+* The auth commands now set the proper header if `--namespace` is set on the target.
