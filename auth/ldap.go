@@ -2,7 +2,10 @@ package auth
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"net/http/httputil"
+	"os"
 	"strings"
 
 	"github.com/starkandwayne/safe/prompt"
@@ -31,5 +34,9 @@ func LDAP(addr, path string) (string, error) {
 		return "", err
 	}
 
+	if shouldDebug() {
+		r, _ := httputil.DumpRequest(req, true)
+		fmt.Fprintf(os.Stderr, "Request:\n%s\n----------------\n", r)
+	}
 	return authenticate(req)
 }
