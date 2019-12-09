@@ -6,6 +6,16 @@ import (
 	"time"
 )
 
+//SetAuthToken provides a thread-safe way to set the auth token for the client.
+//Setting AuthToken directly is still valid, but may race if a coroutine can
+//possibly make a request with the client while the AuthToken is being written
+//to. This function handles a mutex which avoids that.
+func (v *Client) SetAuthToken(token string) {
+	v.tokenLock.Lock()
+	v.AuthToken = token
+	v.tokenLock.Unlock()
+}
+
 //AuthOutput is the general structure as returned by AuthX functions. The
 //Metadata member type is determined by the specific Auth function. Note that
 //the Vault must be initialized and unsealed in order to use authentication
