@@ -312,6 +312,8 @@ resource_types:
 resources:
   - name: git
     type: git
+    check_every: 60m
+    webhook_token: ((webhook.token))
     source:
       uri:         (( grab meta.github.uri ))
       branch:      (( grab meta.github.branch ))
@@ -340,12 +342,15 @@ resources:
       initial_version:   (( grab meta.initial_version || "0.0.1" ))
 
   - name: notify
+    check_every: 24h
     type: slack-notification
     source:
       url: (( grab meta.slack.webhook ))
 
   - name: github
     type: github-release
+    check_every: 60m
+    webhook_token: ((webhook.token))
     source:
       user:         (( grab meta.github.owner ))
       repository:   (( grab meta.github.repo ))
@@ -353,6 +358,8 @@ resources:
 
   - name: git-pull-requests
     type: pull-request
+    check_every: 60m
+    webhook_token: ((webhook.token))
     source:
       access_token: (( grab meta.github.access_token ))
       private_key:  (( grab meta.github.private_key ))
