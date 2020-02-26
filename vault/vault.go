@@ -1139,5 +1139,16 @@ func (v *Vault) SetURL(u string) {
 	if err != nil {
 		panic(fmt.Sprintf("Could not parse Vault URL: %s", err))
 	}
+
+	//The default port for Vault is typically 8200 (which is the VaultKV default),
+	// but safe has historically ignored that and used the default http or https
+	// port, depending on which was specified as the scheme
+	if vaultURL.Port() == "" {
+		port := ":80"
+		if strings.ToLower(vaultURL.Scheme) == "https" {
+			port = ":443"
+		}
+		vaultURL.Host = vaultURL.Host + port
+	}
 	v.client.Client.VaultURL = vaultURL
 }
