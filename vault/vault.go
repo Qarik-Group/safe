@@ -20,6 +20,7 @@ import (
 
 type Vault struct {
 	client *vaultkv.KV
+	debug  bool
 }
 
 type VaultConfig struct {
@@ -86,6 +87,7 @@ func NewVault(conf VaultConfig) (*Vault, error) {
 				return ret
 			}(),
 		}).NewKV(),
+		debug: shouldDebug(),
 	}, nil
 }
 
