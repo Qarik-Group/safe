@@ -3564,7 +3564,7 @@ The following options are recognized:
 			return err
 		}
 
-		fmt.Printf("Reissued x509 certificate at %s - expiry set to %v\n\n", args[0], cert.Certificate.NotAfter)
+		fmt.Printf("Reissued x509 certificate at %s - expiry set to %s\n\n", args[0], cert.ExpiryString())
 
 		return nil
 	})
@@ -3662,7 +3662,7 @@ The following options are recognized:
 			return err
 		}
 
-		fmt.Printf("\nRenewed x509 certificate at %s - expiry set to %v\n\n", args[0], cert.Certificate.NotAfter)
+		fmt.Printf("\nRenewed x509 certificate at %s - expiry set to %s\n\n", args[0], cert.ExpiryString())
 		return nil
 	})
 

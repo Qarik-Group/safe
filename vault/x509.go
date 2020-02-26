@@ -616,3 +616,7 @@ func (c *X509) FormatSerial() string {
 	//cutoff last colon
 	return string(ret[:59])
 }
+
+func (c *X509) ExpiryString() string {
+	return c.Certificate.NotAfter.Format("Jan 02 2006 15:04 MST")
+}
