@@ -60,17 +60,11 @@ func connect(auth bool) *vault.Vault {
 	}
 
 	conf := vault.VaultConfig{
-		URL:        os.Getenv("VAULT_ADDR"),
+		URL:        getVaultURL(),
 		Token:      os.Getenv("VAULT_TOKEN"),
 		Namespace:  os.Getenv("VAULT_NAMESPACE"),
 		SkipVerify: shouldSkipVerify(),
 		CACerts:    caCertPool,
-	}
-	if conf.URL == "" {
-		fmt.Fprintf(os.Stderr, "@R{You are not targeting a Vault.}\n")
-		fmt.Fprintf(os.Stderr, "Try @C{safe target http://your-vault alias}\n")
-		fmt.Fprintf(os.Stderr, " or @C{safe target alias}\n")
-		os.Exit(1)
 	}
 
 	if auth && conf.Token == "" {
@@ -89,6 +83,18 @@ func connect(auth bool) *vault.Vault {
 		os.Exit(1)
 	}
 	return v
+}
+
+//Exits program with error if no Vault targeted
+func getVaultURL() string {
+	ret := os.Getenv("VAULT_ADDR")
+	if ret == "" {
+		fmt.Fprintf(os.Stderr, "@R{You are not targeting a Vault.}\n")
+		fmt.Fprintf(os.Stderr, "Try @C{safe target http://your-vault alias}\n")
+		fmt.Fprintf(os.Stderr, " or @C{safe target alias}\n")
+		os.Exit(1)
+	}
+	return ret
 }
 
 type Options struct {
@@ -1397,6 +1403,7 @@ Flags:
 		Type: AdministrativeCommand,
 	}, func(command string, args ...string) error {
 		cfg := rc.Apply(opt.UseTarget)
+		_ = getVaultURL()
 
 		method := "token"
 		if len(args) > 0 {
