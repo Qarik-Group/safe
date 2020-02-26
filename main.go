@@ -345,14 +345,14 @@ func main() {
 @G{[PROXYING]}
   @B{HTTP_PROXY}     The proxy to use for HTTP requests.
   @B{HTTPS_PROXY}    The proxy to use for HTTPS requests.
-  @B{SAFE_ALL_PROXY} The proxy to use for both HTTP and HTTPS requests. 
+  @B{SAFE_ALL_PROXY} The proxy to use for both HTTP and HTTPS requests.
                  Overrides HTTP_PROXY and HTTPS_PROXY.
   @B{NO_PROXY}       A comma-separated list of domains to not use proxies for.
-  @B{SAFE_KNOWN_HOSTS_FILE} 
+  @B{SAFE_KNOWN_HOSTS_FILE}
                  The location of your known hosts file, used for
                  'ssh+socks5://' proxying. Uses '${HOME}/.ssh/known_hosts'
                  by default.
-  @B{SAFE_SKIP_HOST_KEY_VALIDATION} 
+  @B{SAFE_SKIP_HOST_KEY_VALIDATION}
                  If set, 'ssh+socks5://' proxying will skip host key validation
                  validation of the remote ssh server.
 
@@ -365,7 +365,7 @@ func main() {
   'ssh+socks5://' will open an SSH tunnel to the given server, then will start a
   local SOCKS5 proxy temporarily which sends its traffic through the SSH tunnel.
   Because this requires an SSH connection, some extra information is required.
-  This type of proxy should be specified in the form 
+  This type of proxy should be specified in the form
 
       ssh+socks5://<user>@<hostname>:<port>/<path-to-private-key>
   or  ssh+socks5://<user>@<hostname>:<port>?private-key=<path-to-private-key
@@ -457,7 +457,7 @@ func main() {
 
 	r.Dispatch("target", &Help{
 		Summary: "Target a new Vault, or set your current Vault target",
-		Description: `Target a new Vault if URL and ALIAS are provided, or set 
+		Description: `Target a new Vault if URL and ALIAS are provided, or set
 your current Vault target if just ALIAS is given. If the single argument form
 if provided, the following flags are valid:
 
@@ -969,8 +969,8 @@ which can be quite handy.
 
 By default, the seal keys will also be stored in the Vault itself,
 unless you specify the --no-persist flag.  They will be written to
-secret/vault/seal/keys, as key1, key2, ... keyN. Note that if 
---sealed is also set, this option is ignored (since the Vault will 
+secret/vault/seal/keys, as key1, key2, ... keyN. Note that if
+--sealed is also set, this option is ignored (since the Vault will
 remain sealed).
 
 In more recent versions of Vault, the "secret" mount is not mounted
@@ -1871,7 +1871,7 @@ paths/keys.
 		Usage:   "safe ls [-1|-q] [PATH ...]",
 		Type:    NonDestructiveCommand,
 		Description: `
-	Specifying the -1 flag will print one result per line.  
+	Specifying the -1 flag will print one result per line.
 	Specifying the -q flag will show secrets which have been marked as deleted.
 `,
 	}, func(command string, args ...string) error {
@@ -2154,7 +2154,7 @@ been irrevocably destroyed. An error also occurs if a key is specified.
 		Type:    DestructiveCommand,
 		Description: `
 -d (--deleted) will handle deleted versions by undeleting them, reading them, and then
-redeleting them.	
+redeleting them.
 `}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
 		if len(args) != 2 {
@@ -2244,7 +2244,7 @@ redeleting them.
 
 	r.Dispatch("export", &Help{
 		Summary: "Export one or more subtrees for migration / backup purposes",
-		Usage:   "safe export [-os] PATH [PATH ...]",
+		Usage:   "safe export [-ad] PATH [PATH ...]",
 		Type:    NonDestructiveCommand,
 		Description: `
 Normally, the export will get only the latest version of each secret, and encode it in a format that is backwards-
@@ -2587,7 +2587,7 @@ and overwrite all versions of the secret at the destination.
 		Type:    DestructiveCommand,
 		Description: `
 Specifying the --deep (-d) flag will cause all living versions to be grabbed from the source
-and overwrite all versions of the secret at the destination. 
+and overwrite all versions of the secret at the destination.
 `}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
 
