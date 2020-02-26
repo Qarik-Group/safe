@@ -90,7 +90,7 @@ func getVaultURL() string {
 	ret := os.Getenv("VAULT_ADDR")
 	if ret == "" {
 		fmt.Fprintf(os.Stderr, "@R{You are not targeting a Vault.}\n")
-		fmt.Fprintf(os.Stderr, "Try @C{safe target http://your-vault alias}\n")
+		fmt.Fprintf(os.Stderr, "Try @C{safe target https://your-vault alias}\n")
 		fmt.Fprintf(os.Stderr, " or @C{safe target alias}\n")
 		os.Exit(1)
 	}
