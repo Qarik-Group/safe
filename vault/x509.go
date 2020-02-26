@@ -58,7 +58,12 @@ func (s Secret) X509(requireKey bool) (*X509, error) {
 		b = rest
 		block, rest = pem.Decode(b)
 		if block == nil {
-			return nil, fmt.Errorf("intermediary #%d: not a valid certificate (failed to decode certificate PEM block)", n)
+			//There might be trailing whitespace or certificate annotations, so we
+			//don't want to return an error here. Not erroring here could
+			//accidentally let a typo slip through (like a missing dash in the PEM
+			//header), but if that becomes an issue, we can do some heuristics to
+			//warn on that.
+			break
 		}
 
 		if block.Type != "CERTIFICATE" {
