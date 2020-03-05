@@ -13,7 +13,9 @@ github.com/jhunt/go-snapshot v0.0.0-20170309042712-92984e0ad8d8 h1:hejiJzi7jtU+j
 github.com/jhunt/go-snapshot v0.0.0-20170309042712-92984e0ad8d8/go.mod h1:oNu1YULLxQcu77xYyAN0Xb2YbEspiSwDSn9kPW2zRKU=
 github.com/mattn/go-isatty v0.0.0-20151211000621-56b76bdf51f7 h1:owMyzMR4QR+jSdlfkX9jPU3rsby4++j99BfbtgVr6ZY=
 github.com/mattn/go-isatty v0.0.0-20151211000621-56b76bdf51f7/go.mod h1:M+lRXTBqGeGNdLjl/ufCoiOlB5xdOkqRJdNxMWT7Zi4=
+github.com/onsi/ginkgo v1.2.1-0.20150802011006-d94e2f400033 h1:t7Tpedq7obbXLhO/FqdHoi6x3qRYXec1HqXtEI5u6yc=
 github.com/onsi/ginkgo v1.2.1-0.20150802011006-d94e2f400033/go.mod h1:lLunBs/Ym6LB5Z9jYTR76FiuTmxDTDusOGeTQH+WWjE=
+github.com/onsi/gomega v0.0.0-20150729153218-a2ab8644e0b6 h1:1s5/t1E2BSRXJSSeU9U3n+dlLWj3LXGmaV91UL4LPu0=
 github.com/onsi/gomega v0.0.0-20150729153218-a2ab8644e0b6/go.mod h1:C1qb7wdrVGGVU+Z6iS04AVkA3Q65CEZX59MT0QO5uiA=
 github.com/starkandwayne/goutils v0.0.0-20170530161610-d28cacc19462 h1:0mw7wvcVmoIRvbb8NNH3Z7meWI/aMkcQ4RkbxRY+RMA=
 github.com/starkandwayne/goutils v0.0.0-20170530161610-d28cacc19462/go.mod h1:Py4V645l0xZXsyvSR6WIcsGhNQEiIFDlmJ4Xwd6UCws=

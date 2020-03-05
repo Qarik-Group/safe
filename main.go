@@ -434,14 +434,14 @@ func main() {
 			}
 		}
 
-		current_fmt := fmt.Sprintf("(*) @G{%%-%ds}\t@R{%%s} @Y{%%s}\n", wide)
-		other_fmt := fmt.Sprintf("    %%-%ds\t@R{%%s} %%s\n", wide)
-		has_current := ""
+		currentFmt := fmt.Sprintf("(*) @G{%%-%ds}\t@R{%%s} @Y{%%s}\n", wide)
+		otherFmt := fmt.Sprintf("    %%-%ds\t@R{%%s} %%s\n", wide)
+		hasCurrent := ""
 		if cfg.Current != "" {
-			has_current = " - current target indicated with a (*)"
+			hasCurrent = " - current target indicated with a (*)"
 		}
 
-		fmt.Fprintf(os.Stderr, "\nKnown Vault targets%s:\n", has_current)
+		fmt.Fprintf(os.Stderr, "\nKnown Vault targets%s:\n", hasCurrent)
 		sort.Strings(keys)
 		for _, name := range keys {
 			t := cfg.Vaults[name]
@@ -451,9 +451,9 @@ func main() {
 			} else if strings.HasPrefix(t.URL, "http:") {
 				skip = " (insecure)"
 			}
-			format := other_fmt
+			format := otherFmt
 			if name == cfg.Current {
-				format = current_fmt
+				format = currentFmt
 			}
 			fmt.Fprintf(os.Stderr, format, name, skip, t.URL)
 		}
@@ -1515,13 +1515,12 @@ Flags:
 				return fmt.Errorf("failed to renew %d token(s)", failed)
 			}
 			return nil
+		}
 
-		} else {
-			rc.Apply(opt.UseTarget)
-			v := connect(true)
-			if err := v.RenewLease(); err != nil {
-				return err
-			}
+		rc.Apply(opt.UseTarget)
+		v := connect(true)
+		if err := v.RenewLease(); err != nil {
+			return err
 		}
 		return nil
 	})
@@ -1747,7 +1746,7 @@ paths/keys.
 		// Track errors, paths, keys, values
 		errs := make([]error, 0)
 		results := make(map[string]map[string]string, 0)
-		missing_keys := make(map[string][]string)
+		missingKeys := make(map[string][]string)
 		for _, path := range args {
 			p, k, _ := vault.ParsePath(path)
 			s, err := v.Read(path)
@@ -1756,10 +1755,10 @@ paths/keys.
 			if err != nil {
 				errs = append(errs, err)
 				if k != "" {
-					if _, ok := missing_keys[p]; !ok {
-						missing_keys[p] = make([]string, 0)
+					if _, ok := missingKeys[p]; !ok {
+						missingKeys[p] = make([]string, 0)
 					}
-					missing_keys[p] = append(missing_keys[p], k)
+					missingKeys[p] = append(missingKeys[p], k)
 				}
 				continue
 			}
@@ -1774,8 +1773,8 @@ paths/keys.
 
 		// Handle any errors encountered.  Warn for key request, return error otherwise
 		var err error
-		num_errs := len(errs)
-		if num_errs == 1 {
+		numErrs := len(errs)
+		if numErrs == 1 {
 			err = errs[0]
 		} else if len(errs) > 1 {
 			errStr := "Multiple errors found:"
@@ -1784,7 +1783,7 @@ paths/keys.
 			}
 			err = errors.New(errStr)
 		}
-		if num_errs > 0 {
+		if numErrs > 0 {
 			if opt.Get.KeysOnly {
 				fmt.Fprintf(os.Stderr, "@y{WARNING:} %s\n", err)
 			} else {
@@ -1795,25 +1794,25 @@ paths/keys.
 		// Now that we've collected/collated all the data, format and print it
 		fmt.Printf("---\n")
 		if opt.Get.KeysOnly {
-			printed_paths := make(map[string]bool, 0)
+			printedPaths := make(map[string]bool, 0)
 			for _, path := range args {
 				p, _, _ := vault.ParsePath(path)
-				if printed, _ := printed_paths[p]; printed {
+				if printed, _ := printedPaths[p]; printed {
 					continue
 				}
-				printed_paths[p] = true
+				printedPaths[p] = true
 				result, ok := results[p]
 				if !ok {
 					yml, _ := yaml.Marshal(map[string][]string{p: []string{}})
 					fmt.Printf("%s", string(yml))
 				} else {
-					found_keys := reflect.ValueOf(result).MapKeys()
-					str_keys := make([]string, len(found_keys))
-					for i := 0; i < len(found_keys); i++ {
-						str_keys[i] = found_keys[i].String()
+					foundKeys := reflect.ValueOf(result).MapKeys()
+					strKeys := make([]string, len(foundKeys))
+					for i := 0; i < len(foundKeys); i++ {
+						strKeys[i] = foundKeys[i].String()
 					}
-					sort.Strings(str_keys)
-					yml, _ := yaml.Marshal(map[string][]string{p: str_keys})
+					sort.Strings(strKeys)
+					yml, _ := yaml.Marshal(map[string][]string{p: strKeys})
 					fmt.Printf("%s\n", string(yml))
 				}
 			}

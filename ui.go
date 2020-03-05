@@ -46,17 +46,16 @@ func parseKeyVal(key string, quiet bool) (string, string, bool, error) {
 				ansi.Fprintf(os.Stderr, "%s: <@M{$stdin}\n", l[0])
 			}
 			return l[0], string(b), false, nil
-
-		} else {
-			b, err := ioutil.ReadFile(l[1])
-			if err != nil {
-				return l[0], "", true, fmt.Errorf("Failed to read contents of %s: %s", l[1], err)
-			}
-			if !quiet {
-				ansi.Fprintf(os.Stderr, "%s: <@C{%s}\n", l[0], l[1])
-			}
-			return l[0], string(b), false, nil
 		}
+
+		b, err := ioutil.ReadFile(l[1])
+		if err != nil {
+			return l[0], "", true, fmt.Errorf("Failed to read contents of %s: %s", l[1], err)
+		}
+		if !quiet {
+			ansi.Fprintf(os.Stderr, "%s: <@C{%s}\n", l[0], l[1])
+		}
+		return l[0], string(b), false, nil
 	}
 	return key, "", true, nil
 }
@@ -65,9 +64,8 @@ func pr(label string, confirm bool, secure bool) string {
 	if !confirm {
 		if secure {
 			return prompt.Secure("%s: ", label)
-		} else {
-			return prompt.Normal("%s: ", label)
 		}
+		return prompt.Normal("%s: ", label)
 	}
 
 	for {
