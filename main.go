@@ -3413,6 +3413,13 @@ The following options are recognized:
 			}
 		}
 
+		if len(opt.X509.Issue.KeyUsage) == 0 {
+			opt.X509.Issue.KeyUsage = append(opt.X509.Issue.KeyUsage, "server_auth", "client_auth")
+			if opt.X509.Issue.CA {
+				opt.X509.Issue.KeyUsage = append(opt.X509.Issue.KeyUsage, "key_cert_sign", "crl_sign")
+			}
+		}
+
 		cert, err := vault.NewCertificate(opt.X509.Issue.Subject,
 			uniq(opt.X509.Issue.Name), opt.X509.Issue.KeyUsage,
 			opt.X509.Issue.SigAlgorithm, opt.X509.Issue.Bits)

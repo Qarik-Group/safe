@@ -10,6 +10,7 @@ import (
 	"math/big"
 	"net"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -283,16 +284,95 @@ var signatureAlgorithmLookup = map[string]x509.SignatureAlgorithm{
 	"ecdsa-sha512":  x509.ECDSAWithSHA512,
 }
 
-func translateKeyUsage(input []string) (keyUsage x509.KeyUsage, err error) {
-	var found bool
+func isNoKeyUsage(in string) bool {
+	return in == "none" || in == "no"
+}
 
-	for i, usage := range input {
-		var thisKeyUsage x509.KeyUsage
-		if thisKeyUsage, found = keyUsageLookup[usage]; !found {
-			continue
+func HandleJointKeyUsages(usages []string) (ku x509.KeyUsage, eku []x509.ExtKeyUsage, err error) {
+	for i := range usages {
+		usages[i] = strings.ReplaceAll(
+			strings.ReplaceAll(
+				strings.ToLower(usages[i]), "-", "_",
+			), " ", "_",
+		)
+	}
+
+	sort.Strings(usages)
+	uniqUsages := []string{}
+	if len(usages) > 0 {
+		uniqUsages = append(uniqUsages, usages[0])
+	}
+
+	var hasNoKeyUsage bool
+	for i := 1; i < len(usages); i++ {
+		if usages[i] != usages[i-1] {
+			uniqUsages = append(uniqUsages, usages[i])
+		}
+	}
+
+	usages = uniqUsages
+	for _, usage := range usages {
+		if isNoKeyUsage(usage) {
+			hasNoKeyUsage = true
+		}
+	}
+	if hasNoKeyUsage {
+		if len(usages) > 1 {
+			err = fmt.Errorf("Cannot specify not to have key usages and also to use specific key usages")
 		}
 
-		input[i] = ""
+		return
+	}
+
+	keyUsageStrs, rest := keyUsages(usages)
+	extKeyUsageStrs, rest := extendedKeyUsages(rest)
+	if len(rest) > 0 {
+		err = fmt.Errorf("Unknown key usage string(s): `%s'", strings.Join(rest, "', `"))
+		return
+	}
+
+	ku, err = translateKeyUsage(keyUsageStrs)
+	if err != nil {
+		return
+	}
+
+	eku, err = translateExtendedKeyUsage(extKeyUsageStrs)
+	return
+}
+
+func keyUsages(usages []string) (keyUsages []string, rest []string) {
+	for _, usage := range usages {
+		if _, found := keyUsageLookup[strings.ToLower(usage)]; !found {
+			rest = append(rest, usage)
+		} else {
+			keyUsages = append(keyUsages, usage)
+		}
+	}
+
+	return
+}
+
+func extendedKeyUsages(usages []string) (extKeyUsages []string, rest []string) {
+	for _, usage := range usages {
+		if _, found := extendedKeyUsageLookup[strings.ToLower(usage)]; !found {
+			rest = append(rest, usage)
+		} else {
+			extKeyUsages = append(extKeyUsages, usage)
+		}
+	}
+
+	return
+}
+
+func translateKeyUsage(input []string) (keyUsage x509.KeyUsage, err error) {
+	for _, usage := range input {
+		var thisKeyUsage x509.KeyUsage
+		var found bool
+		if thisKeyUsage, found = keyUsageLookup[usage]; !found {
+			err = fmt.Errorf("`%s' is not a valid key usage", usage)
+			return
+		}
+
 		keyUsage = keyUsage | thisKeyUsage
 	}
 
@@ -300,18 +380,12 @@ func translateKeyUsage(input []string) (keyUsage x509.KeyUsage, err error) {
 }
 
 func translateExtendedKeyUsage(input []string) (extendedKeyUsage []x509.ExtKeyUsage, err error) {
-	var found bool
-
 	for _, extUsage := range input {
 		var thisExtKeyUsage x509.ExtKeyUsage
-		//Was interpreted as a normal key usage
-		if extUsage == "" {
-			continue
-		}
-
+		var found bool
 		if thisExtKeyUsage, found = extendedKeyUsageLookup[extUsage]; !found {
-			err = fmt.Errorf("%s is not a valid x509 key usage", extUsage)
-			break
+			err = fmt.Errorf("`%s' is not a valid extended key usage", extUsage)
+			return
 		}
 		extendedKeyUsage = append(extendedKeyUsage, thisExtKeyUsage)
 	}
@@ -345,18 +419,7 @@ func NewCertificate(subj string, names, keyUsage []string, signatureAlgorithm st
 		return nil, err
 	}
 
-	//Hyphens, underscores, spaces, oh my!
-	for i, _ := range keyUsage {
-		keyUsage[i] = strings.Replace(keyUsage[i], "-", "_", -1)
-		keyUsage[i] = strings.Replace(keyUsage[i], " ", "_", -1)
-	}
-
-	translatedKeyUsage, err := translateKeyUsage(keyUsage)
-	if err != nil {
-		return nil, err
-	}
-
-	translatedExtKeyUsage, err := translateExtendedKeyUsage(keyUsage)
+	ku, eku, err := HandleJointKeyUsages(keyUsage)
 	if err != nil {
 		return nil, err
 	}
@@ -378,8 +441,8 @@ func NewCertificate(subj string, names, keyUsage []string, signatureAlgorithm st
 			DNSNames:           domains,
 			EmailAddresses:     emails,
 			IPAddresses:        ips,
-			KeyUsage:           translatedKeyUsage,
-			ExtKeyUsage:        translatedExtKeyUsage,
+			KeyUsage:           ku,
+			ExtKeyUsage:        eku,
 			/* ExtraExtensions */
 		},
 	}, nil
