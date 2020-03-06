@@ -22,7 +22,7 @@ meta:
     name:   (( param "Please provide the git name for automated commits" ))
 
   go:
-    version: 1.12
+    version: 1.13
     module:  (( concat "github.com/" meta.github.owner "/" meta.github.repo ))
     cmd_module: (( grab meta.go.module ))
     binary:  (( grab meta.github.repo ))
