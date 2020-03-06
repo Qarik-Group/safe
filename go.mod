@@ -11,6 +11,7 @@ require (
 	github.com/jhunt/go-envirotron v0.0.0-20171017043611-8bdb90f72b39
 	github.com/jhunt/go-snapshot v0.0.0-20170309042712-92984e0ad8d8
 	github.com/mattn/go-isatty v0.0.0-20151211000621-56b76bdf51f7
+	github.com/mitchellh/gox v1.0.1 // indirect
 	github.com/onsi/ginkgo v1.2.1-0.20150802011006-d94e2f400033
 	github.com/onsi/gomega v0.0.0-20150729153218-a2ab8644e0b6
 	github.com/starkandwayne/goutils v0.0.0-20170530161610-d28cacc19462
