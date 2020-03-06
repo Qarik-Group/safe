@@ -16,3 +16,9 @@ some of the default flag values for `x509 issue`.
 
 * Key usage strings provided on the command line are now case-insensitive.
 * `generate` was added as a command alias to `gen`.
+
+# Bug Fixes
+
+* Updated help for `target` not to say to use `-s=false`. go-cli apparently won't
+handle that syntax, and so it has been updated to suggest `--no-strongbox` for the
+same functionality.

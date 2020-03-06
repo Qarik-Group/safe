@@ -470,7 +470,7 @@ if provided, the following flags are valid:
 effect if the given URL uses an HTTPS scheme.
 
 -s (--strongbox) specifies that the targeted Vault has a strongbox deployed at
-its IP on port :8484. This is true by default. -s=false will cause commands
+its IP on port :8484. This is true by default. --no-strongbox will cause commands
 that would otherwise use strongbox to run against only the targeted Vault.
 
 -n (--namespace) specifies a Vault Enterprise namespace to run commands against
@@ -481,7 +481,7 @@ PEM-encoded certificate. The given certificate will be trusted as the signing
 certificate to the certificate served by the Vault server. This flag can be
 provided multiple times to provide multiple CA certificates.
 `,
-		Usage: "safe [-k] [-s] [-n] [--ca-cert] target [URL] [ALIAS] | safe target -i",
+		Usage: "safe [-k] [--[no]-strongbox] [-n] [--ca-cert] target [URL] [ALIAS] | safe target -i",
 		Type:  AdministrativeCommand,
 	}, func(command string, args ...string) error {
 		var cfg rc.Config
