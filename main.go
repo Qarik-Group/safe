@@ -241,7 +241,7 @@ type Options struct {
 	Gen struct {
 		Policy string `cli:"-p, --policy"`
 		Length int    `cli:"-l, --length"`
-	} `cli:"gen, auto"`
+	} `cli:"gen, auto, generate"`
 
 	SSH     struct{} `cli:"ssh"`
 	RSA     struct{} `cli:"rsa"`

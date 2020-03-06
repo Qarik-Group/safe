@@ -15,3 +15,4 @@ some of the default flag values for `x509 issue`.
 # Improvements
 
 * Key usage strings provided on the command line are now case-insensitive.
+* `generate` was added as a command alias to `gen`.
