@@ -310,7 +310,6 @@ func main() {
 	opt.Clobber = true
 
 	opt.X509.Issue.Bits = 4096
-	opt.X509.Issue.TTL = "10y"
 
 	opt.Init.Persist = true
 	opt.Rekey.Persist = true
@@ -3431,6 +3430,12 @@ The following options are recognized:
 			cert.MakeCA()
 		}
 
+		if opt.X509.Issue.TTL == "" {
+			opt.X509.Issue.TTL = "2y"
+			if opt.X509.Issue.CA {
+				opt.X509.Issue.TTL = "10y"
+			}
+		}
 		ttl, err := duration(opt.X509.Issue.TTL)
 		if err != nil {
 			return err
