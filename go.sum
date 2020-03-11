@@ -2,6 +2,8 @@ github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5 h1:0CwZNZbxp69SHPd
 github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5/go.mod h1:wHh0iHkYZB8zMSxRWpUBQtwG5a7fFgvEO+odwuTv2gs=
 github.com/cloudfoundry-community/vaultkv v0.0.0-20200226193222-b5a68f66d316 h1:9tQK0ngNRBHpqgH32nr3n20CeS9GR800vF+D0R1HBRc=
 github.com/cloudfoundry-community/vaultkv v0.0.0-20200226193222-b5a68f66d316/go.mod h1:pMz8czjvi3S7Lb7hgAK4J8knpIi+4fK3Bbe+LyzsHus=
+github.com/cloudfoundry-community/vaultkv v0.0.0-20200311151509-343c0e6fc506 h1:o5GNr/sb9Wkxif5MctE5cZekAPB7jbCUhuXwH7uDJWM=
+github.com/cloudfoundry-community/vaultkv v0.0.0-20200311151509-343c0e6fc506/go.mod h1:pMz8czjvi3S7Lb7hgAK4J8knpIi+4fK3Bbe+LyzsHus=
 github.com/ghodss/yaml v0.0.0-20150909031657-73d445a93680/go.mod h1:4dBDuWmgqj2HViK6kFavaiC9ZROes6MMH2rRYeMEF04=
 github.com/hashicorp/go-version v1.0.0 h1:21MVWPKDphxa7ineQQTrCU5brh7OuVVAzGOCnnCPtE8=
 github.com/hashicorp/go-version v1.0.0/go.mod h1:fltr4n8CU8Ke44wwGCBoEymUuxUHl09ZGVZPK5anwXA=
