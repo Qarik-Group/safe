@@ -3,6 +3,7 @@ package vault
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha1"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
@@ -640,12 +641,45 @@ func (ca *X509) Sign(x *X509, ttl time.Duration) error {
 
 	x.Certificate.NotBefore = time.Now()
 	x.Certificate.NotAfter = time.Now().Add(ttl)
+
+	x.Certificate.AuthorityKeyId = ca.getKeyID()
+	x.Certificate.SubjectKeyId, _ = getKeyIDFromPublicKey(x.PrivateKey.Public())
 	raw, err := x509.CreateCertificate(rand.Reader, x.Certificate, ca.Certificate, x.PrivateKey.Public(), ca.PrivateKey)
 	if err != nil {
 		return err
 	}
 	x.Certificate.Raw = raw
 	return nil
+}
+
+func (cert *X509) getKeyID() []byte {
+	if len(cert.Certificate.SubjectKeyId) > 0 {
+		return cert.Certificate.SubjectKeyId
+	}
+
+	if cert.Certificate.PublicKey != nil {
+		ret, err := getKeyIDFromPublicKey(cert.Certificate.PublicKey)
+		if err == nil {
+			return ret
+		}
+	}
+	return nil
+}
+
+func getKeyIDFromPublicKey(key interface{}) ([]byte, error) {
+	var ret []byte
+	var err error
+	switch k := key.(type) {
+	case *rsa.PublicKey:
+		kASN1 := x509.MarshalPKCS1PublicKey(k)
+		tmpArray := sha1.Sum(kASN1)
+		ret = tmpArray[:]
+
+	default:
+		err = fmt.Errorf("Unsupported public key algorithm")
+	}
+
+	return ret, err
 }
 
 func (ca *X509) Revoke(cert *X509) {
