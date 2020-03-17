@@ -3366,12 +3366,12 @@ The following options are recognized:
                       'data_encipherment', 'key_agreement', 'key_cert_sign',
                       'crl_sign', 'encipher_only', or 'decipher_only'. Valid
                       extended key usages are 'client_auth', 'server_auth', 'code_signing',
-											'email_protection', or 'timestamping'. The default extended
-											key usages are 'server_auth' and 'client_auth'. CA certs
-											will additionally have the default key usages of key_cert_sign
-											and crl_sign. Specifying any key usages manually will override
-											all of these defaults. To specify no key usages, add 'no' as the
-											only key usage.
+                      'email_protection', or 'timestamping'. The default extended
+                      key usages are 'server_auth' and 'client_auth'. CA certs
+                      will additionally have the default key usages of key_cert_sign
+                      and crl_sign. Specifying any key usages manually will override
+                      all of these defaults. To specify no key usages, add 'no' as the
+                      only key usage.
 
   -l, --sig-algorithm The algorithm that the certificate will be signed
                       with. Valid values are md5-rsa, sha1-rsa, sha256-rsa
