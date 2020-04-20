@@ -282,16 +282,18 @@ type Options struct {
 		} `cli:"revoke"`
 
 		Renew struct {
-			SignedBy     string `cli:"-i, --signed-by"`
-			TTL          string `cli:"-t, --ttl"`
-			SigAlgorithm string `cli:"-l, --sig-algorithm"`
+			SignedBy     string   `cli:"-i, --signed-by"`
+			TTL          string   `cli:"-t, --ttl"`
+			KeyUsage     []string `cli:"-u, --key-usage"`
+			SigAlgorithm string   `cli:"-l, --sig-algorithm"`
 		} `cli:"renew"`
 
 		Reissue struct {
-			Bits         int    `cli:"-b, --bits"`
-			SignedBy     string `cli:"-i, --signed-by"`
-			TTL          string `cli:"-t, --ttl"`
-			SigAlgorithm string `cli:"-l, --sig-algorithm"`
+			Bits         int      `cli:"-b, --bits"`
+			SignedBy     string   `cli:"-i, --signed-by"`
+			TTL          string   `cli:"-t, --ttl"`
+			KeyUsage     []string `cli:"-u, --key-usage"`
+			SigAlgorithm string   `cli:"-l, --sig-algorithm"`
 		} `cli:"reissue"`
 
 		Show struct {
@@ -3494,6 +3496,19 @@ The following options are recognized:
                       Defaults to the last TTL used to issue or renew
                       the certificate.
 
+  -u, --key-usage     An x509 key usage or extended key usage. Can be specified
+                      once for each desired usage. Valid key usage values are:
+                      'digital_signature', 'non_repudiation', 'key_encipherment',
+                      'data_encipherment', 'key_agreement', 'key_cert_sign',
+                      'crl_sign', 'encipher_only', or 'decipher_only'. Valid
+                      extended key usages are 'client_auth', 'server_auth', 'code_signing',
+                      'email_protection', or 'timestamping'. The default extended
+                      key usages are 'server_auth' and 'client_auth'. CA certs
+                      will additionally have the default key usages of key_cert_sign
+                      and crl_sign. Specifying any key usages manually will override
+                      all of these defaults. To specify no key usages, add 'no' as the
+											only key usage.
+
   -l, --sig-algorithm The algorithm that the certificate will be signed
                       with. Valid values are md5-rsa, sha1-rsa, sha256-rsa
                       sha384-rsa, sha512-rsa, sha256-rsapss, sha384-rsapss,
@@ -3523,6 +3538,17 @@ The following options are recognized:
 		if err != nil {
 			return err
 		}
+
+		if len(opt.X509.Renew.KeyUsage) > 0 {
+			keyUsage, extKeyUsage, err := vault.HandleJointKeyUsages(opt.X509.Renew.KeyUsage)
+			if err != nil {
+				return err
+			}
+
+			cert.Certificate.KeyUsage = keyUsage
+			cert.Certificate.ExtKeyUsage = extKeyUsage
+		}
+
 		if opt.X509.Reissue.SigAlgorithm != "" {
 			sigAlgo, err := vault.TranslateSignatureAlgorithm(opt.X509.Reissue.SigAlgorithm)
 			if err != nil {
@@ -3606,6 +3632,19 @@ The following options are recognized:
                       Defaults to the last TTL used to issue or renew
                       the certificate.
 
+  -u, --key-usage     An x509 key usage or extended key usage. Can be specified
+                      once for each desired usage. Valid key usage values are:
+                      'digital_signature', 'non_repudiation', 'key_encipherment',
+                      'data_encipherment', 'key_agreement', 'key_cert_sign',
+                      'crl_sign', 'encipher_only', or 'decipher_only'. Valid
+                      extended key usages are 'client_auth', 'server_auth', 'code_signing',
+                      'email_protection', or 'timestamping'. The default extended
+                      key usages are 'server_auth' and 'client_auth'. CA certs
+                      will additionally have the default key usages of key_cert_sign
+                      and crl_sign. Specifying any key usages manually will override
+                      all of these defaults. To specify no key usages, add 'no' as the
+											only key usage.
+
   -l, --sig-algorithm The algorithm that the certificate will be signed
                       with. Valid values are md5-rsa, sha1-rsa, sha256-rsa
                       sha384-rsa, sha512-rsa, sha256-rsapss, sha384-rsapss,
@@ -3634,6 +3673,16 @@ The following options are recognized:
 		cert, err := s.X509(true)
 		if err != nil {
 			return err
+		}
+
+		if len(opt.X509.Renew.KeyUsage) > 0 {
+			keyUsage, extKeyUsage, err := vault.HandleJointKeyUsages(opt.X509.Renew.KeyUsage)
+			if err != nil {
+				return err
+			}
+
+			cert.Certificate.KeyUsage = keyUsage
+			cert.Certificate.ExtKeyUsage = extKeyUsage
 		}
 
 		if opt.X509.Renew.SigAlgorithm != "" {
