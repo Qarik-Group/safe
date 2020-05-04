@@ -299,28 +299,36 @@ func writeKnownHosts(knownHostsFile, hostname string, key ssh.PublicKey) error {
 	if err != nil {
 		return fmt.Errorf("Could not open `%s' for reading: %s", knownHostsFile, err)
 	}
-	//Let's make sure we're writing to a new line...
-	_, err = f.Seek(-1, 2)
+
+	fileInfo, err := f.Stat()
 	if err != nil {
-		return fmt.Errorf("Error when seeking to end of `%s': %s", knownHostsFile, err)
+		return fmt.Errorf("Could no retrieve info for file `%s'")
 	}
 
-	lastByte := make([]byte, 1)
-	_, err = f.Read(lastByte)
-	if err != nil {
-		return fmt.Errorf("Error when reading from `%s': %s", knownHostsFile, err)
-	}
-
-	if !bytes.Equal(lastByte, []byte("\n")) {
-		//Need to append a newline
-		_, err = f.Write([]byte("\n"))
+	if fileInfo.Size() != 0 {
+		//Let's make sure we're writing to a new line...
+		_, err := f.Seek(-1, 2)
 		if err != nil {
-			return fmt.Errorf("Error when writing to `%s': %s", knownHostsFile, err)
+			return fmt.Errorf("Error when seeking to end of `%s': %s", knownHostsFile, err)
+		}
+
+		lastByte := make([]byte, 1)
+		_, err = f.Read(lastByte)
+		if err != nil {
+			return fmt.Errorf("Error when reading from `%s': %s", knownHostsFile, err)
+		}
+
+		if !bytes.Equal(lastByte, []byte("\n")) {
+			//Need to append a newline
+			_, err = f.Write([]byte("\n"))
+			if err != nil {
+				return fmt.Errorf("Error when writing to `%s': %s", knownHostsFile, err)
+			}
 		}
 	}
 
 	newKnownHostsLine := knownhosts.Line([]string{normalizedHostname}, key)
-	_, err = f.WriteString(newKnownHostsLine)
+	_, err = f.WriteString(newKnownHostsLine + "\n")
 	if err != nil {
 		return fmt.Errorf("Error when writing to `%s': %s", knownHostsFile, err)
 	}
