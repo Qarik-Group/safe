@@ -1,6 +1,6 @@
 module github.com/starkandwayne/safe
 
-go 1.13
+go 1.14
 
 require (
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
@@ -16,9 +16,9 @@ require (
 	github.com/onsi/gomega v0.0.0-20150729153218-a2ab8644e0b6
 	github.com/starkandwayne/goutils v0.0.0-20170530161610-d28cacc19462
 	github.com/tredoe/osutil v0.0.0-20161130133508-7d3ee1afa71c
-	golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2
-	golang.org/x/net v0.0.0-20190603091049-60506f45cf65
-	golang.org/x/sys v0.0.0-20190215142949-d0b11bdaac8a
-	golang.org/x/text v0.3.1-0.20180617084112-5cec4b58c438
+	golang.org/x/crypto v0.0.0-20200429183012-4b2356b1ed79
+	golang.org/x/net v0.0.0-20200501053045-e0ff5e5a1de5
+	golang.org/x/sys v0.0.0-20200501145240-bc7a7d42d5c3
+	golang.org/x/text v0.3.2
 	gopkg.in/yaml.v2 v2.0.0-20151201162745-f7716cbe52ba
 )
