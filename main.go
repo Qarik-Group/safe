@@ -145,6 +145,7 @@ type Options struct {
 		As     string `cli:"--as"`
 		File   string `cli:"-f, --file"`
 		Memory bool   `cli:"-m, --memory"`
+		Port   int    `cli:"-p, --port"`
 	} `cli:"local"`
 
 	Init struct {
@@ -739,7 +740,7 @@ The following options are recognized:
 
 	r.Dispatch("local", &Help{
 		Summary: "Run a local vault",
-		Usage:   "safe local (--memory|--file path/to/dir) [--as name]",
+		Usage:   "safe local (--memory|--file path/to/dir) [--as name] [--port port]",
 		Description: `
 Spins up a new Vault instance, on an unused port between 8201 and 9999
 (inclusive).  The new Vault will be initialized with a single seal key,
@@ -766,12 +767,16 @@ subsequent activations of the Vault.
 		}
 
 		var port int
-		for port = 8201; port < 9999; port++ {
-			conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", port))
-			if err != nil {
-				break
+		if opt.Local.Port != 0 {
+			port = opt.Local.Port
+		} else {
+			for port = 8201; port < 9999; port++ {
+				conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+				if err != nil {
+					break
+				}
+				conn.Close()
 			}
-			conn.Close()
 		}
 
 		f, err := ioutil.TempFile("", "kazoo")
