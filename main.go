@@ -742,10 +742,15 @@ The following options are recognized:
 		Summary: "Run a local vault",
 		Usage:   "safe local (--memory|--file path/to/dir) [--as name] [--port port]",
 		Description: `
-Spins up a new Vault instance, on an unused port between 8201 and 9999
-(inclusive).  The new Vault will be initialized with a single seal key,
-targeted with a catchy name, authenticated by the new root token, and
-populated with a secret/handshake!
+Spins up a new Vault instance.
+
+By default, an unused port between 8201 and 9999 (inclusive) will be selected as
+the Vault listening port. You may manually specify a port with the -p/--port 
+flag. 
+
+The new Vault will be initialized with a single seal key, targeted with
+a catchy name, authenticated by the new root token, and populated with a
+secret/handshake!
 
 If you just need a transient Vault for testing or experimentation, and
 don't particularly care about the contents of the Vault, specify the
