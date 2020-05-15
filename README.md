@@ -396,8 +396,8 @@ Import and export can be combined in a pipeline to facilitate
 movement of credentials from one Vault to another, like so:
 
 ```
-safe -t old-vault export secret/sub/tree | \
-  safe -t new-vault import
+safe -T old-vault export secret/sub/tree | \
+  safe -T new-vault import
 ```
 
 ### env
