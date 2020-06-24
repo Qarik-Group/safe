@@ -4,21 +4,21 @@ go 1.14
 
 require (
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
-	github.com/cloudfoundry-community/vaultkv v0.1.0
+	github.com/cloudfoundry-community/vaultkv v0.1.1
 	github.com/jhunt/go-ansi v0.0.0-20180630013815-403d5f0d9ccb
 	github.com/jhunt/go-cli v0.0.0-20170503201019-f04a1744b5e3
 	github.com/jhunt/go-envirotron v0.0.0-20171017043611-8bdb90f72b39
 	github.com/jhunt/go-snapshot v0.0.0-20170309042712-92984e0ad8d8 // indirect
 	github.com/mattn/go-isatty v0.0.0-20151211000621-56b76bdf51f7
+	github.com/mitchellh/gox v1.0.1 // indirect
 	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
-	github.com/onsi/ginkgo v1.2.1-0.20150802011006-d94e2f400033
-	github.com/onsi/gomega v0.0.0-20150729153218-a2ab8644e0b6
+	github.com/onsi/ginkgo v1.13.0
+	github.com/onsi/gomega v1.10.1
 	github.com/starkandwayne/goutils v0.0.0-20170530161610-d28cacc19462
 	github.com/tredoe/osutil v0.0.0-20161130133508-7d3ee1afa71c
 	golang.org/x/crypto v0.0.0-20200429183012-4b2356b1ed79
-	golang.org/x/net v0.0.0-20200501053045-e0ff5e5a1de5
-	golang.org/x/sys v0.0.0-20200501145240-bc7a7d42d5c3 // indirect
+	golang.org/x/net v0.0.0-20200520004742-59133d7f0dd7
 	golang.org/x/text v0.3.2 // indirect
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
-	gopkg.in/yaml.v2 v2.0.0-20151201162745-f7716cbe52ba
+	gopkg.in/yaml.v2 v2.3.0
 )

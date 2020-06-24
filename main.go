@@ -2892,6 +2892,15 @@ NBITS defaults to 2048.
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 
+		//If the command is vault status, we don't want to expose the VAULT_NAMESPACE envvar
+		for _, arg := range args {
+			if !strings.HasPrefix(arg, "-") {
+				if arg == "status" {
+					os.Unsetenv("VAULT_NAMESPACE")
+				}
+				break
+			}
+		}
 		cmd.Env = os.Environ()
 
 		//Make sure we don't accidentally specify a http_proxy and a HTTP_PROXY
