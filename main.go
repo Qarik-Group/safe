@@ -3902,7 +3902,7 @@ prints out information about a certificate, including:
 			}
 			if cert.KeyUsage&x509.KeyUsageDataEncipherment != 0 {
 				n++
-				fmt.Printf("    - @C{data-encupherment}  can be used to encrypt user data directly.\n")
+				fmt.Printf("    - @C{data-encipherment}  can be used to encrypt user data directly.\n")
 			}
 			if cert.KeyUsage&x509.KeyUsageKeyAgreement != 0 {
 				n++
