@@ -805,35 +805,20 @@ func convertMountpoint(o interface{}) (mountpoint, bool) {
 }
 
 func (v *Vault) Mounts(typ string) ([]string, error) {
-	res, err := v.Curl("GET", "sys/mounts", nil)
+	mounts, err := v.client.Client.ListMounts()
 	if err != nil {
 		return nil, err
 	}
 
-	body, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return nil, err
-	}
+	ret := []string{}
 
-	if res.StatusCode != 200 {
-		return nil, DecodeErrorResponse(body)
-	}
-
-	mm := make(map[string]interface{})
-	if err := json.Unmarshal(body, &mm); err != nil {
-		return nil, fmt.Errorf("Received invalid JSON '%s' from Vault: %s\n",
-			body, err)
-	}
-
-	l := make([]string, 0)
-	for k, m := range mm {
-		if mount, ok := convertMountpoint(m); ok {
-			if typ == "" || mount.Type == typ {
-				l = append(l, strings.TrimSuffix(k, "/")+"/")
-			}
+	for name, mountInfo := range mounts {
+		if mountInfo.Type == typ {
+			ret = append(ret, strings.TrimSuffix(name, "/")+"/")
 		}
 	}
-	return l, nil
+
+	return ret, nil
 }
 
 func (v *Vault) IsMounted(typ, path string) (bool, error) {
