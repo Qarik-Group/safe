@@ -1369,10 +1369,12 @@ written to STDOUT instead of STDERR to make it easier to consume.
 				Addr  string `json:"VAULT_ADDR"`
 				Token string `json:"VAULT_TOKEN,omitempty"`
 				Skip  string `json:"VAULT_SKIP_VERIFY,omitempty"`
+				NS    string `json:"VAULT_NAMESPACE,omitempty"`
 			}{
 				Addr:  vars["VAULT_ADDR"],
 				Token: vars["VAULT_TOKEN"],
 				Skip:  vars["VAULT_SKIP_VERIFY"],
+				NS:    vars["VAULT_NAMESPACE"],
 			}
 			b, err := json.Marshal(jsonEnv)
 			if err != nil {
