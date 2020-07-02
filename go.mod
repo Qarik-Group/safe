@@ -18,7 +18,6 @@ require (
 	github.com/tredoe/osutil v0.0.0-20161130133508-7d3ee1afa71c
 	golang.org/x/crypto v0.0.0-20200429183012-4b2356b1ed79
 	golang.org/x/net v0.0.0-20200520004742-59133d7f0dd7
-	golang.org/x/text v0.3.2 // indirect
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
 	gopkg.in/yaml.v2 v2.3.0
 )
