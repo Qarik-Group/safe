@@ -885,6 +885,23 @@ listener "tcp" {
 
 		rc.Apply("")
 		v := connect(false)
+
+		const maxStartupWait = 5 * time.Second
+		const betweenChecksWait = 250 * time.Millisecond
+		startupCheckBeginTime := time.Now()
+		for {
+			_, err := v.Sealed()
+			if err == nil {
+				break
+			}
+
+			if time.Since(startupCheckBeginTime) > maxStartupWait {
+				die(fmt.Errorf("Timed out waiting for Vault to begin listening: %s", err))
+			}
+
+			time.Sleep(betweenChecksWait)
+		}
+
 		token := ""
 		if len(keys) == 0 {
 			keys, _, err = v.Init(1, 1)
