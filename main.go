@@ -407,20 +407,24 @@ func main() {
 		cfg := rc.Apply(opt.UseTarget)
 		if opt.Targets.JSON {
 			type vault struct {
-				Name   string `json:"name"`
-				URL    string `json:"url"`
-				Verify bool   `json:"verify"`
+				Name      string `json:"name"`
+				URL       string `json:"url"`
+				Verify    bool   `json:"verify"`
+				Namespace string `json:"namespace,omitempty"`
+				Strongbox bool   `json:"strongbox"`
 			}
 			vaults := make([]vault, 0)
 
 			for name, details := range cfg.Vaults {
 				vaults = append(vaults, vault{
-					Name:   name,
-					URL:    details.URL,
-					Verify: !details.SkipVerify,
+					Name:      name,
+					URL:       details.URL,
+					Verify:    !details.SkipVerify,
+					Namespace: details.Namespace,
+					Strongbox: !details.NoStrongbox,
 				})
 			}
-			b, err := json.Marshal(vaults)
+			b, err := json.MarshalIndent(vaults, "", "  ")
 			if err != nil {
 				return err
 			}
