@@ -1493,7 +1493,15 @@ Flags:
 			return fmt.Errorf("Unrecognized authentication method '%s'", method)
 		}
 
+		//This handles saving the token to the correct target when using the -T
+		// flag to use a different target
+		currentTarget := cfg.Current
+		err = cfg.SetCurrent(target, false)
+		if err != nil {
+			return fmt.Errorf("Could not find target with name `%s'")
+		}
 		cfg.SetToken(token)
+		cfg.SetCurrent(currentTarget, false)
 		return cfg.Write()
 	})
 
