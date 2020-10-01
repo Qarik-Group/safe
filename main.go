@@ -132,6 +132,7 @@ type Options struct {
 
 	Auth struct {
 		Path string `cli:"-p, --path"`
+		JSON bool   `cli:"--json"`
 	} `cli:"auth, login"`
 
 	Logout struct{} `cli:"logout"`
@@ -1423,12 +1424,14 @@ github    Provide a Github personal access (oauth) token.
 ldap      Provide LDAP user credentials.
 userpass  Provide a username and password registered with the UserPass backend.
 approle   Provide a client ID and client secret registered with the AppRole backend.
+status    Get information about current authentication status
 
 Flags:
 	-p, --path  Set the path of the auth backend mountpoint. For those who are
 		          familiar with the API, this is the part that comes after v1/auth.
 		          Defaults to the name of auth type (e.g. "userpass"), which is
-		          the default when creating auth backends with the Vault CLI.
+							the default when creating auth backends with the Vault CLI.
+	-j, --json  For auth status, returns the information as a JSON object.
 `,
 		Type: AdministrativeCommand,
 	}, func(command string, args ...string) error {
@@ -1488,6 +1491,34 @@ Flags:
 				return err
 			}
 			break
+
+		case "status":
+			v := connect(false)
+			tokenInfo, err := v.Client().Client.TokenInfoSelf()
+			var tokenObj TokenStatus
+			if err != nil {
+				if !(vaultkv.IsForbidden(err) || vaultkv.IsNotFound(err)) {
+					return err
+				}
+			} else {
+				tokenObj.info = *tokenInfo
+				tokenObj.valid = true
+			}
+
+			var output string
+			if opt.Auth.JSON {
+				outputBytes, err := json.MarshalIndent(tokenObj, "", "  ")
+				if err != nil {
+					panic("Could not marshal json from TokenStatus object")
+				}
+
+				output = string(append(outputBytes, '\n'))
+			} else {
+				output = tokenObj.String()
+			}
+
+			fmt.Printf(output)
+			return nil
 
 		default:
 			return fmt.Errorf("Unrecognized authentication method '%s'", method)
