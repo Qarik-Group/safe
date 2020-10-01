@@ -1427,11 +1427,11 @@ approle   Provide a client ID and client secret registered with the AppRole back
 status    Get information about current authentication status
 
 Flags:
-	-p, --path  Set the path of the auth backend mountpoint. For those who are
-		          familiar with the API, this is the part that comes after v1/auth.
-		          Defaults to the name of auth type (e.g. "userpass"), which is
-							the default when creating auth backends with the Vault CLI.
-	-j, --json  For auth status, returns the information as a JSON object.
+  -p, --path  Set the path of the auth backend mountpoint. For those who are
+              familiar with the API, this is the part that comes after v1/auth.
+              Defaults to the name of auth type (e.g. "userpass"), which is
+              the default when creating auth backends with the Vault CLI.
+  -j, --json  For auth status, returns the information as a JSON object.
 `,
 		Type: AdministrativeCommand,
 	}, func(command string, args ...string) error {
