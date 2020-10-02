@@ -57,12 +57,14 @@ func (t TokenStatus) MarshalJSON() ([]byte, error) {
 	}
 
 	outStruct := struct {
+		Valid        bool     `json:"valid"`
 		CreationTime int64    `json:"creation_time"`
 		ExpireTime   int64    `json:"expire_time"`
 		Renewable    bool     `json:"renewable"`
 		Policies     []string `json:"policies"`
 		TTL          int64    `json:"ttl"`
 	}{
+		Valid:        t.valid,
 		CreationTime: floorZero(t.info.CreationTime.Unix()),
 		ExpireTime:   floorZero(t.info.ExpireTime.Unix()),
 		Renewable:    t.info.Renewable,
