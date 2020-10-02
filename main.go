@@ -1501,7 +1501,9 @@ Flags:
 			tokenInfo, err := v.Client().Client.TokenInfoSelf()
 			var tokenObj TokenStatus
 			if err != nil {
-				if !(vaultkv.IsForbidden(err) || vaultkv.IsNotFound(err)) {
+				if !(vaultkv.IsForbidden(err) ||
+					vaultkv.IsNotFound(err) ||
+					vaultkv.IsBadRequest(err)) {
 					return err
 				}
 			} else {
