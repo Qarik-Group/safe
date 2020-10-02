@@ -5,9 +5,10 @@ import (
 	"strings"
 	"time"
 
+	"fmt"
+
 	"github.com/cloudfoundry-community/vaultkv"
 	"github.com/jhunt/go-ansi"
-	fmt "github.com/jhunt/go-ansi"
 )
 
 type TokenStatus struct {
