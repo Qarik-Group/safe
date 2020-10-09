@@ -316,24 +316,13 @@ func (v *Vault) verifySecretExists(path string) error {
 	return err
 }
 
-func (v *Vault) verifySecretUndestroyed(path string) error {
-	path = Canonicalize(path)
-	secret, _, version := ParsePath(path)
+func (v *Vault) verifySecretUndestroyed(secret string, version uint64) error {
 	allVersions, err := v.Client().Versions(secret)
 	if err != nil {
 		return err
 	}
 
-	destroyedErr := fmt.Errorf("`%s' is destroyed", path)
-
-	if version == 0 {
-		if allVersions[len(allVersions)-1].Destroyed {
-			return destroyedErr
-		}
-
-		return nil
-	}
-
+	destroyedErr := fmt.Errorf("`%s' version: %d is destroyed", secret, version)
 	firstVersion := allVersions[0].Version
 	if uint(version) < firstVersion {
 		return destroyedErr
@@ -538,17 +527,17 @@ func (v *Vault) Undelete(path string) error {
 		return fmt.Errorf("Cannot undelete specific key (%s)", path)
 	}
 
-	err := v.verifySecretUndestroyed(path)
-	if err != nil {
-		return err
-	}
-
 	if version == 0 {
 		respVersions, err := v.Versions(secret)
 			if err != nil {
 				return err
 		}
 		version = uint64(respVersions[len(respVersions)-1].Version)
+	}
+
+	err := v.verifySecretUndestroyed(secret, version)
+	if err != nil {
+		return err
 	}
 
 	return v.Client().Undelete(secret, []uint{uint(version)})
