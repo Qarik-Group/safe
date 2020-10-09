@@ -543,6 +543,14 @@ func (v *Vault) Undelete(path string) error {
 		return err
 	}
 
+	if version == 0 {
+		respVersions, err := v.Versions(secret)
+			if err != nil {
+				return err
+		}
+		version = uint64(respVersions[len(respVersions)-1].Version)
+	}
+
 	return v.Client().Undelete(secret, []uint{uint(version)})
 }
 
