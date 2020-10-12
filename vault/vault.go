@@ -316,41 +316,6 @@ func (v *Vault) verifySecretExists(path string) error {
 	return err
 }
 
-func (v *Vault) verifySecretUndestroyed(path string) error {
-	path = Canonicalize(path)
-	secret, _, version := ParsePath(path)
-	allVersions, err := v.Client().Versions(secret)
-	if err != nil {
-		return err
-	}
-
-	destroyedErr := fmt.Errorf("`%s' is destroyed", path)
-
-	if version == 0 {
-		if allVersions[len(allVersions)-1].Destroyed {
-			return destroyedErr
-		}
-
-		return nil
-	}
-
-	firstVersion := allVersions[0].Version
-	if uint(version) < firstVersion {
-		return destroyedErr
-	}
-
-	idx := int(uint(version) - firstVersion)
-	if idx >= len(allVersions) {
-		return fmt.Errorf("version %d of `%s' does not yet exist", version, secret)
-	}
-
-	if allVersions[idx].Destroyed {
-		return destroyedErr
-	}
-
-	return nil
-}
-
 //DeleteTree recursively deletes the leaf nodes beneath the given root until
 //the root has no children, and then deletes that.
 func (v *Vault) DeleteTree(root string, opts DeleteOpts) error {
@@ -538,9 +503,28 @@ func (v *Vault) Undelete(path string) error {
 		return fmt.Errorf("Cannot undelete specific key (%s)", path)
 	}
 
-	err := v.verifySecretUndestroyed(path)
+	respVersions, err := v.Versions(secret)
 	if err != nil {
 		return err
+	}
+
+	if version == 0 {
+		version = uint64(respVersions[len(respVersions)-1].Version)
+	}
+
+	destroyedErr := fmt.Errorf("`%s' version: %d is destroyed", secret, version)
+	firstVersion := respVersions[0].Version
+	if uint(version) < firstVersion {
+		return destroyedErr
+	}
+
+	idx := int(uint(version) - firstVersion)
+	if idx >= len(respVersions) {
+		return fmt.Errorf("version %d of `%s' does not yet exist", version, secret)
+	}
+
+	if respVersions[idx].Destroyed {
+		return destroyedErr
 	}
 
 	return v.Client().Undelete(secret, []uint{uint(version)})
