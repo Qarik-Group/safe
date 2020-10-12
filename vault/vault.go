@@ -612,8 +612,16 @@ func (v *Vault) Copy(oldpath, newpath string, opts MoveCopyOpts) error {
 		}
 	}
 
-	srcPath, srcKey, _ := ParsePath(oldpath)
-	dstPath, dstKey, _ := ParsePath(newpath)
+	srcPath, srcKey, srcVersion := ParsePath(oldpath)
+	dstPath, dstKey, dstVersion := ParsePath(newpath)
+
+	if dstVersion != 0 {
+		return fmt.Errorf("Copying a secret to a specific destination version is not supported")
+	}
+
+	if opts.Deep && srcVersion != 0 {
+		return fmt.Errorf("Performing a deep copy of a specified version is not supported")
+	}
 
 	var toWrite []*Secret
 	if srcKey != "" { //Just a single key.
@@ -651,13 +659,28 @@ func (v *Vault) Copy(oldpath, newpath string, opts MoveCopyOpts) error {
 		t, err := v.ConstructSecrets(srcPath, TreeOpts{
 			FetchKeys:           true,
 			GetOnly:             true,
-			FetchAllVersions:    opts.Deep,
+			FetchAllVersions:    opts.Deep || srcVersion != 0,
 			GetDeletedVersions:  opts.Deep && opts.DeletedVersions,
-			AllowDeletedSecrets: opts.Deep,
+			AllowDeletedSecrets: opts.Deep || srcVersion != 0,
 		})
 
 		if err != nil {
 			return err
+		}
+
+		if len(t) == 0 {
+			// Prevent a panic
+			return fmt.Errorf("No valid secrets were found to be copied")
+		}
+
+		if srcVersion != 0 {
+			//Filter results to the specific requested secret
+			for i := range t[0].Versions {
+				if t[0].Versions[i].Number == uint(srcVersion) {
+					t[0].Versions = []SecretVersion{t[0].Versions[i]}
+					break
+				}
+			}
 		}
 
 		err = t[0].Copy(v, dstPath, TreeCopyOpts{Clear: opts.Deep, Pad: opts.Deep})
