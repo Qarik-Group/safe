@@ -2687,6 +2687,10 @@ and overwrite all versions of the secret at the destination.
 			}
 		}
 
+		if opt.Copy.Recurse && (vault.PathHasVersion(args[0]) || vault.PathHasVersion(args[1])) {
+			return fmt.Errorf("Cannot recursively copy a path with specific version")
+		}
+
 		//Don't try to recurse if operating on a key
 		// args[0] is the source path. args[1] is the destination path.
 		if opt.Copy.Recurse && !(vault.PathHasKey(args[0]) || vault.PathHasKey(args[1])) {

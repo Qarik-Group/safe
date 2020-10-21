@@ -51,6 +51,14 @@ func PathHasKey(path string) bool {
 	return key != ""
 }
 
+// PathHasVersion returns true if the given path has a version specified in its
+// syntax.
+// False otherwise.
+func PathHasVersion(path string) bool {
+	_, _, version := ParsePath(path)
+	return version != 0
+}
+
 func Canonicalize(p string) string {
 	p = strings.TrimSuffix(p, "/")
 	p = strings.TrimPrefix(p, "/")
