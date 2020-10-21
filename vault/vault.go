@@ -670,7 +670,7 @@ func (v *Vault) Copy(oldpath, newpath string, opts MoveCopyOpts) error {
 
 		if len(t) == 0 {
 			// Prevent a panic
-			return fmt.Errorf("No valid secrets were found to be copied")
+			return NewSecretNotFoundError(srcPath)
 		}
 
 		if srcVersion != 0 {
