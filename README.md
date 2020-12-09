@@ -386,11 +386,27 @@ standard output.
 
 ### import <export.file
 
-Read an export file (as produced by the `export` subcommand) and
-write all of the secrets contained therein to the same paths
-inside the Vault.  Trees will be imported in an additive nature,
-so existing credentials in the same subtree as imported
-credentials will be left intact.
+Read an export (as produced by the `export` subcommand) from
+standard input, and write all of the secrets contained
+therein to the same paths inside the targeted Vault.  Trees
+will be imported in an additive nature, so existing credentials
+in the same subtree as imported credentials will be left intact.
+
+If you've got an export saved in a file _on-disk_, you can feed
+it to `safe import` using your shell's redirection facilities:
+
+```
+safe import < ./path/to/export.file
+```
+
+You can also use `cat`, in the standard UNIX idiom:
+
+```
+cat ./path/to/export.file | safe import
+```
+
+(_Note:_ storing exports on-disk is considered bad practice, as
+ it leaks your secrets via a shared resource: the filesystem.)
 
 Import and export can be combined in a pipeline to facilitate
 movement of credentials from one Vault to another, like so:
