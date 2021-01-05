@@ -173,7 +173,7 @@ func (x *X509) IntermediarySubject(n int) string {
 	return formatSubject(x.Intermediaries[n].Subject)
 }
 
-func parseSubject(subj string) (pkix.Name, error) {
+func ParseSubject(subj string) (pkix.Name, error) {
 	/* parse subject names that look like this:
 	    /cn=foo.bl/c=us/st=ny/l=buffalo/o=stark & wayne/ou=r&d
 	and  CN=foo.bl,C=us,ST=ny,L=buffalo,O=stark & wayne,OU=r&d
@@ -220,7 +220,7 @@ func parseSubject(subj string) (pkix.Name, error) {
 	return name, nil
 }
 
-func categorizeSANs(in []string) (ips []net.IP, domains, emails []string) {
+func CategorizeSANs(in []string) (ips []net.IP, domains, emails []string) {
 	ips = make([]net.IP, 0)
 	domains = make([]string, 0)
 	emails = make([]string, 0)
@@ -408,12 +408,12 @@ func NewCertificate(subj string, names, keyUsage []string, signatureAlgorithm st
 		return nil, fmt.Errorf("invalid RSA key strength '%d', must be one of: 1024, 2048, 4096", bits)
 	}
 
-	name, err := parseSubject(subj)
+	name, err := ParseSubject(subj)
 	if err != nil {
 		return nil, err
 	}
 
-	ips, domains, emails := categorizeSANs(names)
+	ips, domains, emails := CategorizeSANs(names)
 
 	key, err := rsa.GenerateKey(rand.Reader, bits)
 	if err != nil {
@@ -527,7 +527,7 @@ func (x X509) ValidForEmail(email string) bool {
 }
 
 func (x X509) ValidFor(names ...string) (bool, error) {
-	ips, domains, emails := categorizeSANs(names)
+	ips, domains, emails := CategorizeSANs(names)
 
 	for _, ip := range ips {
 		if !x.ValidForIP(ip) {

@@ -284,6 +284,8 @@ type Options struct {
 		} `cli:"revoke"`
 
 		Renew struct {
+			Subject      string   `cli:"-s, --subj, --subject"`
+			Name         []string `cli:"-n, --name"`
 			SignedBy     string   `cli:"-i, --signed-by"`
 			TTL          string   `cli:"-t, --ttl"`
 			KeyUsage     []string `cli:"-u, --key-usage"`
@@ -291,6 +293,8 @@ type Options struct {
 		} `cli:"renew"`
 
 		Reissue struct {
+			Subject      string   `cli:"-s, --subj, --subject"`
+			Name         []string `cli:"-n, --name"`
 			Bits         int      `cli:"-b, --bits"`
 			SignedBy     string   `cli:"-i, --signed-by"`
 			TTL          string   `cli:"-t, --ttl"`
@@ -3573,6 +3577,21 @@ Reissues an X.509 Certificate with a new key.
 
 The following options are recognized:
 
+  -s, --subject       The subject name for this certificate.
+                      i.e. /cn=www.example.com/c=us/st=ny...
+                      Unlike in x509 issue, the subject will not automatically
+                      take the first SAN - if you want to update it, you will
+                      need to specify this flag explicitly.
+
+  -n, --name          Subject Alternate Name(s) for this
+                      certificate.  These can be domain names,
+                      IP addresses or email address -- safe will
+                      figure out how to properly encode them.
+                      Can (and probably should) be specified
+											more than once. This flag will not append additional SANs,
+											it will act as an exhaustive list in the same way that
+                      it would for a new issue command.
+
   -b, --bits  N       RSA key strength, in bits.  The only valid
                       arguments are 1024 (highly discouraged),
                       2048 and 4096.  Defaults to the last value used
@@ -3634,8 +3653,22 @@ The following options are recognized:
 			return err
 		}
 
-		if len(opt.X509.Renew.KeyUsage) > 0 {
-			keyUsage, extKeyUsage, err := vault.HandleJointKeyUsages(opt.X509.Renew.KeyUsage)
+		if len(opt.X509.Reissue.Name) > 0 {
+			ips, dns, email := vault.CategorizeSANs(uniq(opt.X509.Renew.Name))
+			cert.Certificate.IPAddresses = ips
+			cert.Certificate.DNSNames = dns
+			cert.Certificate.EmailAddresses = email
+		}
+
+		if opt.X509.Reissue.Subject != "" {
+			cert.Certificate.Subject, err = vault.ParseSubject(opt.X509.Reissue.Subject)
+			if err != nil {
+				return err
+			}
+		}
+
+		if len(opt.X509.Reissue.KeyUsage) > 0 {
+			keyUsage, extKeyUsage, err := vault.HandleJointKeyUsages(opt.X509.Reissue.KeyUsage)
 			if err != nil {
 				return err
 			}
@@ -3713,6 +3746,20 @@ The following options are recognized:
 Renew an X.509 Certificate with existing key
 
 The following options are recognized:
+  -s, --subject       The subject name for this certificate.
+                      i.e. /cn=www.example.com/c=us/st=ny...
+                      Unlike in x509 issue, the subject will not automatically
+                      take the first SAN - if you want to update it, you will
+                      need to specify this flag explicitly.
+
+  -n, --name          Subject Alternate Name(s) for this
+                      certificate.  These can be domain names,
+                      IP addresses or email address -- safe will
+                      figure out how to properly encode them.
+                      Can (and probably should) be specified
+                      more than once. This flag will not append additional SANs,
+                      it will act as an exhaustive list in the same way that
+                      it would for a new issue command.
 
   -i, --signed-by   	Path in the Vault where the CA certificate
                       (and signing key) can be found.  If this is not
@@ -3768,6 +3815,20 @@ The following options are recognized:
 		cert, err := s.X509(true)
 		if err != nil {
 			return err
+		}
+
+		if len(opt.X509.Renew.Name) > 0 {
+			ips, dns, email := vault.CategorizeSANs(uniq(opt.X509.Renew.Name))
+			cert.Certificate.IPAddresses = ips
+			cert.Certificate.DNSNames = dns
+			cert.Certificate.EmailAddresses = email
+		}
+
+		if opt.X509.Renew.Subject != "" {
+			cert.Certificate.Subject, err = vault.ParseSubject(opt.X509.Renew.Subject)
+			if err != nil {
+				return err
+			}
 		}
 
 		if len(opt.X509.Renew.KeyUsage) > 0 {
