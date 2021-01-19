@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/asn1"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
@@ -3581,7 +3582,10 @@ The following options are recognized:
                       i.e. /cn=www.example.com/c=us/st=ny...
                       Unlike in x509 issue, the subject will not automatically
                       take the first SAN - if you want to update it, you will
-                      need to specify this flag explicitly.
+											need to specify this flag explicitly. Use caution when
+                      changing the subject of a CA cert, as it will
+                      invalidate the chain of trust between the CA and
+                      certificates it has signed for many client implementations.
 
   -n, --name          Subject Alternate Name(s) for this
                       certificate.  These can be domain names,
@@ -3662,6 +3666,11 @@ The following options are recognized:
 
 		if opt.X509.Reissue.Subject != "" {
 			cert.Certificate.Subject, err = vault.ParseSubject(opt.X509.Reissue.Subject)
+			if err != nil {
+				return err
+			}
+
+			cert.Certificate.RawSubject, err = asn1.Marshal(cert.Certificate.Subject.ToRDNSequence())
 			if err != nil {
 				return err
 			}
@@ -3750,7 +3759,10 @@ The following options are recognized:
                       i.e. /cn=www.example.com/c=us/st=ny...
                       Unlike in x509 issue, the subject will not automatically
                       take the first SAN - if you want to update it, you will
-                      need to specify this flag explicitly.
+                      need to specify this flag explicitly. Use caution when
+                      changing the subject of a CA cert, as it will
+                      invalidate the chain of trust between the CA and
+                      certificates it has signed for many client implementations.
 
   -n, --name          Subject Alternate Name(s) for this
                       certificate.  These can be domain names,
@@ -3826,6 +3838,11 @@ The following options are recognized:
 
 		if opt.X509.Renew.Subject != "" {
 			cert.Certificate.Subject, err = vault.ParseSubject(opt.X509.Renew.Subject)
+			if err != nil {
+				return err
+			}
+
+			cert.Certificate.RawSubject, err = asn1.Marshal(cert.Certificate.Subject.ToRDNSequence())
 			if err != nil {
 				return err
 			}

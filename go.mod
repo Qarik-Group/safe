@@ -10,6 +10,7 @@ require (
 	github.com/jhunt/go-envirotron v0.0.0-20171017043611-8bdb90f72b39
 	github.com/jhunt/go-snapshot v0.0.0-20170309042712-92984e0ad8d8 // indirect
 	github.com/mattn/go-isatty v0.0.0-20151211000621-56b76bdf51f7
+	github.com/mitchellh/gox v1.0.1 // indirect
 	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
 	github.com/onsi/ginkgo v1.13.0
 	github.com/onsi/gomega v1.10.1
