@@ -259,8 +259,8 @@ type Options struct {
 		DataOnly bool `cli:"--data-only"`
 	} `cli:"curl"`
 
-	Uuid struct {
-		Uuid string
+	UUID struct {
+		UUID string
 	} `cli:"uuid"`
 
 	X509 struct {
@@ -2811,7 +2811,7 @@ The following options are recognized:
 	})
 
 	r.Dispatch("uuid", &Help{
-		Summary: "Generate a version 4 uuid value and write it to the specified path and/or key. If no key is provide the key `uuid` is used",
+		Summary: "Generate a new UUIDv4",
 		Usage:   "safe uuid PATH[:KEY]",
 		Type:    NonDestructiveCommand,
 		Description: ``,
@@ -2828,11 +2828,10 @@ The following options are recognized:
 
 		v := connect(true)
 
-		for len(args) > 0 {
 			var path, key string
 			if vault.PathHasKey(args[0]) {
 				path, key, _ = vault.ParsePath(args[0])
-				args = args[1:]
+				
 			} else {
 				path, key = args[0], "uuid"
 				//If the key looks like a full path with a :key at the end, then the user
@@ -2851,9 +2850,9 @@ The following options are recognized:
 				if !opt.Quiet {
 					fmt.Fprintf(os.Stderr, "@R{Cowardly refusing to update} @C{%s:%s} @R{as it is already present in Vault}\n", path, key)
 				}
-				continue
+				return err
 			}
-			err = s.Set(key, stringuuid, true)
+			err = s.Set(key, stringuuid, opt.SkipIfExists)
 			if err != nil {
 				return err
 			}
@@ -2861,7 +2860,7 @@ The following options are recognized:
 			if err = v.Write(path, s); err != nil {
 				return err
 			}
-		}
+		
 		return nil
 	})
 
