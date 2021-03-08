@@ -36,6 +36,8 @@ import (
 	"github.com/starkandwayne/safe/prompt"
 	"github.com/starkandwayne/safe/rc"
 	"github.com/starkandwayne/safe/vault"
+
+	uuid "github.com/pborman/uuid"
 )
 
 var Version string
@@ -256,6 +258,10 @@ type Options struct {
 	Curl struct {
 		DataOnly bool `cli:"--data-only"`
 	} `cli:"curl"`
+
+	UUID struct {
+		UUID string
+	} `cli:"uuid"`
 
 	X509 struct {
 		Validate struct {
@@ -2801,6 +2807,60 @@ The following options are recognized:
 				return err
 			}
 		}
+		return nil
+	})
+
+	r.Dispatch("uuid", &Help{
+		Summary: "Generate a new UUIDv4",
+		Usage:   "safe uuid PATH[:KEY]",
+		Type:    NonDestructiveCommand,
+		Description: ``,
+	}, func(command string, args ...string) error {
+		rc.Apply(opt.UseTarget)
+
+		if len(args) == 0 {
+			r.ExitWithUsage("uuid")
+		}
+
+		u := uuid.NewRandom()
+
+		stringuuid := u.String()
+
+		v := connect(true)
+
+			var path, key string
+			if vault.PathHasKey(args[0]) {
+				path, key, _ = vault.ParsePath(args[0])
+				
+			} else {
+				path, key = args[0], "uuid"
+				//If the key looks like a full path with a :key at the end, then the user
+				//probably botched the args
+				if vault.PathHasKey(key) {
+					return fmt.Errorf("For secret `%s` and key `%s`: key cannot contain a key", path, key)
+				}
+
+			}
+			s, err := v.Read(path)
+			if err != nil && !vault.IsNotFound(err) {
+				return err
+			}
+			exists := (err == nil)
+			if opt.SkipIfExists && exists && s.Has(key) {
+				if !opt.Quiet {
+					fmt.Fprintf(os.Stderr, "@R{Cowardly refusing to update} @C{%s:%s} @R{as it is already present in Vault}\n", path, key)
+				}
+				return err
+			}
+			err = s.Set(key, stringuuid, opt.SkipIfExists)
+			if err != nil {
+				return err
+			}
+
+			if err = v.Write(path, s); err != nil {
+				return err
+			}
+		
 		return nil
 	})
 
