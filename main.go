@@ -1938,17 +1938,35 @@ paths/keys.
 				fmt.Printf("@B{%s}:\n", args[i])
 			}
 
+			const numColumns = 3
+			table := table{}
+
+			table.setHeader("version", "status", "created at")
+
 			for j := range versions {
 				//Destroyed needs to be first because things can come back as both deleted _and_ destroyed.
 				// destroyed is objectively more interesting.
+				statusString := "@G{alive}"
 				if versions[j].Destroyed {
-					fmt.Printf("%d\t@R{destroyed}\n", versions[j].Version)
+					statusString = "@R{destroyed}"
 				} else if versions[j].Deleted {
-					fmt.Printf("%d\t@Y{deleted}\n", versions[j].Version)
-				} else {
-					fmt.Printf("%d\t@G{alive}\n", versions[j].Version)
+					statusString = "@Y{deleted}"
 				}
+
+				createdAtString := "unknown"
+
+				if !versions[j].CreatedAt.IsZero() {
+					createdAtString = versions[j].CreatedAt.Local().Format(time.RFC822)
+				}
+
+				table.addRow(
+					fmt.Sprintf("%d", versions[j].Version),
+					fmt.Sprintf(statusString),
+					createdAtString,
+				)
 			}
+
+			table.print()
 
 			if len(args) > 1 && i != len(args)-1 {
 				fmt.Printf("\n")

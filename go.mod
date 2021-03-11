@@ -4,7 +4,7 @@ go 1.14
 
 require (
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
-	github.com/cloudfoundry-community/vaultkv v0.1.1
+	github.com/cloudfoundry-community/vaultkv v0.2.0
 	github.com/jhunt/go-ansi v0.0.0-20180630013815-403d5f0d9ccb
 	github.com/jhunt/go-cli v0.0.0-20170503201019-f04a1744b5e3
 	github.com/jhunt/go-envirotron v0.0.0-20171017043611-8bdb90f72b39
@@ -12,6 +12,7 @@ require (
 	github.com/mattn/go-isatty v0.0.0-20151211000621-56b76bdf51f7
 	github.com/mitchellh/gox v1.0.1 // indirect
 	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
+	github.com/olekukonko/tablewriter v0.0.5
 	github.com/onsi/ginkgo v1.13.0
 	github.com/onsi/gomega v1.10.1
 	github.com/pborman/uuid v1.2.1
