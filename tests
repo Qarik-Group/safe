@@ -12,10 +12,10 @@ root_token=
 unseal_key=
 
 declare -a versions=(
-  "0.9.6"
-  "1.1.5"
-  "1.2.4"
-  "1.3.2"
+  "1.3.10"
+  "1.4.7"
+  "1.5.7"
+  "1.6.3"
 )
 
 case $OSTYPE in
@@ -636,9 +636,9 @@ EOF
   (run; ./safe versions secret/versions >t/home/got); exitok $? 0
 
   now checking that the output of versions was version 1
-  eq "$(awk '{print $1}' < t/home/got)" 1
+  eq "$(tail -n +2 < t/home/got | awk '{print $1}')" 1
   now checking that the output of versions was labeled as alive
-  eq "$(awk '{print $2}' < t/home/got)" alive
+  eq "$(tail -n +2 < t/home/got | awk '{print $2}')" alive
 
 
    ######  ##     ## ########  ######  ##    ##
