@@ -23,7 +23,7 @@ type Config struct {
 }
 
 type Options struct {
-	ManageVaultToken bool `yaml:"manage_vault_token,omitempty"`
+	ManageVaultToken bool `yaml:"manage_vault_token"`
 }
 
 type Vault struct {
