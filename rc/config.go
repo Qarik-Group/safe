@@ -19,6 +19,11 @@ type Config struct {
 	Version int               `yaml:"version"`
 	Current string            `yaml:"current"`
 	Vaults  map[string]*Vault `yaml:"vaults"`
+	Options Options           `yaml:"options"`
+}
+
+type Options struct {
+	ManageVaultToken bool `yaml:"manage_vault_token"`
 }
 
 type Vault struct {
@@ -148,6 +153,9 @@ func (c *Config) Write() error {
 	b, err = yaml.Marshal(sv)
 	if err != nil {
 		return err
+	}
+	if c.Options.ManageVaultToken {
+		ioutil.WriteFile(fmt.Sprintf("%s/.vault-token", userHomeDir()), []byte(v.Token), 0600)
 	}
 
 	return ioutil.WriteFile(svtoken(), b, 0600)
