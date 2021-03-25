@@ -187,7 +187,7 @@ func (t *table) _calcDisplayWidth(cell string) int {
 
 func (t *table) _formatHeaders() {
 	for colNum := range t.headers {
-		t.headers[colNum] = ansi.Sprintf("@M{%s}", t.headers[colNum])
+		t.headers[colNum] = t._sprintf("@M{%s}", t.headers[colNum])
 	}
 }
 
@@ -218,4 +218,12 @@ func (t *table) _printCell(cell string, spaces int) {
 	}
 
 	os.Stdout.Write(spaceBuf)
+}
+
+func (t *table) _sprintf(f string, args ...interface{}) string {
+	//ansi library doesn't do the isatty logic for its sprintf call, so we
+	// use its fprintf call (which does) to make our own hacky sprintf
+	var outputBuilder strings.Builder
+	ansi.Fprintf(&outputBuilder, f, args...)
+	return outputBuilder.String()
 }
