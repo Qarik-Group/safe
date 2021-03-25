@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"regexp"
 	"strings"
 	"unicode"
 
@@ -221,9 +222,9 @@ func (t *table) _printCell(cell string, spaces int) {
 }
 
 func (t *table) _sprintf(f string, args ...interface{}) string {
-	//ansi library doesn't do the isatty logic for its sprintf call, so we
-	// use its fprintf call (which does) to make our own hacky sprintf
-	var outputBuilder strings.Builder
-	ansi.Fprintf(&outputBuilder, f, args...)
-	return outputBuilder.String()
+	ret := ansi.Sprintf(f, args...)
+	if !ansi.ShouldColorize(os.Stdout) {
+		regexp.MustCompile("\033\\[\\d+(;\\d+)?m").ReplaceAllString(ret, "")
+	}
+	return ret
 }
