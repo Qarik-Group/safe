@@ -2184,19 +2184,19 @@ EOF
 
   testing versions 
   now testing the output of versions
-  (./safe versions secret/versioned >t/home/got); exitok $? 0
+  (./safe versions secret/versioned | tail -n +2 | awk '{ print $1" "$2}' >t/home/got); exitok $? 0
   # The whitespace below between version num and status is a tab
   cat <<'EOF' >t/home/want; diffok
-2	alive
-3	alive
-4	alive
-5	alive
-6	alive
-7	alive
-8	alive
-9	alive
-10	alive
-11	alive
+2 alive
+3 alive
+4 alive
+5 alive
+6 alive
+7 alive
+8 alive
+9 alive
+10 alive
+11 alive
 EOF
 
   testing deleting specific versions
@@ -2208,11 +2208,11 @@ EOF
   now deleting version two
   (./safe delete secret/versioned^2 >/dev/null); exitok $? 0
   now checking the version list
-  (./safe versions secret/versioned >t/home/got); exitok $? 0
+  (./safe versions secret/versioned | tail -n +2 | awk '{ print $1" "$2}' >t/home/got); exitok $? 0
   cat << 'EOF' >t/home/want; diffok
-1	alive
-2	deleted
-3	alive
+1 alive
+2 deleted
+3 alive
 EOF
     
   testing deleting the latest version
@@ -2224,11 +2224,11 @@ EOF
   now deleting the latest version
   (./safe delete secret/versioned >/dev/null); exitok $? 0
   now checking the version list
-  (./safe versions secret/versioned >t/home/got); exitok $? 0
+  (./safe versions secret/versioned | tail -n +2 | awk '{ print $1" "$2}' >t/home/got); exitok $? 0
   cat << 'EOF' >t/home/want; diffok
-1	alive
-2	alive
-3	deleted
+1 alive
+2 alive
+3 deleted
 EOF
     
   
@@ -2241,11 +2241,11 @@ EOF
   now destroying version two
   (./safe delete -D secret/versioned^2 >/dev/null); exitok $? 0
   now checking the version list
-  (./safe versions secret/versioned >t/home/got); exitok $? 0
+  (./safe versions secret/versioned | tail -n +2 | awk '{ print $1" "$2}' >t/home/got); exitok $? 0
   cat << 'EOF' >t/home/want; diffok
-1	alive
-2	destroyed
-3	alive
+1 alive
+2 destroyed
+3 alive
 EOF
 
   testing destroying the latest version
@@ -2257,11 +2257,11 @@ EOF
   now destroying the latest version
   (./safe delete -D secret/versioned >/dev/null); exitok $? 0
   now checking the version list
-  (./safe versions secret/versioned >t/home/got); exitok $? 0
+  (./safe versions secret/versioned | tail -n +2 | awk '{ print $1" "$2}' >t/home/got); exitok $? 0
   cat << 'EOF' >t/home/want; diffok
-1	alive
-2	alive
-3	destroyed
+1 alive
+2 alive
+3 destroyed
 EOF
 
   testing deleting already deleted versions
@@ -2297,11 +2297,11 @@ EOF
   now destroying version two
   (./safe delete -D secret/versioned^2 >/dev/null); exitok $? 0
   now checking the version list
-  (./safe versions secret/versioned >t/home/got); exitok $? 0
+  (./safe versions secret/versioned | tail -n +2 | awk '{ print $1" "$2}' >t/home/got); exitok $? 0
   cat << 'EOF' >t/home/want; diffok
-1	alive
-2	destroyed
-3	alive
+1 alive
+2 destroyed
+3 alive
 EOF
 
   testing destroying already destroyed versions
@@ -2351,12 +2351,12 @@ EOF
   now deleting all versions
   (./safe delete secret/versioned -a); exitok $? 0
   now getting versions metadata
-  (./safe versions secret/versioned >t/home/got); exitok $? 0
+  (./safe versions secret/versioned | tail -n +2 | awk '{ print $1" "$2}' >t/home/got); exitok $? 0
   now checking that all versions are deleted
   cat << 'EOF' >t/home/want; diffok
-1	deleted
-2	deleted
-3	deleted
+1 deleted
+2 deleted
+3 deleted
 EOF
 
 
@@ -2371,12 +2371,12 @@ EOF
   now deleting all versions
   (./safe delete secret/versioned -a); exitok $? 0
   now getting versions metadata
-  (./safe versions secret/versioned >t/home/got); exitok $? 0
+  (./safe versions secret/versioned | tail -n +2 | awk '{ print $1" "$2}' >t/home/got); exitok $? 0
   now checking that all versions are deleted
   cat << 'EOF' >t/home/want; diffok
-1	deleted
-2	deleted
-3	deleted
+1 deleted
+2 deleted
+3 deleted
 EOF
 
   testing destroying all versions
@@ -2427,13 +2427,13 @@ EOF
   now reverting back to version 2
   (./safe revert secret/versioned 2); exitok $? 0
   now retrieving the version list
-  (./safe versions secret/versioned >t/home/got); exitok $? 0
+  (./safe versions secret/versioned | tail -n +2 | awk '{ print $1" "$2}' >t/home/got); exitok $? 0
   now checking that there are four living versions
   cat << 'EOF' >t/home/want; diffok
-1	alive
-2	alive
-3	alive
-4	alive
+1 alive
+2 alive
+3 alive
+4 alive
 EOF
   now getting the latest version of the secret
   (./safe get secret/versioned:key >t/home/got); exitok $? 0
@@ -2451,12 +2451,12 @@ EOF
   now reverting back to version 3
   (./safe revert secret/versioned 3); exitok $? 0
   now retrieving the version list
-  (./safe versions secret/versioned >t/home/got); exitok $? 0
+  (./safe versions secret/versioned | tail -n +2 | awk '{ print $1" "$2}' >t/home/got); exitok $? 0
   now checking that there are three living versions
   cat << 'EOF' >t/home/want; diffok
-1	alive
-2	alive
-3	alive
+1 alive
+2 alive
+3 alive
 EOF
   now getting the latest version of the secret
   (./safe get secret/versioned:key >t/home/got); exitok $? 0
@@ -2474,12 +2474,12 @@ EOF
   now reverting back to version 4
   (./safe revert secret/versioned 4 2>/dev/null); exitok $? 1
   now retrieving the version list
-  (./safe versions secret/versioned >t/home/got); exitok $? 0
+  (./safe versions secret/versioned | tail -n +2 | awk '{ print $1" "$2}' >t/home/got); exitok $? 0
   now checking that there are three living versions
   cat << 'EOF' >t/home/want; diffok
-1	alive
-2	alive
-3	alive
+1 alive
+2 alive
+3 alive
 EOF
   now getting the latest version of the secret
   (./safe get secret/versioned:key >t/home/got); exitok $? 0
@@ -2499,12 +2499,12 @@ EOF
   now reverting back to version 2
   (./safe revert secret/versioned 2 2>/dev/null); exitok $? 1
   now retrieving the version list
-  (./safe versions secret/versioned >t/home/got); exitok $? 0
+  (./safe versions secret/versioned | tail -n +2 | awk '{ print $1" "$2}' >t/home/got); exitok $? 0
   now checking that there are three versions with the correct states
   cat << 'EOF' >t/home/want; diffok
-1	alive
-2	deleted
-3	alive
+1 alive
+2 deleted
+3 alive
 EOF
   now getting the latest version of the secret
   (./safe get secret/versioned:key >t/home/got); exitok $? 0
@@ -2524,13 +2524,13 @@ EOF
   now reverting back to version 2
   (./safe revert secret/versioned 2 -d); exitok $? 0
   now retrieving the version list
-  (./safe versions secret/versioned >t/home/got); exitok $? 0
+  (./safe versions secret/versioned | tail -n +2 | awk '{ print $1" "$2}' >t/home/got); exitok $? 0
   now checking that there are four versions with the correct states
   cat << 'EOF' >t/home/want; diffok
-1	alive
-2	deleted
-3	alive
-4	alive
+1 alive
+2 deleted
+3 alive
+4 alive
 EOF
   now getting the latest version of the secret
   (./safe get secret/versioned:key >t/home/got); exitok $? 0

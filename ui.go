@@ -96,6 +96,11 @@ func (t *table) setHeader(headers ...string) {
 
 func (t *table) addRow(cols ...string) {
 	t._assertValidRowWidth(len(cols))
+	if !ansi.ShouldColorize(os.Stdout) {
+		for i := range cols {
+			cols[i] = t._stripColor(cols[i])
+		}
+	}
 	t.rows = append(t.rows, cols)
 }
 
@@ -224,7 +229,11 @@ func (t *table) _printCell(cell string, spaces int) {
 func (t *table) _sprintf(f string, args ...interface{}) string {
 	ret := ansi.Sprintf(f, args...)
 	if !ansi.ShouldColorize(os.Stdout) {
-		regexp.MustCompile("\033\\[\\d+(;\\d+)?m").ReplaceAllString(ret, "")
+		ret = t._stripColor(ret)
 	}
 	return ret
+}
+
+func (t *table) _stripColor(s string) string {
+	return regexp.MustCompile("\033\\[\\d+(;\\d+)?m").ReplaceAllString(s, "")
 }
