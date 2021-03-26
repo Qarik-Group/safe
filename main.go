@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/cloudfoundry-community/vaultkv"
+	"github.com/jhunt/go-ansi"
 	fmt "github.com/jhunt/go-ansi"
 	"github.com/jhunt/go-cli"
 	env "github.com/jhunt/go-envirotron"
@@ -259,9 +260,8 @@ type Options struct {
 		DataOnly bool `cli:"--data-only"`
 	} `cli:"curl"`
 
-	UUID struct {
-		UUID string
-	} `cli:"uuid"`
+	UUID   struct{} `cli:"uuid"`
+	Option struct{} `cli:"option"`
 
 	X509 struct {
 		Validate struct {
@@ -2880,6 +2880,82 @@ The following options are recognized:
 		}
 
 		return nil
+	})
+
+	r.Dispatch("option", &Help{
+		Summary: "View or edit global safe CLI options",
+		Usage:   "safe option [optionname=value]",
+		Type:    AdministrativeCommand,
+		Description: `
+Currently available options are:
+
+@G{manage_vault_token}    If set to true, then when logging in or switching targets,
+                      the '.vault-token' file in your $HOME directory that the Vault CLI uses will be 
+                      updated.
+`,
+	}, func(command string, args ...string) error {
+		cfg := rc.Apply(opt.UseTarget)
+
+		optLookup := []struct {
+			opt string
+			val *bool
+		}{
+			{"manage_vault_token", &cfg.Options.ManageVaultToken},
+		}
+
+		if len(args) == 0 {
+			table := table{}
+			for _, entry := range optLookup {
+				value := "@R{false}"
+				if *entry.val {
+					value = "@G{true}"
+				}
+				table.addRow(entry.opt, ansi.Sprintf(value))
+			}
+
+			table.print()
+			return nil
+		}
+
+		for _, arg := range args {
+			argSplit := strings.Split(arg, "=")
+			if len(argSplit) != 2 {
+				return fmt.Errorf("Option arg syntax: option=value")
+			}
+
+			parseTrueFalse := func(s string) (bool, error) {
+				switch s {
+				case "true", "on", "yes":
+					return true, nil
+				case "false", "off", "no":
+					return false, nil
+				}
+
+				return false, fmt.Errorf("value must be one of true|on|yes|false|off|no")
+			}
+
+			optionKey := strings.ReplaceAll(argSplit[0], "-", "_")
+			optionVal, err := parseTrueFalse(argSplit[1])
+			if err != nil {
+				return err
+			}
+
+			found := false
+			for _, opt := range optLookup {
+				if opt.opt == optionKey {
+					found = true
+					*opt.val = optionVal
+					ansi.Printf("updated @G{%s}\n", opt.opt)
+					break
+				}
+			}
+
+			if !found {
+				return fmt.Errorf("unknown option: %s", argSplit[0])
+			}
+		}
+
+		return cfg.Write()
 	})
 
 	r.Dispatch("ssh", &Help{
