@@ -2836,7 +2836,7 @@ The following options are recognized:
 	}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
 
-		if len(args) == 0 {
+		if len(args) != 1 {
 			r.ExitWithUsage("uuid")
 		}
 
