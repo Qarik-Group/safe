@@ -2,7 +2,7 @@
 meta:
   name:    safe
   release: Safe
-  target:  pipes
+  target:  buffalo-lab
   url:     https://pipes.starkandwayne.com
 
   initial_version: 0.0.5
