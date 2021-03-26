@@ -15,6 +15,7 @@ const (
 	NonDestructiveCommand        = "@G"
 	AdministrativeCommand        = "@W"
 	MiscellaneousCommand         = "@W"
+	HiddenCommand                = "HIDEME"
 )
 
 type Help struct {
@@ -44,7 +45,9 @@ func (r *Runner) Dispatch(command string, help *Help, fn Handler) {
 	}
 
 	r.Handlers[command] = fn
-	r.Topics[command] = help
+	if help != nil && help.Type != HiddenCommand {
+		r.Topics[command] = help
+	}
 }
 
 func (r *Runner) HelpTopic(topic string, help string) {
