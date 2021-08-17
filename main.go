@@ -33,7 +33,6 @@ import (
 	env "github.com/jhunt/go-envirotron"
 	"gopkg.in/yaml.v2"
 
-	"github.com/starkandwayne/safe/auth"
 	"github.com/starkandwayne/safe/prompt"
 	"github.com/starkandwayne/safe/rc"
 	"github.com/starkandwayne/safe/vault"
@@ -1451,7 +1450,8 @@ Flags:
 		Type: AdministrativeCommand,
 	}, func(command string, args ...string) error {
 		cfg := rc.Apply(opt.UseTarget)
-		_ = getVaultURL()
+		v := connect(false)
+		v.Client().Client.SetAuthToken("")
 
 		method := "token"
 		if len(args) > 0 {
@@ -1468,44 +1468,56 @@ Flags:
 		}
 		fmt.Fprintf(os.Stderr, "Authenticating against @C{%s} at @C{%s}\n", target, url)
 
+		authMount := method
+		if opt.Auth.Path != "" {
+			authMount = opt.Auth.Path
+		}
+
 		switch method {
 		case "token":
 			if opt.Auth.Path != "" {
 				return fmt.Errorf("Setting a custom path is not supported for token auth")
 			}
-			token, err = auth.Token(url)
-			if err != nil {
-				return err
-			}
-			break
+			token = prompt.Secure("Token: ")
 
 		case "ldap":
-			token, err = auth.LDAP(url, opt.Auth.Path)
+			username := prompt.Normal("LDAP username: ")
+			password := prompt.Secure("Password: ")
+
+			result, err := v.Client().Client.AuthLDAPMount(authMount, username, password)
 			if err != nil {
 				return err
 			}
-			break
+			token = result.ClientToken
 
 		case "github":
-			token, err = auth.Github(url, opt.Auth.Path)
+			accessToken := prompt.Secure("Github Personal Access Token: ")
+
+			result, err := v.Client().Client.AuthGithubMount(authMount, accessToken)
 			if err != nil {
 				return err
 			}
-			break
+			token = result.ClientToken
 
 		case "userpass":
-			token, err = auth.UserPass(url, opt.Auth.Path)
+			username := prompt.Normal("Username: ")
+			password := prompt.Secure("Password: ")
+
+			result, err := v.Client().Client.AuthUserpassMount(authMount, username, password)
 			if err != nil {
 				return err
 			}
-			break
+			token = result.ClientToken
 
 		case "approle":
-			token, err = auth.AppRole(url, opt.Auth.Path)
+			roleID := prompt.Normal("Role ID: ")
+			secretID := prompt.Secure("Secret ID: ")
+
+			result, err := v.Client().Client.AuthApproleMount(authMount, roleID, secretID)
 			if err != nil {
 				return err
 			}
-			break
+			token = result.ClientToken
 
 		case "status":
 			v := connect(false)

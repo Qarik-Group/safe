@@ -46,7 +46,7 @@ func NewVault(conf VaultConfig) (*Vault, error) {
 	}
 	vaultURL, err := url.Parse(strings.TrimSuffix(conf.URL, "/"))
 	if err != nil {
-		return nil, fmt.Errorf("Could not parse Vault URL: %s", err)
+		return nil, fmt.Errorf("could not parse Vault URL: %s", err)
 	}
 
 	//The default port for Vault is typically 8200 (which is the VaultKV default),
