@@ -547,7 +547,7 @@ provided multiple times to provide multiple CA certificates.
 					fmt.Fprintf(os.Stderr, "You will need to target a Vault manually first.\n\n")
 					fmt.Fprintf(os.Stderr, "Try something like this:\n")
 					fmt.Fprintf(os.Stderr, "     @C{safe target ops https://address.of.your.vault}\n")
-					fmt.Fprintf(os.Stderr, "     @C{safe auth (github|token|ldap||userpass)}\n")
+					fmt.Fprintf(os.Stderr, "     @C{safe auth (github|token|ldap|okta|userpass)}\n")
 					fmt.Fprintf(os.Stderr, "\n")
 					os.Exit(1)
 				}
