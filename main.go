@@ -74,6 +74,7 @@ func connect(auth bool) *vault.Vault {
 		fmt.Fprintf(os.Stderr, "@R{You are not authenticated to a Vault.}\n")
 		fmt.Fprintf(os.Stderr, "Try @C{safe auth ldap}\n")
 		fmt.Fprintf(os.Stderr, " or @C{safe auth github}\n")
+		fmt.Fprintf(os.Stderr, " or @C{safe auth okta}\n")
 		fmt.Fprintf(os.Stderr, " or @C{safe auth token}\n")
 		fmt.Fprintf(os.Stderr, " or @C{safe auth userpass}\n")
 		fmt.Fprintf(os.Stderr, " or @C{safe auth approle}\n")
@@ -546,7 +547,7 @@ provided multiple times to provide multiple CA certificates.
 					fmt.Fprintf(os.Stderr, "You will need to target a Vault manually first.\n\n")
 					fmt.Fprintf(os.Stderr, "Try something like this:\n")
 					fmt.Fprintf(os.Stderr, "     @C{safe target ops https://address.of.your.vault}\n")
-					fmt.Fprintf(os.Stderr, "     @C{safe auth (github|token|ldap|userpass)}\n")
+					fmt.Fprintf(os.Stderr, "     @C{safe auth (github|token|ldap|okta|userpass)}\n")
 					fmt.Fprintf(os.Stderr, "\n")
 					os.Exit(1)
 				}
@@ -1427,7 +1428,7 @@ written to STDOUT instead of STDERR to make it easier to consume.
 
 	r.Dispatch("auth", &Help{
 		Summary: "Authenticate to the current target",
-		Usage:   "safe auth [--path <value>] (token|github|ldap|userpass|approle)",
+		Usage:   "safe auth [--path <value>] (token|github|ldap|okta|userpass|approle)",
 		Description: `
 Set the authentication token sent when talking to the Vault.
 
@@ -1436,6 +1437,7 @@ Supported auth backends are:
 token     Set the Vault authentication token directly.
 github    Provide a Github personal access (oauth) token.
 ldap      Provide LDAP user credentials.
+okta      Provide Okta user credentials.
 userpass  Provide a username and password registered with the UserPass backend.
 approle   Provide a client ID and client secret registered with the AppRole backend.
 status    Get information about current authentication status
@@ -1485,6 +1487,16 @@ Flags:
 			password := prompt.Secure("Password: ")
 
 			result, err := v.Client().Client.AuthLDAPMount(authMount, username, password)
+			if err != nil {
+				return err
+			}
+			token = result.ClientToken
+
+		case "okta":
+			username := prompt.Normal("Okta username: ")
+			password := prompt.Secure("Password: ")
+
+			result, err := v.Client().Client.AuthOktaMount(authMount, username, password)
 			if err != nil {
 				return err
 			}

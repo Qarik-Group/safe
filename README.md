@@ -70,11 +70,12 @@ To authenticate:
 safe auth [token]
 safe auth ldap
 safe auth github
+safe auth okta
 ```
 
 (Other authentication backends are not yet supported)
 
-For each type (token, ldap or github), you will be prompted for
+For each type (token, ldap, okta or github), you will be prompted for
 the necessary credentials to authenticated against the Vault.
 
 Usage
