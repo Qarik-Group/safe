@@ -4,7 +4,7 @@ go 1.14
 
 require (
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
-	github.com/cloudfoundry-community/vaultkv v0.4.0
+	github.com/cloudfoundry-community/vaultkv v0.5.0
 	github.com/jhunt/go-ansi v0.0.0-20180630013815-403d5f0d9ccb
 	github.com/jhunt/go-cli v0.0.0-20170503201019-f04a1744b5e3
 	github.com/jhunt/go-envirotron v0.0.0-20171017043611-8bdb90f72b39
