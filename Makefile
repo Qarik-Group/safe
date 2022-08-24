@@ -1,6 +1,6 @@
 DESTDIR      ?= /usr/local
 RELEASE_ROOT ?= release
-TARGETS      ?= linux/amd64 darwin/amd64 windows/amd64
+TARGETS      ?= linux/amd64 darwin/amd64 darwin/arm64 windows/amd64
 
 GO_LDFLAGS := -ldflags="-X main.Version=$(VERSION)"
 
