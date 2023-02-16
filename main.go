@@ -89,7 +89,7 @@ func connect(auth bool) *vault.Vault {
 	return v
 }
 
-//Exits program with error if no Vault targeted
+// Exits program with error if no Vault targeted
 func getVaultURL() string {
 	ret := os.Getenv("VAULT_ADDR")
 	if ret == "" {
@@ -2061,7 +2061,7 @@ paths/keys.
 			if !opt.List.Quick {
 				for i := range paths {
 					if !strings.HasSuffix(paths[i], "/") {
-						fullpath := path + "/" + paths[i]
+						fullpath := path + "/" + vault.EscapePathSegment(paths[i])
 						mountVersion, err := v.MountVersion(fullpath)
 						if err != nil {
 							return err
@@ -4463,7 +4463,7 @@ func recursively(cmd string, args ...string) bool {
 	return y == "y" || y == "yes"
 }
 
-//For versions of safe 0.10+
+// For versions of safe 0.10+
 // Older versions just use a map[string]map[string]string
 type exportFormat struct {
 	ExportVersion uint `json:"export_version"`

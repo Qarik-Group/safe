@@ -141,8 +141,8 @@ func getEnvironmentVariable(variables ...string) string {
 	return ""
 }
 
-//SOCKS5SSHConfig contains configuration variables for setting up a SOCKS5
-//proxy to be tunneled through an SSH connection.
+// SOCKS5SSHConfig contains configuration variables for setting up a SOCKS5
+// proxy to be tunneled through an SSH connection.
 type SOCKS5SSHConfig struct {
 	Host                  string
 	User                  string
@@ -151,7 +151,7 @@ type SOCKS5SSHConfig struct {
 	SkipHostKeyValidation bool
 }
 
-//StartSSHTunnel makes an SSH connection according to the given config. It
+// StartSSHTunnel makes an SSH connection according to the given config. It
 // returns an SSH client if it was successful and an error otherwise.
 func StartSSHTunnel(conf SOCKS5SSHConfig) (*ssh.Client, error) {
 	hostKeyCallback := ssh.InsecureIgnoreHostKey()
@@ -186,9 +186,9 @@ func StartSSHTunnel(conf SOCKS5SSHConfig) (*ssh.Client, error) {
 	return ssh.Dial("tcp", conf.Host, sshConfig)
 }
 
-//StartSOCKS5SSH makes an SSH connection according to the given config, starts
-//a local SOCKS5 server on a random port, and then returns the proxy
-//address if the connection was successful and an error if it was unsuccessful.
+// StartSOCKS5SSH makes an SSH connection according to the given config, starts
+// a local SOCKS5 server on a random port, and then returns the proxy
+// address if the connection was successful and an error if it was unsuccessful.
 func StartSOCKS5Server(dialFn func(string, string) (net.Conn, error)) (string, error) {
 	socks5Server, err := socks5.New(&socks5.Config{
 		Dial: noopDialContext(dialFn),
@@ -302,7 +302,7 @@ func writeKnownHosts(knownHostsFile, hostname string, key ssh.PublicKey) error {
 
 	fileInfo, err := f.Stat()
 	if err != nil {
-		return fmt.Errorf("Could no retrieve info for file `%s'")
+		return fmt.Errorf("Could not retrieve info for file `%s': %s", knownHostsFile, err)
 	}
 
 	if fileInfo.Size() != 0 {

@@ -12,7 +12,7 @@ import (
 	"github.com/starkandwayne/goutils/tree"
 )
 
-//This is a synchronized queue that specifically works with our tree algorithm,
+// This is a synchronized queue that specifically works with our tree algorithm,
 // in which the workers that pull work off the queue are also responsible for
 // populating the queue. This is because of the recursive nature of the tree
 // population. All workers are released when all workers are simultaneously
@@ -142,7 +142,7 @@ func (v *Vault) ConstructSecrets(path string, opts TreeOpts) (s Secrets, err err
 	return s, nil
 }
 
-//This does not keep the list in a sorted order. Sort afterward
+// This does not keep the list in a sorted order. Sort afterward
 func (s *Secrets) purgeWhereLatestVersionDeleted() {
 	for i := 0; i < len(*s); i++ {
 		if len((*s)[i].Versions) == 0 || (*s)[i].Versions[len((*s)[i].Versions)-1].State != SecretStateAlive {
@@ -368,7 +368,7 @@ func (v *Vault) constructTree(path string, opts TreeOpts) (*secretTree, error) {
 	return ret, err
 }
 
-//Only use this for the base for the initial node of the tree. You can infer
+// Only use this for the base for the initial node of the tree. You can infer
 // type much faster than this if you know the operation that retrieved it in the
 // first place.
 func (t *secretTree) populateNodeType(v *Vault) error {
@@ -459,7 +459,12 @@ func (s Secrets) Paths() []string {
 	for i := range s {
 		if len(s[i].Versions) > 0 {
 			for _, key := range s[i].Versions[len(s[i].Versions)-1].Data.Keys() {
-				ret = append(ret, fmt.Sprintf("%s:%s", s[i].Path, key))
+				ret = append(ret,
+					fmt.Sprintf("%s:%s",
+						EscapePathSegment(s[i].Path),
+						EscapePathSegment(key),
+					),
+				)
 			}
 		} else {
 			ret = append(ret, s[i].Path)

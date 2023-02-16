@@ -134,7 +134,6 @@ func (v *Vault) Curl(method string, path string, body []byte) (*http.Response, e
 // If there is nothing at that path, a nil *Secret will be returned, with no
 // error.
 func (v *Vault) Read(path string) (secret *Secret, err error) {
-	path = Canonicalize(path)
 	path, key, version := ParsePath(path)
 
 	secret = NewSecret()
@@ -190,9 +189,13 @@ func (v *Vault) List(path string) (paths []string, err error) {
 
 // Write takes a Secret and writes it to the Vault at the specified path.
 func (v *Vault) Write(path string, s *Secret) error {
-	path = Canonicalize(path)
-	if strings.Contains(path, ":") {
+	path, key, version := ParsePath(path)
+	if key != "" {
 		return fmt.Errorf("cannot write to paths in /path:key notation")
+	}
+
+	if version != 0 {
+		return fmt.Errorf("cannot write to paths in /path^version notation")
 	}
 
 	if s.Empty() {
@@ -207,7 +210,7 @@ func (v *Vault) Write(path string, s *Secret) error {
 	return err
 }
 
-//errIfFolder returns an error with your provided message if the given path is a folder.
+// errIfFolder returns an error with your provided message if the given path is a folder.
 // Can also throw an error if contacting the backend failed, in which case that error
 // is returned.
 func (v *Vault) errIfFolder(path, message string, args ...interface{}) error {
@@ -316,8 +319,8 @@ func (v *Vault) verifySecretExists(path string) error {
 	return err
 }
 
-//DeleteTree recursively deletes the leaf nodes beneath the given root until
-//the root has no children, and then deletes that.
+// DeleteTree recursively deletes the leaf nodes beneath the given root until
+// the root has no children, and then deletes that.
 func (v *Vault) DeleteTree(root string, opts DeleteOpts) error {
 	root = Canonicalize(root)
 
@@ -486,13 +489,13 @@ func (v *Vault) deleteSpecificKey(path string) error {
 	return v.Write(secretPath, secret)
 }
 
-//DeleteVersions marks the given versions of the given secret as deleted for
+// DeleteVersions marks the given versions of the given secret as deleted for
 // a v2 backend or actually deletes it for a v1 backend.
 func (v *Vault) DeleteVersions(path string, versions []uint) error {
 	return v.client.Delete(path, &vaultkv.KVDeleteOpts{Versions: versions, V1Destroy: true})
 }
 
-//DestroyVersions irrevocably destroys the given versions of the given secret
+// DestroyVersions irrevocably destroys the given versions of the given secret
 func (v *Vault) DestroyVersions(path string, versions []uint) error {
 	return v.client.Destroy(path, versions)
 }
@@ -530,7 +533,7 @@ func (v *Vault) Undelete(path string) error {
 	return v.Client().Undelete(secret, []uint{uint(version)})
 }
 
-//deleteIfPresent first checks to see if there is a Secret at the given path,
+// deleteIfPresent first checks to see if there is a Secret at the given path,
 // and if so, it deletes it. Otherwise, no error is thrown
 func (v *Vault) deleteIfPresent(path string, opts DeleteOpts) error {
 	secretpath, _, _ := ParsePath(path)
@@ -699,7 +702,7 @@ func (v *Vault) Copy(oldpath, newpath string, opts MoveCopyOpts) error {
 	return nil
 }
 
-//MoveCopyTree will recursively copy all nodes from the root to the new location.
+// MoveCopyTree will recursively copy all nodes from the root to the new location.
 // This function will get confused about 'secret:key' syntax, so don't let those
 // get routed here - they don't make sense for a recursion anyway.
 func (v *Vault) MoveCopyTree(oldRoot, newRoot string, f func(string, string, MoveCopyOpts) error, opts MoveCopyOpts) error {

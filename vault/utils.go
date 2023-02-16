@@ -8,32 +8,59 @@ import (
 	"strings"
 )
 
+var keyColonRegexp = regexp.MustCompile(`[^\\](:)`)
+var versionCaretRegexp = regexp.MustCompile(`[^\\](\^)`)
+
 // ParsePath splits the given path string into its respective secret path
-//   and contained key parts
+// and contained key parts
 func ParsePath(path string) (secret, key string, version uint64) {
 	secret = path
-	if idx := strings.LastIndex(path, "^"); idx >= 0 {
-		versionString := path[idx+1:]
-		var err error
+	var err error
+
+	matches := versionCaretRegexp.FindAllStringSubmatchIndex(path, -1)
+	if len(matches) > 0 { //if there exists a version caret
+		caretIdx := matches[len(matches)-1]
+		caretStart, caretEnd := caretIdx[len(caretIdx)-2], caretIdx[len(caretIdx)-1]
+		versionString := path[caretEnd:]
 		version, err = strconv.ParseUint(versionString, 10, 64)
 		if err == nil {
-			path = path[:idx]
+			path = path[:caretStart]
 			secret = path
 		}
 	}
 
-	if idx := strings.LastIndex(path, ":"); idx >= 0 {
-		secret = path[:idx]
-		key = path[idx+1:]
+	matches = keyColonRegexp.FindAllStringSubmatchIndex(path, -1)
+	if len(matches) > 0 { //if there exists a path colon
+		colonIdx := matches[len(matches)-1]
+		colonStart, colonEnd := colonIdx[len(colonIdx)-2], colonIdx[len(colonIdx)-1]
+		key = path[colonEnd:]
+		secret = path[:colonStart]
 	}
+
+	//unescape escaped characters
+	secret = strings.ReplaceAll(secret, `\:`, ":")
+	secret = strings.ReplaceAll(secret, `\^`, "^")
+	key = strings.ReplaceAll(key, `\:`, ":")
+	key = strings.ReplaceAll(key, `\^`, "^")
 
 	secret = Canonicalize(secret)
 	return
 }
 
+// EscapePathSegment is the reverse of ParsePath for an output secret or key
+// segment; whereas that function unescapes colons and carets, this function
+// reescapes them so that they can be run through that function again.
+func EscapePathSegment(segment string) string {
+	segment = strings.ReplaceAll(segment, ":", `\:`)
+	segment = strings.ReplaceAll(segment, "^", `\^`)
+	return segment
+}
+
 // EncodePath creates a safe-friendly canonical path for the given arguments
 func EncodePath(path, key string, version uint64) string {
+	path = EscapePathSegment(path)
 	if key != "" {
+		key = EscapePathSegment(key)
 		path += ":" + key
 	}
 
