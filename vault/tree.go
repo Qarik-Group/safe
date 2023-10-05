@@ -113,7 +113,7 @@ type secretTree struct {
 	Branches     []secretTree
 	Type         uint
 	MountVersion uint
-	Value        string
+	Value        interface{}
 	Version      uint
 	Deleted      bool
 	Destroyed    bool
@@ -238,7 +238,8 @@ func (t secretTree) convertToSecrets() Secrets {
 				}
 
 				for _, key := range version.Branches {
-					thisVersion.Data.Set(key.Basename(), key.Value, false)
+					//thisVersion.Data.Set(key.Basename(), key.Value, false)
+					thisVersion.Data.SetAsInterface(key.Basename(), key.Value, false)
 				}
 
 				thisEntry.Versions = append(thisEntry.Versions, thisVersion)
@@ -308,6 +309,8 @@ type TreeOpts struct {
 	GetDeletedVersions bool
 	//Only perform gets. If the target is not a secret, then an error is returned
 	GetOnly bool
+	//All key values are retrieved as strings
+	AsStrings bool
 }
 
 func (v *Vault) constructTree(path string, opts TreeOpts) (*secretTree, error) {
@@ -479,6 +482,8 @@ type TreeCopyOpts struct {
 	Clear bool
 	//Pad will insert dummy versions that have been truncated by Vault
 	Pad bool
+	//AppendOnly
+	AppendOnly bool
 }
 
 func (s SecretEntry) Copy(v *Vault, dst string, opts TreeCopyOpts) error {
@@ -487,6 +492,40 @@ func (s SecretEntry) Copy(v *Vault, dst string, opts TreeCopyOpts) error {
 		if err != nil {
 			return fmt.Errorf("Could not wipe existing secret at path `%s': %s", dst, err)
 		}
+	}
+
+	if opts.AppendOnly {
+		var latest *SecretVersion
+		if len(s.Versions) > 0 && s.Versions[len(s.Versions)-1].State == SecretStateAlive {
+			latest = &s.Versions[len(s.Versions)-1]
+		}
+
+		if latest != nil {
+			updateRequired := false
+			// get latest version from client
+			existingSecret := &Secret{
+				data: make(map[string]interface{}),
+			}
+
+			_, err := v.client.Get(dst, &existingSecret.data, &vaultkv.KVGetOpts{Version: 0})
+			// if err is nil, then the secret exists
+			if err == nil {
+				// compare the latest version of the secret with the existing secret
+				// if they are the same, then we don't need to do anything
+				updateRequired = !latest.Data.Equals(existingSecret)
+
+			} else {
+				updateRequired = true
+			}
+			if updateRequired {
+				_, err = v.Client().Set(dst, latest.Data.data, nil)
+				if err != nil {
+					return fmt.Errorf("Could not write secret to path `%s': %s", dst, err)
+				}
+			}
+
+		}
+		return nil
 	}
 
 	var toDelete, toDestroy []uint
@@ -503,9 +542,9 @@ func (s SecretEntry) Copy(v *Vault, dst string, opts TreeCopyOpts) error {
 	}
 
 	for _, version := range s.Versions {
-		var toWrite map[string]string
+		var toWrite map[string]interface{}
 		if version.State == SecretStateDestroyed {
-			toWrite = map[string]string{"TO_DESTROY": "TO_DESTROY"}
+			toWrite = map[string]interface{}{"TO_DESTROY": "TO_DESTROY"}
 		} else {
 			toWrite = version.Data.data
 		}
@@ -810,6 +849,7 @@ func (w *treeWorker) workGet(t secretTree) ([]secretTree, error) {
 	}
 
 	s, err := w.vault.Read(EncodePath(path, "", uint64(t.Version)))
+
 	//For v1 backends, this is the first non-list Vault access.
 	// If we're unable to get a path that we could list because of permissions,
 	// don't explode.
@@ -818,6 +858,10 @@ func (w *treeWorker) workGet(t secretTree) ([]secretTree, error) {
 			return nil, nil
 		}
 		return nil, err
+	}
+
+	if w.opts.AsStrings {
+		s, err = w.vault.DataAsString(s)
 	}
 
 	if t.Deleted {
@@ -838,7 +882,7 @@ func (w *treeWorker) workGet(t secretTree) ([]secretTree, error) {
 		ret = append(ret, secretTree{
 			Name:    path + ":" + key,
 			Type:    treeTypeKey,
-			Value:   string(s.data[key]),
+			Value:   s.data[key],
 			Version: version,
 			Deleted: t.Deleted,
 		})
