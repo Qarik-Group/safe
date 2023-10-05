@@ -154,23 +154,44 @@ func (v *Vault) Read(path string) (secret *Secret, err error) {
 		}
 		raw = map[string]interface{}{key: val}
 	}
-
-	for k, v := range raw {
-		if (key != "" && k == key) || key == "" {
-			if s, ok := v.(string); ok {
-				secret.data[k] = s
-			} else {
-				var b []byte
-				b, err = json.Marshal(v)
-				if err != nil {
-					return
+	secret.data = raw
+	/*
+		for k, v := range raw {
+			if (key != "" && k == key) || key == "" {
+				if s, ok := v.(string); ok {
+					secret.data[k] = s
+				} else {
+					var b []byte
+					b, err = json.Marshal(v)
+					if err != nil {
+						return
+					}
+					secret.data[k] = string(b)
 				}
-				secret.data[k] = string(b)
 			}
 		}
-	}
-
+	*/
 	return
+}
+
+
+
+func (v *Vault) DataAsString(in *Secret) (out *Secret, err error) {
+	out = in
+
+	for k, v := range in.data {
+		if s, ok := v.(string); ok {
+			out.data[k] = s
+		} else {
+			var b []byte
+			b, err = json.Marshal(v)
+			if err != nil {
+				return
+			}
+			out.data[k] = string(b)
+		}
+	}
+	return out, nil
 }
 
 // List returns the set of (relative) paths that are directly underneath

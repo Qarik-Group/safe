@@ -18,11 +18,11 @@ import (
 // A Secret contains a set of key/value pairs that store anything you
 // want, including passwords, RSAKey keys, usernames, etc.
 type Secret struct {
-	data map[string]string
+	data map[string]interface{}
 }
 
 func NewSecret() *Secret {
-	return &Secret{make(map[string]string)}
+	return &Secret{make(map[string]interface{})}
 }
 
 func (s Secret) MarshalJSON() ([]byte, error) {
@@ -41,8 +41,29 @@ func (s *Secret) Has(key string) bool {
 
 // Get retrieves the value of the given key, or "" if no such key exists.
 func (s *Secret) Get(key string) string {
-	x, _ := s.data[key]
-	return x
+	xx, ok := s.data[key]
+	if !ok {
+		return ""
+	}
+	switch x := xx.(type) {
+	case string:
+		return x
+	case []byte:
+		return string(x)
+	default:
+		res, _ := json.Marshal(x)
+		return string(res)
+	}
+
+}
+
+func (s *Secret) GetAsInterface(key string) interface{} {
+	xx, ok := s.data[key]
+	if !ok {
+		// return empty interface
+		return nil
+	}
+	return xx
 }
 
 func (s *Secret) Keys() []string {
@@ -57,6 +78,15 @@ func (s *Secret) Keys() []string {
 
 // Set stores a value in the Secret, under the given key.
 func (s *Secret) Set(key, value string, skipIfExists bool) error {
+	if s.Has(key) && skipIfExists {
+		return ansi.Errorf("@R{BUG: Something tried to overwrite the} @C{%s} @R{key, but it already existed, and --no-clobber was specified}", key)
+	}
+	s.data[key] = value
+	return nil
+}
+
+// Set interface
+func (s *Secret) SetAsInterface(key string, value interface{}, skipIfExists bool) error {
 	if s.Has(key) && skipIfExists {
 		return ansi.Errorf("@R{BUG: Something tried to overwrite the} @C{%s} @R{key, but it already existed, and --no-clobber was specified}", key)
 	}
@@ -269,6 +299,29 @@ func (s *Secret) YAML() string {
 	return string(b)
 }
 
+// Eqals compares two secrets and returns true if they are equal
+func (s *Secret) Equals(in *Secret) bool {
+
+	if (s == nil && in == nil) || (s == in) {
+		return true
+	}
+	if (s == nil && in != nil) || (s != nil && in == nil) {
+		return false
+	}
+	if (s.data == nil && in.data != nil) || (s.data != nil && in.data == nil) {
+		return false
+	}
+	a, err := json.Marshal(s.data)
+	if err != nil {
+		return false
+	}
+	b, err := json.Marshal(in.data)
+	if err != nil {
+		return false
+	}
+	return string(a) == string(b)
+}
+
 // SingleValue converts a secret to a string representing the value extracted.
 // Returns an error if there are not exactly one results in the secret
 // object
@@ -278,7 +331,16 @@ func (s *Secret) SingleValue() (string, error) {
 	}
 	var ret string
 	for _, v := range s.data {
-		ret = v
+
+		switch x := v.(type) {
+		case string:
+			ret = x
+		case []byte:
+			ret = string(x)
+		default:
+			res, _ := json.Marshal(x)
+			ret = string(res)
+		}
 	}
 	return ret, nil
 }

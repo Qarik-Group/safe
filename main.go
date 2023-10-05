@@ -222,14 +222,16 @@ type Options struct {
 		All     bool `cli:"-a, --all"`
 		Deleted bool `cli:"-d, --deleted"`
 		//These do nothing but are kept for backwards-compat
-		OnlyAlive bool `cli:"-o, --only-alive"`
-		Shallow   bool `cli:"-s, --shallow"`
+		OnlyAlive          bool `cli:"-o, --only-alive"`
+		Shallow            bool `cli:"-s, --shallow"`
+		NoStringConversion bool `cli:"-n, --no-string-conversion"`
 	} `cli:"export"`
 
 	Import struct {
 		IgnoreDestroyed bool `cli:"-I, --ignore-destroyed"`
 		IgnoreDeleted   bool `cli:"-i, --ignore-deleted"`
 		Shallow         bool `cli:"-s, --shallow"`
+		AppendOnly      bool `cli:"-a, --appendonly"`
 	} `cli:"import"`
 
 	Move struct {
@@ -2378,7 +2380,7 @@ redeleting them.
 
 	r.Dispatch("export", &Help{
 		Summary: "Export one or more subtrees for migration / backup purposes",
-		Usage:   "safe export [-ad] PATH [PATH ...]",
+		Usage:   "safe export [-adn] PATH [PATH ...]",
 		Type:    NonDestructiveCommand,
 		Description: `
 Normally, the export will get only the latest version of each secret, and encode it in a format that is backwards-
@@ -2387,6 +2389,7 @@ compatible with pre-1.0.0 versions of safe (and newer versions).
 incompatible with versions of safe prior to v1.0.0
 -d (--deleted) will cause safe to undelete, read, and then redelete deleted secrets in order to encode them in the
 backup. Without this, deleted versions will be ignored.
+-n (--no-string-conversion) will use v3 export and does not convert values to strings. This is incompatible with v1/v2
 `}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
 		if len(args) < 1 {
@@ -2431,6 +2434,7 @@ backup. Without this, deleted versions will be ignored.
 				FetchAllVersions:    opt.Export.All,
 				GetDeletedVersions:  opt.Export.Deleted,
 				AllowDeletedSecrets: opt.Export.Deleted,
+				AsStrings:           !opt.Export.NoStringConversion,
 			})
 			if err != nil {
 				return err
@@ -2440,6 +2444,7 @@ backup. Without this, deleted versions will be ignored.
 		}
 
 		var mustV2Export bool
+		mustV2Export = opt.Export.All || opt.Export.NoStringConversion
 		//Determine if we can get away with a v1 export
 		for _, s := range secrets {
 			if len(s.Versions) > 1 {
@@ -2459,7 +2464,12 @@ backup. Without this, deleted versions will be ignored.
 		}
 
 		v2Export := func() error {
-			export := exportFormat{ExportVersion: 2, Data: map[string]exportSecret{}, RequiresVersioning: map[string]bool{}}
+
+			exportVersionNum := uint(2)
+			if opt.Export.NoStringConversion {
+				exportVersionNum = 3
+			}
+			export := exportFormat{ExportVersion: exportVersionNum, Data: map[string]exportSecret{}, RequiresVersioning: map[string]bool{}}
 
 			for _, secret := range secrets {
 				if len(secret.Versions) > 1 {
@@ -2477,11 +2487,11 @@ backup. Without this, deleted versions will be ignored.
 					thisVersion := exportVersion{
 						Deleted:   version.State == vault.SecretStateDeleted && opt.Export.Deleted,
 						Destroyed: version.State == vault.SecretStateDestroyed || (version.State == vault.SecretStateDeleted && !opt.Export.Deleted),
-						Value:     map[string]string{},
+						Value:     map[string]interface{}{},
 					}
 
 					for _, key := range version.Data.Keys() {
-						thisVersion.Value[key] = version.Data.Get(key)
+						thisVersion.Value[key] = version.Data.GetAsInterface(key)
 					}
 
 					thisSecret.Versions = append(thisSecret.Versions, thisVersion)
@@ -2524,6 +2534,7 @@ backup. Without this, deleted versions will be ignored.
 rting garbage data and then destroying it (which is originally done to preserve version numbering).
 -i (--ignore-deleted) will ignore deleted versions from being written during the import.
 -s (--shallow) will write only the latest version for each secret.
+-a (--appendonly) will only write latest alive version if exists.
 `}, func(command string, args ...string) error {
 		rc.Apply(opt.UseTarget)
 		b, err := ioutil.ReadAll(os.Stdin)
@@ -2622,7 +2633,7 @@ rting garbage data and then destroying it (which is originally done to preserve 
 					}
 					data := vault.NewSecret()
 					for k, v := range secret.Versions[i].Value {
-						data.Set(k, v, false)
+						data.SetAsInterface(k, v, false)
 					}
 					s.Versions = append(s.Versions, vault.SecretVersion{
 						Number: firstVersion + uint(i),
@@ -2632,8 +2643,9 @@ rting garbage data and then destroying it (which is originally done to preserve 
 				}
 
 				err := s.Copy(v, s.Path, vault.TreeCopyOpts{
-					Clear: true,
-					Pad:   !(opt.Import.IgnoreDestroyed || opt.Import.Shallow),
+					Clear:      !opt.Import.AppendOnly,
+					Pad:        !(opt.Import.IgnoreDestroyed || opt.Import.Shallow),
+					AppendOnly: opt.Import.AppendOnly,
 				})
 				if err != nil {
 					return err
@@ -2654,7 +2666,7 @@ rting garbage data and then destroying it (which is originally done to preserve 
 			if len(v) == 1 {
 				if meta, isMap := (v[0]).(map[string]interface{}); isMap {
 					version, isFloat64 := meta["export_version"].(float64)
-					if isFloat64 && version == 2 {
+					if (isFloat64 && version == 2) || (isFloat64 && version == 3) {
 						fn = v2Import
 					}
 				}
@@ -4478,7 +4490,7 @@ type exportSecret struct {
 }
 
 type exportVersion struct {
-	Deleted   bool              `json:"deleted,omitempty"`
-	Destroyed bool              `json:"destroyed,omitempty"`
-	Value     map[string]string `json:"value,omitempty"`
+	Deleted   bool                   `json:"deleted,omitempty"`
+	Destroyed bool                   `json:"destroyed,omitempty"`
+	Value     map[string]interface{} `json:"value,omitempty"`
 }
