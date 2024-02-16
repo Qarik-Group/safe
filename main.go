@@ -75,6 +75,7 @@ func connect(auth bool) *vault.Vault {
 		fmt.Fprintf(os.Stderr, "Try @C{safe auth ldap}\n")
 		fmt.Fprintf(os.Stderr, " or @C{safe auth github}\n")
 		fmt.Fprintf(os.Stderr, " or @C{safe auth okta}\n")
+		fmt.Fprintf(os.Stderr, " or @C{safe auth oidc}\n")
 		fmt.Fprintf(os.Stderr, " or @C{safe auth token}\n")
 		fmt.Fprintf(os.Stderr, " or @C{safe auth userpass}\n")
 		fmt.Fprintf(os.Stderr, " or @C{safe auth approle}\n")
@@ -761,8 +762,8 @@ The following options are recognized:
 Spins up a new Vault instance.
 
 By default, an unused port between 8201 and 9999 (inclusive) will be selected as
-the Vault listening port. You may manually specify a port with the -p/--port 
-flag. 
+the Vault listening port. You may manually specify a port with the -p/--port
+flag.
 
 The new Vault will be initialized with a single seal key, targeted with
 a catchy name, authenticated by the new root token, and populated with a
@@ -1428,7 +1429,7 @@ written to STDOUT instead of STDERR to make it easier to consume.
 
 	r.Dispatch("auth", &Help{
 		Summary: "Authenticate to the current target",
-		Usage:   "safe auth [--path <value>] (token|github|ldap|okta|userpass|approle)",
+		Usage:   "safe auth [--path <value>] (token|github|oidc|ldap|okta|userpass|approle)",
 		Description: `
 Set the authentication token sent when talking to the Vault.
 
@@ -1438,6 +1439,7 @@ token     Set the Vault authentication token directly.
 github    Provide a Github personal access (oauth) token.
 ldap      Provide LDAP user credentials.
 okta      Provide Okta user credentials.
+oidc      Complete OIDC auth flow
 userpass  Provide a username and password registered with the UserPass backend.
 approle   Provide a client ID and client secret registered with the AppRole backend.
 status    Get information about current authentication status
@@ -1502,6 +1504,12 @@ Flags:
 			}
 			token = result.ClientToken
 
+		case "oidc":
+			result, err := v.Client().Client.AuthOIDCMount(authMount)
+			if err != nil {
+				return err
+			}
+			token = result.ClientToken
 		case "github":
 			accessToken := prompt.Secure("Github Personal Access Token: ")
 
@@ -2914,7 +2922,7 @@ The following options are recognized:
 Currently available options are:
 
 @G{manage_vault_token}    If set to true, then when logging in or switching targets,
-                      the '.vault-token' file in your $HOME directory that the Vault CLI uses will be 
+                      the '.vault-token' file in your $HOME directory that the Vault CLI uses will be
                       updated.
 `,
 	}, func(command string, args ...string) error {
